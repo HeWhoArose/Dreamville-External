@@ -34,7 +34,7 @@ export class WorldActivityDirector {
 	];
 
 	private static locationSupportsPublicActivity(name: string, description: string): boolean {
-		return /citadel|market|bazaar|inn|tavern|guild|town|city|village|settlement|harbour|harbor|station|plaza|square|academy|temple district|capital|alley/i.test(name + ' ' + description);
+		return /citadel|market|bazaar|inn|tavern|guild|town|city|village|settlement|harbour|harbor|station|plaza|square|academy|library|archives?|atheneum|university|college|palace|temple district|capital|alley/i.test(name + ' ' + description);
 	}
 
 	private static peopleForLocation(storyId: string, locationId: string, name: string, description: string) {

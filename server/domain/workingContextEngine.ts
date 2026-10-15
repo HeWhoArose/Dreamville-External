@@ -1303,6 +1303,32 @@ export class WorkingContextEngine {
     const locSensory = locNode?.ambientSensory || run.startingLocation?.ambientSensory || 'A quiet, watchful atmosphere fills the surroundings.';
     const locRegion = locNode?.regionId || run.startingLocation?.region || 'Frontier';
 
+    // Use the same canonical visibility projection as live turns: actor records alone
+    // do not prove that an entity is visible, present, or alive in the opening scene.
+    const openingSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction: 'Begin the story and observe the immediate surroundings.',
+      viewerActorId: player?.actorId,
+      worldRepo: repo,
+    });
+    const visibleStartingActors = openingSituation.location.id === startingLocId
+      ? openingSituation.nearbyEntities
+        .filter((entity) => entity.kind !== 'PLAYER'
+          && entity.locationId === startingLocId
+          && entity.visibleToPlayer
+          && entity.isAlive
+          && entity.presence !== 'absent')
+        .slice(0, 8)
+      : [];
+    const occupancy = openingSituation.sceneEvidence?.occupancy;
+    const presentActorContext = visibleStartingActors.length
+      ? visibleStartingActors.map((entity) => [
+          entity.name + (entity.role ? ' (' + entity.role + ')' : ''),
+          entity.currentActivity ? 'activity: ' + entity.currentActivity : '',
+        ].filter(Boolean).join(' — ')).join('; ')
+        + `; occupancy: ${occupancy?.status || locNode?.population?.status || 'UNKNOWN'}`
+      : `No registered non-player actors are currently visible. Occupancy: ${occupancy?.status || locNode?.population?.status || 'UNKNOWN'}; expected population: ${occupancy?.expectedPopulation || locNode?.population?.expectedPopulation || 'unspecified'}. Missing actor records alone do not establish abandonment; do not invent named people or assert hidden presence.`;
+
     // 2. Canonical protagonist details
     const charName = run.characterName || run.protagonist?.identity?.name || 'Protagonist';
     const charRole = run.characterRole || run.protagonist?.role?.profession || run.protagonist?.role?.archetype || 'Adventurer';
@@ -1415,6 +1441,16 @@ export class WorkingContextEngine {
       },
 
       // B2_IMMEDIATE: Capabilities & Player Visible Facts
+      {
+        id: `chunk_${storyId}_b2_present_people`,
+        band: 'B2_IMMEDIATE',
+        label: 'CANONICALLY_VISIBLE_STARTING_ACTORS',
+        content: `Canonically visible people and current activity: ${presentActorContext}`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(presentActorContext),
+        sourceAuthority: 'CurrentSituationBuilder visibility projection of canonical WorldRepository entities',
+        isProtected: true,
+        relevanceScore: 0.99,
+      },
       {
         id: `chunk_${storyId}_b2_capabilities`,
         band: 'B2_IMMEDIATE',

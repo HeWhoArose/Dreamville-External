@@ -69,6 +69,7 @@ test('movement and observation can coexist without speech', () => {
 	assert.equal(intent.observationIntent, true);
 	assert.equal(intent.speechIntent, false);
 	assert.equal(intent.interactionMode, 'EXPLORATION');
+	assert.equal(intent.locationTarget, undefined, 'a purpose clause such as “to hear the rumors” is not a travel destination');
 });
 
 test('attack is classified as combat without inventing dialogue', () => {
@@ -265,6 +266,8 @@ test('movement phrasing preserves the named destination in make-my-way actions',
 	assert.equal(result.movementIntent, true);
 	assert.equal(result.goal, 'change_position_or_approach_target');
 	assert.equal(result.locationTarget?.name, 'Archive of Contracts');
+	assert.equal(result.locationTarget?.source, 'EXPLICIT');
+	assert.equal(result.locationTarget?.id, undefined, 'an unresolved player-named destination must not be invented as a canonical location ID');
 });
 
 test('Continue inherits an unfinished travel destination from the immediately previous movement turn', () => {

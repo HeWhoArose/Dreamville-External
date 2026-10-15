@@ -56,7 +56,13 @@ function buildDeterministicNarration(
 
 	const parts: string[] = [];
 	if (intent.movementIntent) {
-		parts.push('You move closer to the relevant source without changing the action into a conversation.');
+		if (intent.locationTarget?.name && !intent.locationTarget.id) {
+			parts.push(`You attempt to head toward the destination you named, ${intent.locationTarget.name}, but the canonical scene has not resolved that name to a location; arrival or a location change is not assumed.`);
+		} else if (intent.locationTarget?.name) {
+			parts.push(`You begin moving toward ${intent.locationTarget.name}; arrival is not claimed unless canonical spatial state confirms it.`);
+		} else {
+			parts.push('You move closer to the relevant source without changing the action into a conversation.');
+		}
 	}
 	if (intent.speechIntent) {
 		parts.push('You speak only the question or statement you explicitly intended.');

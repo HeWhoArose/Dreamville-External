@@ -163,6 +163,10 @@ describe('Phase 18 — end-to-end turn harness', () => {
 				)
 			);
 			assert.ok(trace.nextSituation);
+			if (playerAction.includes('moon gate')) {
+				assert.equal(trace.intent.locationTarget?.name, 'nonexistent moon gate');
+				assert.equal(trace.intent.locationTarget?.id, undefined, 'unknown destinations remain intent context, not canonical locations');
+			}
 		}
 	});
 

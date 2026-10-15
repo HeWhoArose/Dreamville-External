@@ -6,6 +6,7 @@ import { serverMockAuthority } from '../mockEngine/serverMockAuthority';
 import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from '../domain/narrativeRichnessEvaluation';
 import { NarrativePacingEngine } from '../domain/narrativePacingEngine';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
+import { WorldActivityDirector } from '../domain/worldActivityDirector';
 import type { CurrentSituation } from '../domain/currentSituation';
 import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
 import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
@@ -118,6 +119,14 @@ export class OpeningSceneService {
 		const run = worldRepo.getStoryRun(storyId);
 		if (!run) throw new Error(`StoryRun with ID "${storyId}" does not exist in repository.`);
 		if (run.openingScene && !forceRegenerate) return run.openingScene;
+
+		// Establish deterministic ambient population before composing the first player-facing
+		// scene. This is an explicit run-initialization write, not a side effect of the
+		// read-only CurrentSituationBuilder projection.
+		const openingLocationId = run.startingLocationId || run.currentLocationId || worldRepo.getPlayerLifecycle(storyId)?.locationId;
+		if (openingLocationId) {
+			WorldActivityDirector.ensureAmbientPopulation(worldRepo, storyId, openingLocationId);
+		}
 
 		const workingContext: AssembledOpeningContext = WorkingContextEngine.assembleOpeningContext({
 			storyId,

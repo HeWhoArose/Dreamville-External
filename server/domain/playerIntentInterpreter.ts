@@ -124,6 +124,20 @@ function explicitLocation(text: string, situation?: CurrentSituation): IntentLoc
 	return found ? { ...found, source: 'EXPLICIT' } : undefined;
 }
 
+function explicitMovementDestination(text: string): string | undefined {
+	const patterns = [
+		/\b(?:toward|towards|into)\s+(?:the\s+|a\s+|an\s+)?(.+?)(?:[.!?]|,\s*(?:while|then|before|after)\b|\s+(?:while|and then|before|after)\b.*|$)/i,
+		/\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|follow|run|sneak|creep|make (?:my|our|your) way|proceed)\b[\s\S]*?\bto\s+(?!(?:hear|listen|find|see|ask|talk|speak|look|watch|inspect|check|learn|discover|observe|investigate)\b)(?:the\s+|a\s+|an\s+)?(.+?)(?:[.!?]|,\s*(?:while|then|before|after)\b|\s+(?:while|and then|before|after)\b.*|$)/i,
+	];
+	for (const pattern of patterns) {
+		const match = text.match(pattern);
+		const destination = clean(match?.[1]).replace(/^[,;:]+|[,;:]+$/g, '').trim();
+		if (!destination || /^(?:closer|nearer|forward|back|away|left|right|here|there|home|ahead|aside|inside|outside|to sleep|to bed)\b/i.test(destination)) continue;
+		return destination.slice(0, 120);
+	}
+	return undefined;
+}
+
 function extractedTarget(text: string): string | undefined {
 	const quoted = text.match(/["“”']([^"“”']{2,80})["“”']/);
 	if (quoted?.[1]) return clean(quoted[1]);
@@ -197,9 +211,12 @@ export class PlayerIntentInterpreter {
 
 		const explicitTargets = unique(explicitEntities(originalText, situation), (target) => target.id || target.name.toLowerCase());
 		const targetText = extractedTarget(originalText);
+		const rawMovementDestination = movement ? explicitMovementDestination(originalText) : undefined;
 		const explicitLocationTarget = explicitLocation(originalText, situation) || (continuationDestination
 			? { name: continuationDestination, source: 'IMPLIED' as const }
-			: undefined);
+			: rawMovementDestination
+				? { name: rawMovementDestination, source: 'EXPLICIT' as const }
+				: undefined);
 
 		let goal: string | undefined;
 		let informationGoal: string | undefined;
@@ -213,6 +230,7 @@ export class PlayerIntentInterpreter {
 				informationGoal = targetText || 'learn what can be discovered from the current scene';
 			}
 		} else if (combat) goal = 'resolve_threat';
+		else if (isTravelContinuation) goal = 'continue_travel_toward_destination';
 		else if (movement) goal = 'change_position_or_approach_target';
 		else if (manipulation) goal = 'interact_with_or_examine_target';
 		else if (dialogue) goal = 'communicate_with_target';

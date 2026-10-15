@@ -7780,6 +7780,8 @@ export class MultiModelOrchestrator {
     storyBeat?: StoryBeatContract;
     turnPackage: StructuredTurnPackage;
     repository?: WorldRepository;
+    /** Exact pacing contract used for the primary candidate, reused by repair and final review. */
+    pacingContract?: NarrativePacingContract;
   }): { valid: boolean; errorReason?: string } {
     const narration = (params.turnPackage.narrative || []).join(' ').trim();
     if (!narration) {
@@ -7797,7 +7799,7 @@ export class MultiModelOrchestrator {
     }
 
     const repository = params.repository || this.getWorldRepository();
-    const pacingContract = NarrativePacingEngine.resolve({
+    const pacingContract = params.pacingContract || NarrativePacingEngine.resolve({
       situation: params.situation,
       intent: params.intent,
     });
@@ -7882,6 +7884,7 @@ export class MultiModelOrchestrator {
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
     narrativePlan?: EphemeralNarrativePlan;
     storyBeat?: StoryBeatContract;
+    narrativePacingContract?: NarrativePacingContract;
     researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
     narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
     narrativeQualityAudit?: {
@@ -8485,6 +8488,7 @@ export class MultiModelOrchestrator {
                 storyBeat,
                 turnPackage: rewriteValidation.turnPackage,
                 repository: worldRepo,
+                pacingContract: narrativePacingContract,
               });
               if (!rewriteFinalValidation.valid) {
                 return {
@@ -8627,6 +8631,7 @@ export class MultiModelOrchestrator {
       storyBeat,
       turnPackage: validation.turnPackage,
       repository: worldRepo,
+      pacingContract: narrativePacingContract,
     });
     if (!finalCandidateValidation.valid) {
       return {
@@ -8660,6 +8665,7 @@ export class MultiModelOrchestrator {
       attemptsTrail: generated.attemptsTrail,
       researchPacket,
       narrativePlan,
+      narrativePacingContract,
       researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
       contextAudit,
       narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,

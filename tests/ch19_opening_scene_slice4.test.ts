@@ -696,10 +696,10 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // A substance-first rewrite the same model could return on the review call:
   const improvedTurn = JSON.stringify({
     narrative: [
-      'You circle the sand of The Obsidian Arena while keeping the guarded high-level target in the private viewing box in sight.',
-      'Changing your position across the sand gives you another angle on the guarded box, but it still does not reveal the target’s intentions.',
-      'The caste enforcers remain between you and the target as established in the scene; their position gives you something concrete to assess without deciding what you will do next.',
-      'The murmur of spectators remains audible above while you continue watching. You have a better read of the guarded box, but neither the target’s intentions nor an opening has been confirmed.'
+      'You circle the sand of The Obsidian Arena while keeping the private viewing box in sight.',
+      'Changing your position across the sand gives you a clearer angle on the private viewing box, but it does not establish what the target intends.',
+      'The caste enforcers remain between you and the target, as established in the scene; their position gives you something concrete to assess without deciding what you will do next.',
+      'The murmur of spectators remains audible above while you continue watching. You have a clearer view of the private viewing box, but neither the target’s intentions nor an opening has been confirmed.'
     ],
     dialogue: [],
     events: [],

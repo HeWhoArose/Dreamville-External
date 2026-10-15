@@ -215,3 +215,44 @@ test('AI intent cannot erase explicit player speech', () => {
 	assert.equal(result.speechIntent, true);
 	assert.equal(result.interactionMode, 'DIALOGUE');
 });
+
+test('availability checks are treated as information-seeking, not movement-only', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic(
+		'I move towards the post and check what is available.',
+		currentSituation,
+	);
+
+	assert.equal(result.goal, 'gather_information');
+	assert.ok(result.informationGoal);
+	assert.match(result.informationGoal, /work|jobs|contracts|notices|available/i);
+	assert.equal(result.observationIntent, true);
+	assert.equal(result.speechIntent, false);
+});
+
+test('asking around for job requests preserves the opportunity inquiry', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic(
+		'I walk around to inquire about job requests.',
+		currentSituation,
+	);
+
+	assert.equal(result.goal, 'gather_information');
+	assert.match(result.informationGoal || '', /work|jobs|contracts|notices/i);
+	assert.equal(result.speechIntent, true);
+});
+
+
+test('follow-up request to check further remains information-seeking', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic(
+		'I check further for what I can do.',
+		currentSituation,
+	);
+
+	assert.equal(result.goal, 'gather_information');
+	assert.equal(result.interactionMode, 'INFORMATION_SEEKING');
+	assert.match(result.informationGoal || '', /learn what can be discovered/i);
+	assert.equal(result.speechIntent, false);
+	assert.equal(result.observationIntent, false);
+});

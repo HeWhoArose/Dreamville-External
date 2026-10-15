@@ -8171,9 +8171,27 @@ export class MultiModelOrchestrator {
           const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction, playerIntent);
           if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
-          return temporalContinuity.valid
-            ? { valid: true }
-            : { valid: false, errorReason: temporalContinuity.errorReason };
+          if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
+
+          // Apply semantic/epistemic review to every provider candidate, not only
+          // selected full-turn orchestration paths. This is the live narrative-only
+          // endpoint used by ordinary player actions and retry-generated narration.
+          const semanticReview = SemanticNarrativeReview.review({
+            intent: playerIntent,
+            situation: currentSituation,
+            plan: narrativePlan,
+            turnPackage: validation.turnPackage,
+          });
+          if (semanticReview.decision !== 'ACCEPT') {
+            return {
+              valid: false,
+              errorReason: 'Narration failed semantic grounding review: ' + [
+                ...semanticReview.violations.map((violation) => violation.message),
+                ...semanticReview.missingRequirements,
+              ].join(' | '),
+            };
+          }
+          return { valid: true };
         },
       },
     );

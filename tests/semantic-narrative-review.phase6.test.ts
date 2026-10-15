@@ -192,3 +192,56 @@ test('Phase 6 rejects unsupported environmental features during observation', ()
 	assert.equal(review.decision, 'REJECT');
 	assert.ok(review.violations.some((v) => v.code === 'UNSUPPORTED_CLAIM'));
 });
+
+test('Phase 6 rejects atmospheric narration that does not answer an information-seeking action', () => {
+	const review = SemanticNarrativeReview.review({
+		intent: intent(),
+		situation: situation(),
+		plan: plan(),
+		turnPackage: pkg('Across the expansive grounds, the low hum of arcane engines vibrates against the firm earth. The amber light catches the native vegetation as the afternoon continues.'),
+	});
+
+	assert.notEqual(review.decision, 'ACCEPT');
+	assert.ok(review.violations.some((v) => v.code === 'MISSING_INFORMATION'));
+});
+
+test('Phase 6 rejects an invented dockside notice board and job postings during observation', () => {
+	const review = SemanticNarrativeReview.review({
+		intent: intent({
+			action: 'approach_and_check_available_work',
+			goal: 'gather_information',
+			informationGoal: 'find available work, jobs, contracts, tasks, or notices',
+			interactionMode: 'PASSIVE_OBSERVATION',
+			movementIntent: true,
+			observationIntent: true,
+			speechIntent: false,
+			originalText: 'I move towards the post and check what is available.',
+		}),
+		situation: situation({
+			location: {
+				id: 'archive',
+				name: 'Elysium Solar Citadel',
+				regionId: 'citadel',
+				description: 'A solar citadel with broad terraces and crystalline resonance arrays.',
+				ambientSensory: 'A faint hum from solar engines.',
+				connectedLocations: [],
+			},
+			visibleEvents: [],
+			nearbyEntities: [],
+			sceneObjects: [],
+			sceneEvidence: {
+				objects: [],
+				entities: [],
+				events: [],
+				sensory: [],
+				structures: ['broad terraces', 'crystalline resonance arrays'],
+				occupancy: { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
+			},
+		}),
+		plan: plan({ informationToReveal: [] }),
+		turnPackage: pkg('You reach a weathered wooden support beam near the lower docks. Several parchment notices list a collapsed pier and a mechanic job repairing a leaking hydraulic valve.'),
+	});
+
+	assert.equal(review.decision, 'REJECT');
+	assert.ok(review.violations.some((v) => v.code === 'UNSUPPORTED_CLAIM'));
+});

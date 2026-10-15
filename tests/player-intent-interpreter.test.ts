@@ -69,7 +69,7 @@ test('movement and observation can coexist without speech', () => {
 	assert.equal(intent.observationIntent, true);
 	assert.equal(intent.speechIntent, false);
 	assert.equal(intent.interactionMode, 'EXPLORATION');
-	assert.equal(intent.locationTarget, undefined, 'a purpose clause such as “to hear the rumors” is not a travel destination');
+	assert.equal(intent.locationTarget, undefined, 'approaching a doorway to watch nearby guards is not a named destination');
 });
 
 test('attack is classified as combat without inventing dialogue', () => {

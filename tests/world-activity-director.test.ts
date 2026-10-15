@@ -251,3 +251,17 @@ test('WorldActivityDirector varies public market NPC identities across story see
 	assert.ok(alternatives.some((roster) => roster.map((person) => person.name).join('|') !== first.map((person) => person.name).join('|')),
 		'different stories should not all receive the same fixed NPC roster');
 });
+
+test('WorldActivityDirector treats libraries and archives as public activity locations when occupancy is unknown', () => {
+	const { repository, cards } = makeRepository({
+		id: 'loc_archive',
+		name: 'Archive of Contracts',
+		description: 'A public civic archive where records are consulted.',
+		population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+	});
+	const people = WorldActivityDirector.ensureAmbientPopulation(repository, 'story_archive_population', 'loc_archive');
+	assert.ok(people.length > 0);
+	assert.ok(people.every((person: any) => person.worldState.locationId === 'loc_archive'));
+	assert.ok(people.every((person: any) => person.metadata.ambientPopulation === true));
+	assert.equal(cards.size, people.length);
+});

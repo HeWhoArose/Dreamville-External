@@ -54,10 +54,7 @@ const CONTINUE_ACTION_PATTERN = /^(?:continue|continue on|keep going|go on|proce
 function pendingMovementDestination(situation?: CurrentSituation): string | undefined {
 	const previous = situation?.recentTurns.slice(-1)[0];
 	if (!previous?.playerAction || !MOVEMENT_PATTERN.test(previous.playerAction)) return undefined;
-	const action = previous.playerAction;
-	const destination = action.match(/\b(?:toward|towards|to|into)\s+(?:the\s+)?(.+?)(?:[.!?]|$)/i)?.[1];
-	if (destination) return clean(destination).replace(/\s+(?:as|while|and then|and)\s+.*$/i, '').trim();
-	return undefined;
+	return explicitMovementDestination(previous.playerAction);
 }
 const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|fight|cast at|defend|parry)\b/i;
 const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;

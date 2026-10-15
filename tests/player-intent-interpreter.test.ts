@@ -265,6 +265,8 @@ test('movement phrasing preserves the named destination in make-my-way actions',
 	assert.equal(result.movementIntent, true);
 	assert.equal(result.goal, 'change_position_or_approach_target');
 	assert.equal(result.locationTarget?.name, 'Archive of Contracts');
+	assert.equal(result.locationTarget?.source, 'EXPLICIT');
+	assert.equal(result.locationTarget?.id, undefined, 'an unlisted destination stays name-only until canonical resolution');
 });
 
 test('Continue inherits an unfinished travel destination from the immediately previous movement turn', () => {

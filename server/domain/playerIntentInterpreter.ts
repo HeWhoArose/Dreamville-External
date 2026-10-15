@@ -124,6 +124,18 @@ function explicitLocation(text: string, situation?: CurrentSituation): IntentLoc
 	return found ? { ...found, source: 'EXPLICIT' } : undefined;
 }
 
+function unresolvedExplicitMovementDestination(text: string): IntentLocationReference | undefined {
+	// A name explicitly supplied after a spatial preposition remains part of the
+	// player's intent even when it is not in the current location's link list.
+	// Keep it name-only (no synthetic id); canonical resolution must still decide
+	// whether the destination exists and can be reached.
+	const match = text.match(
+		/\b(?:toward|towards|into)\s+(?:the\s+)?(.+?)(?=\s+(?:and then|and|while|before|after|so I can)\b|\s+to\s+(?:inspect|watch|look|listen|hear|ask|talk|speak|read|check|search|examine)\b|[.!?]|$)/i,
+	);
+	const name = clean(match?.[1] || '').replace(/^(?:the|a|an)\s+/i, '').trim();
+	return name.length >= 3 ? { name, source: 'EXPLICIT' } : undefined;
+}
+
 function extractedTarget(text: string): string | undefined {
 	const quoted = text.match(/["“”']([^"“”']{2,80})["“”']/);
 	if (quoted?.[1]) return clean(quoted[1]);
@@ -199,11 +211,13 @@ export class PlayerIntentInterpreter {
 		const targetText = extractedTarget(originalText);
 		const explicitLocationTarget = explicitLocation(originalText, situation) || (continuationDestination
 			? { name: continuationDestination, source: 'IMPLIED' as const }
-			: undefined);
+			: movement ? unresolvedExplicitMovementDestination(originalText) : undefined);
 
 		let goal: string | undefined;
 		let informationGoal: string | undefined;
-		if (information) {
+		if (isTravelContinuation) {
+			goal = 'continue_travel_toward_destination';
+		} else if (information) {
 			goal = 'gather_information';
 			if (availabilityLookup || opportunityInquiry) {
 				informationGoal = OPPORTUNITY_TOPIC_PATTERN.test(originalText)

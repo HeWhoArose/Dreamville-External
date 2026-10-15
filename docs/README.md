@@ -37,7 +37,7 @@ This is the complete, active owner plan for:
 
 Say “Phase 1 of `docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`” when referring to the live-model test gate. Do not say only “Phase 1”: older historical documents use that label for different work (CurrentSituation, StoryBeat contract, Master Plan phase work and other systems).
 
-## 3. Current owner specifications and work plans
+## 3. Latest baseline audit (2026-10-15)\n\nRead [Narrative Grounding Phase 0 Baseline Audit](NARRATIVE_GROUNDING_PHASE0_BASELINE_AUDIT_2026-10-15.md) before implementing the active narrative plan. It records which systems already exist, which integrations remain unverified, the current main-branch CI baseline, and the required human gates. It is a dated snapshot; inspect current code and CI before relying on its status.\n\n## 4. Current owner specifications and work plans
 
 | Document | Ownership | How to use it |
 |---|---|---|
@@ -54,7 +54,7 @@ Say “Phase 1 of `docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`�
 
 “Active” means the contract or remaining work is still relevant. It does **not** mean every bullet is absent from code. Always audit the current implementation before adding anything.
 
-## 4. Verified implementation evidence — do not reimplement by default
+## 5. Verified implementation evidence — do not reimplement by default
 
 | Document(s) | Current documented state | Required behaviour before a change |
 |---|---|---|
@@ -69,7 +69,7 @@ Say “Phase 1 of `docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`�
 
 These records are verification snapshots, not permission to assume the latest `main` still passes. For any new change, record the exact tested commit and current CI status.
 
-## 5. Required human/live validation
+## 6. Required human/live validation
 
 The following work cannot be marked complete from source inspection or mock-only tests:
 - actual configured-model narration quality and semantic fidelity;
@@ -80,7 +80,7 @@ The following work cannot be marked complete from source inspection or mock-only
 
 These are explicitly tagged **[HUMAN LIVE-SESSION REQUIRED]**, **[HUMAN UX REVIEW REQUIRED]**, or **[HUMAN UI SESSION REQUIRED]** in the active narrative plan. When credentials or access are unavailable, report **BLOCKED**, not PASS.
 
-## 6. Archive policy
+## 7. Archive policy
 
 `docs/outdated/README.md` explains the archive and lists its categories. The archive contains old broad plans, completed plans, duplicate/superseded specs, legacy phase reports and forensic snapshots.
 
@@ -89,6 +89,6 @@ These are explicitly tagged **[HUMAN LIVE-SESSION REQUIRED]**, **[HUMAN UX REVIE
 - Do not resume an old phase from an archived report. Find the current owner in this index, inspect code and tests, then implement only a gap reproduced on the current target branch.
 - Some old paths remain as short deprecation pointers for link compatibility. A pointer is not the original plan and must not be expanded into a new implementation.
 
-## 7. Repository authority boundary
+## 8. Repository authority boundary
 
 This repository is the active integrated Dreamville engine and application: `server/` contains canonical runtime/simulation/authority services as well as AI orchestration; `src/` contains the user-facing application. Historical “external client only” wording has been archived. This does not weaken the internal boundary: canonical commands/repositories own world truth; AI output is not canonical without authorization and validation.

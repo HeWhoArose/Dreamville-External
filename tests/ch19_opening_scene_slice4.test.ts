@@ -680,7 +680,7 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // environment-only sentences that never depict the situation or any actor.
   const environmentOnlyTurn = JSON.stringify({
     narrative: [
-      'You circle the sand of The Obsidian Arena, keeping the private viewing box in sight.',
+      'You circle the sand of The Obsidian Arena and keep the private viewing box, where a high-level target watches behind caste enforcers, in sight.',
       'The sun bears down over the pale sand of the fighting pit.',
       'Tiered stone benches ring the fighting pit beneath the iron rails.',
       'Sunlight glints along the iron rails above the tiered benches.',
@@ -696,10 +696,10 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // A substance-first rewrite the same model could return on the review call:
   const improvedTurn = JSON.stringify({
     narrative: [
-      'You circle the sand of The Obsidian Arena, keeping the private viewing box in sight as you change your angle across the floor.',
-      'From this position, the iron rails no longer overlap the lower edge of the box, giving you a clearer view of the high-level target behind the caste enforcers already established in the scene.',
-      'You gauge the distance from the sand to the rail and the route around the tiered benches; the change in viewpoint gives you a better sense of the approach without committing you to it.',
-      'The murmur of spectators carries down from the benches while the target remains in view; you have improved your read of the space, but no action has been taken on your behalf.',
+      'You circle the sand of The Obsidian Arena while keeping the guarded high-level target in the private viewing box in sight.',
+      'Changing your position across the floor gives you a clearer sense of the distance to the box and the iron rails above the tiered benches.',
+      'The caste enforcers remain between you and the target as established in the scene; their position gives you something concrete to assess without deciding what you will do next.',
+      'The murmur of spectators carries down from the benches while you continue watching. You have a better read of the approach, but neither the target’s intentions nor an opening has been confirmed.',
     ],
     dialogue: [],
     events: [],

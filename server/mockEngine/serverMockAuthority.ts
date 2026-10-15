@@ -1258,6 +1258,7 @@ export class ServerMockAuthority {
     let narrativeVisualCues: string[] | undefined;
     let narrativePlanForFinalReview: import('../domain/narrativeDirector').EphemeralNarrativePlan | undefined;
     let narrativeStoryBeatForFinalReview: import('../domain/storyBeatDirector').StoryBeatContract | undefined;
+    let narrativePacingContractForFinalReview: import('../domain/narrativePacingEngine').NarrativePacingContract | undefined;
     try {
       const narrator = worldRepository.getAiOrchestrator();
       const generated = await narrator.generateNarrativeOnly({
@@ -1293,6 +1294,7 @@ export class ServerMockAuthority {
 
       narrativePlanForFinalReview = generated.narrativePlan;
       narrativeStoryBeatForFinalReview = generated.storyBeat;
+      narrativePacingContractForFinalReview = generated.narrativePacingContract;
       narrativeResearchPacket = generated.researchPacket;
       narrativeContextAudit = generated.contextAudit;
       narrativeGeneration = {
@@ -1476,7 +1478,7 @@ export class ServerMockAuthority {
               storyBeat: narrativeStoryBeatForFinalReview,
               turnPackage: rewrittenTurnPackage,
               repository: worldRepository,
-              pacingContract: narrativeGeneration?.narrativePacingContract,
+              pacingContract: narrativePacingContractForFinalReview,
             });
             const postReview = this.evaluateLiveNarrativeQuality({
               narrativeText: parsed.narrativeText,

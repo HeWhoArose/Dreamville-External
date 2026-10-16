@@ -8204,7 +8204,7 @@ export class MultiModelOrchestrator {
       'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
     const richnessEvaluationPlan: EphemeralNarrativePlan = {
       ...narrativePlan,
-      sceneComposition: resolvedSceneComposition,
+      ...(resolvedSceneComposition ? { sceneComposition: resolvedSceneComposition } : {}),
     };
 
     const contextAudit = {
@@ -8974,7 +8974,7 @@ export class MultiModelOrchestrator {
       'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
     const richnessEvaluationPlan: EphemeralNarrativePlan = {
       ...narrativePlan,
-      sceneComposition: resolvedSceneComposition,
+      ...(resolvedSceneComposition ? { sceneComposition: resolvedSceneComposition } : {}),
     };
 
     const profile = repo.getAdaptationProfile(storyId);

@@ -1348,11 +1348,11 @@ test('Phase 12 regression: environment-heavy narration fails closed when the N18
 	const scenery = new DeterministicMockAdapter('phase12_environment_heavy_provider');
 	scenery.cannedResponses.set('narrative.generate', JSON.stringify({
 		narrative: [
-			`You look around ${location!.name}, taking in the chamber from the central walkway.`,
-			`The ${location!.name}'s bronze rings hold their exact alignment beneath the high ceiling.`,
-			'Fine lines and engraved marks cover the instrument’s metal surfaces in orderly circles.',
-			'Cool reflections cross the stone arches and settle over the flagstones in muted bands.',
-			'A faint layer of dust softens the edges of the brass housing without obscuring its details.',
+			`You look around ${location!.name}, taking in the colossal bronze astrolabe suspended over a bottomless chasm.`,
+			'Concentric rings hum softly above the bottomless chasm.',
+			'A faint ozone tang hangs in the air beside rhythmic metallic ticking.',
+			'The colossal bronze astrolabe remains suspended over the bottomless chasm.',
+			'Rhythmic metallic ticking continues around the concentric rings as they hum softly.',
 		],
 		dialogue: [],
 		events: [],

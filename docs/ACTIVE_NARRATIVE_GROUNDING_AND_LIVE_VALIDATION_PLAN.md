@@ -20,20 +20,22 @@
 
 ## Integration status update — 2026-10-16
 
-The current consolidated integration candidate is PR #76 at `9597f0ca0d85c83a631763eb1ce17d231105c7c1`, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head GitHub Actions workflows passed on this commit:
+The current integration candidate is PR #76 at `88882c96ee15ee0fef0a64d47a6ee032a43612d1`, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head workflows passed on this commit:
 
-- Full suite: **1,522/1,522 tests passed**, zero failures.
-- Lint and TypeScript checks: passed.
+- Full suite: **1,523/1,523 tests passed**, zero test failures.
+- Type-check and lint: passed.
 - Release-contract verification: passed.
 - Production build: passed.
 
-Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058248), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058356), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058389).
+Evidence: [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458017), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458006), [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458038).
 
-The exact-head test output verifies the HTTP NPC-initiative prompt regression, opening-scene ambient population and restricted-occupancy behavior, opening-dialogue provenance, fail-closed final narration review, configured Gemini routing, explicit movement destinations, unfinished-travel continuation, and multiple persistence/reload cases. The bounded current-scene event summary is included in full and compact narration prompt modes to protect canonical evidence under tight token budgets.
+The latest change restores a durable repository-reconstruction regression for opening population and opening-scene text. It verifies authored occupancy metadata survives reload, canonical ambient resident IDs/count survive, the persisted StoryRun snapshot retains the entities, and forced opening regeneration does not duplicate residents. The test uses a temporary persistence directory and restores the environment variable in `finally`.
 
-PRs #69–#75 are overlapping source branches to reconcile against #76, not independent changes to stack blindly. Their relevant documentation cleanup, fail-closed narration, opening population, model-routing, movement, and test-fixture work is represented in the integration candidate; see the open-PR triage document for scoped treatment.
+The passing suite also retains NPC-initiative prompt coverage, opening-scene semantic checks, fail-closed narration review, configured Gemini routing, explicit movement destinations and unfinished-travel continuation, plus existing persistence/reload checks.
 
-**Player-testing boundary:** the live-provider 125-turn session remains deferred until code integrations are complete, because repeated automated calls can consume Gemini/provider token and quota limits. The deterministic/mock HTTP marathon remains in CI. Do not mark the real-provider session as passed until the player performs it through the actual UI. PR #76 remains open and unmerged, and the final merged-main release gate is still required. Broader living-world/social-opportunity and manual UI behavior must not be declared completely validated solely from the specific passing NPC-initiative regression.
+PRs #69–#75 remain open and are overlapping source branches; do not stack or merge them blindly. See the open-PR triage document for the candidate's scoped reconciliation.
+
+**Player-testing boundary:** the real-provider 125-turn session remains deferred until code integration is complete. The deterministic/mock HTTP marathon is not a substitute for live provider calls or human UI testing. PR #76 remains open and unmerged; rerun the release gate after merge to `main`. Do not claim the entire living-world/social-opportunity experience is validated solely from these targeted regressions.
 
 ---
 

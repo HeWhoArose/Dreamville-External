@@ -534,7 +534,7 @@ export class OpeningSceneService {
 		if (!narration) return { valid: false, errorReason: 'The opening candidate is empty.' };
 
 		try {
-			const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId || \`player_actor_\${storyId}\`;
+			const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
 			const situation = CurrentSituationBuilder.build({
 				storyId,
 				viewerActorId,
@@ -544,7 +544,7 @@ export class OpeningSceneService {
 			// Opening setup is not a player command to move, speak, observe, or
 			// obtain an answer. Keep the semantic contract neutral while still
 			// enforcing canon, hidden-knowledge, and agency boundaries.
-			const intentText = \`Begin the story within \${facts.location.name}.\`;
+			const intentText = `Begin the story within ${facts.location.name}.`;
 			const intent = PlayerIntentInterpreter.deterministic(intentText, situation);
 			const plan = OpeningSceneService.buildOpeningReviewPlan(facts, storyId);
 			const turnPackage: StructuredTurnPackage = {
@@ -566,7 +566,7 @@ export class OpeningSceneService {
 			].filter(Boolean);
 			return {
 				valid: false,
-				errorReason: \`SemanticNarrativeReview returned \${review.decision}\` + (details.length ? \`: \${details.join(' | ')}\` : '.'),
+				errorReason: `SemanticNarrativeReview returned ${review.decision}` + (details.length ? `: ${details.join(' | ')}` : '.'),
 			};
 		} catch (error: any) {
 			return {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { StorySessionRecorder } from '../server/domain/storySessionRecorder';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 test('story session recorder reconstructs lossless state through JSON patches', () => {
 	const initial = {
@@ -131,4 +132,33 @@ test('story session recorder refuses to append after it has been stopped', () =>
 		/Cannot append to a stopped story session recording/,
 	);
 	assert.equal(StorySessionRecorder.validate(recording).valid, true);
+});
+
+
+test('recording-integrity errors do not fail canonical repository interaction recording', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('story_recorder_boundary');
+	repository.recordStorySessionInteraction({
+		storyId: 'story_recorder_boundary',
+		kind: 'DIRECT_TURN',
+		source: 'AI',
+		startedAt: '2026-10-16T10:00:00.000Z',
+		completedAt: '2026-10-16T10:00:00.100Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: { value: 1 },
+		stateAfter: { value: 2 },
+	});
+	assert.doesNotThrow(() => repository.recordStorySessionInteraction({
+		storyId: 'story_recorder_boundary',
+		kind: 'DIRECT_TURN',
+		source: 'AI',
+		startedAt: '2026-10-16T10:00:01.000Z',
+		completedAt: '2026-10-16T10:00:01.100Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: { value: 999 },
+		stateAfter: { value: 1000 },
+	}));
+	assert.equal(repository.getStorySessionRecording('story_recorder_boundary')?.interactions.length, 1);
 });

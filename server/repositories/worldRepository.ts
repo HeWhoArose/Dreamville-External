@@ -3189,8 +3189,17 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public recordStorySessionInteraction(params: RecordStorySessionInteractionParams): StorySessionRecording {
     const recording = this.ensureStorySessionRecording(params.storyId, this.getStoryRun(params.storyId)?.title, params.stateBefore);
-    StorySessionRecorder.append(recording, params);
-    storySessionRecordingStore.save(recording);
+    try {
+      StorySessionRecorder.append(recording, params);
+      storySessionRecordingStore.save(recording);
+    } catch (error) {
+      // Forensic recording is observability, not canonical gameplay authority.
+      // A bad/missing evidence append must never turn a committed player action into a failed action.
+      console.error(
+        `[StorySessionRecorder] Failed to record interaction for story "${params.storyId}"; canonical gameplay continues.`,
+        error,
+      );
+    }
     return recording;
   }
 

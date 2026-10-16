@@ -668,6 +668,21 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                 </div>
               ))}
               <div className="mt-4 rounded-2xl border border-violet-200/15 bg-violet-300/5 px-4 py-4">
+                {combatState.lastResolution.narrativeSource === 'DETERMINISTIC_FALLBACK' && (
+                  <p className="mb-2 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-[10px] font-semibold text-amber-100/80">
+                    Deterministic combat summary · AI narration unavailable. The resolved combat result is preserved.
+                  </p>
+                )}
+                {combatState.lastResolution.narrativeSource === 'AI_FALLBACK' && (
+                  <p className="mb-2 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-[10px] font-semibold text-amber-100/80">
+                    Backup AI narrator used. The resolved combat result is preserved.
+                  </p>
+                )}
+                {combatState.lastResolution.fallbackUsed && !combatState.lastResolution.narrativeSource && (
+                  <p className="mb-2 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-[10px] font-semibold text-amber-100/80">
+                    Narration fallback recorded. The resolved combat result is preserved.
+                  </p>
+                )}
                 <div className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-100/55">What happened</div>
                 <div className="mt-1 font-serif text-sm leading-7 text-violet-50">{combatState.lastResolution.narrativeResponse}</div>
               </div>

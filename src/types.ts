@@ -1299,6 +1299,8 @@ export interface CombatNarrativeResolution {
   narrativeResponse: string;
   canonicalEventIds: string[];
   fallbackUsed?: boolean;
+  /** Which path supplied the combat narration; does not affect canonical mechanics. */
+  narrativeSource?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
   createdAt: string;
 }
 

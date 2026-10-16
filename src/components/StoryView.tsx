@@ -1195,6 +1195,21 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   ))}
                 </div>
               )}
+              {combatTransition.precombatResolution?.narrativeSource === 'DETERMINISTIC_FALLBACK' && (
+                <p className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-[10px] font-semibold text-amber-100/80">
+                  Deterministic combat summary · AI narration unavailable. The resolved combat result is preserved.
+                </p>
+              )}
+              {combatTransition.precombatResolution?.narrativeSource === 'AI_FALLBACK' && (
+                <p className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-[10px] font-semibold text-amber-100/80">
+                  Backup AI narrator used. The resolved combat result is preserved.
+                </p>
+              )}
+              {combatTransition.precombatResolution?.fallbackUsed && !combatTransition.precombatResolution?.narrativeSource && (
+                <p className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/5 px-3 py-2 text-[10px] font-semibold text-amber-100/80">
+                  Narration fallback recorded. The resolved combat result is preserved.
+                </p>
+              )}
               {combatTransition.precombatResolution?.narrativeResponse && (
                 <p className="mt-3 font-serif text-sm leading-6 text-stone-200">{combatTransition.precombatResolution.narrativeResponse}</p>
               )}

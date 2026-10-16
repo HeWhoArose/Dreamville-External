@@ -187,7 +187,7 @@ export class CombatEncounterService {
       canonicalEventIds: mechanical.canonicalEventIds || [],
       createdAt: formatCanonicalTimestamp(params.repository.getWorldClock(params.storyId).getTimestamp()),
     }, params.storyId, provisionalResolutionId);
-    const narration = await this.generateNarration({
+    const narrationResult = await this.generateNarration({
       storyId: params.storyId,
       actionText: params.actionText,
       mechanicalSummary,
@@ -208,7 +208,9 @@ export class CombatEncounterService {
       damage,
       targetHp: [{ targetId: params.targetId, hpCurrent: updatedTarget.hpCurrent, hpMax: updatedTarget.hpMax, targetDied: updatedTarget.isDead }],
       mechanicalSummary,
-      narrativeResponse: narration,
+      narrativeResponse: narrationResult.text,
+      fallbackUsed: narrationResult.fallbackUsed,
+      narrativeSource: narrationResult.source,
       canonicalEventIds: mechanical.canonicalEventIds || [],
       createdAt: formatCanonicalTimestamp(params.repository.getWorldClock(params.storyId).getTimestamp()),
     };
@@ -263,7 +265,7 @@ export class CombatEncounterService {
     return { success: true, resolution, transition };
   }
 
-  private async generateNarration(params: { storyId: string; actionText: string; mechanicalSummary: string; targetName: string; targetHp: number; repository: WorldRepository; actionResolution?: import('./actionResolution').ActionResolution }): Promise<string> {
+  private async generateNarration(params: { storyId: string; actionText: string; mechanicalSummary: string; targetName: string; targetHp: number; repository: WorldRepository; actionResolution?: import('./actionResolution').ActionResolution }): Promise<{ text: string; source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK'; fallbackUsed: boolean }> {
     try {
       const generated = await params.repository.getAiOrchestrator().generateNarrativeOnly({
         storyId: params.storyId,
@@ -272,11 +274,15 @@ export class CombatEncounterService {
         committedOutcome: params.mechanicalSummary + ' ' + params.targetName + ' has ' + params.targetHp + ' HP remaining.',
         continuationDirective: 'This is a pre-combat opening action. Narrate the already-resolved result. Do not roll again and do not start initiative in the prose.',
       });
-      if (generated.success && generated.turnPackage?.narrative?.length) return generated.turnPackage.narrative.join('\n\n').trim();
+      const text = generated.success ? (generated.turnPackage?.narrative || []).join('\n\n').trim() : '';
+      if (text) {
+        const source = generated.source || 'AI_FALLBACK';
+        return { text, source, fallbackUsed: source !== 'AI_PRIMARY' };
+      }
     } catch {
       // Deterministic fallback below.
     }
-    return params.mechanicalSummary + ' ' + params.targetName + ' has ' + params.targetHp + ' HP remaining. Combat is now initiated; roll for initiative.';
+    return { text: params.mechanicalSummary + ' ' + params.targetName + ' has ' + params.targetHp + ' HP remaining. Combat is now initiated; roll for initiative.', source: 'DETERMINISTIC_FALLBACK', fallbackUsed: true };
   }
 }
 

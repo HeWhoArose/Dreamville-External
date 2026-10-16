@@ -8009,17 +8009,39 @@ export class MultiModelOrchestrator {
       storyBeat,
     });
 
-    // Current-scene events are authoritative player-visible evidence. Keep this
-    // compact projection inside the protected B1 anchor so a small narrative token
-    // budget cannot evict an NPC-initiated interaction into a lower-priority B3
-    // research block that may be dropped before provider handoff.
-    const canonicalSceneEventContext = currentSituation.visibleEvents
+    // Current-scene events are authoritative player-visible evidence. Merge the
+    // bounded CurrentSituation projection with canonical NPC-initiation events
+    // read directly from event history: the initiating event must remain available
+    // even if the generic recent-event projection trims older entries.
+    const projectedSceneEvents = currentSituation.visibleEvents
       .filter((event) => event.locationId === currentSituation.location.id && event.type !== 'DIALOGUE')
+      .map((event) => ({
+        id: String(event.id || ''),
+        type: String(event.type || 'EVENT'),
+        summary: String(event.summary || ''),
+      }));
+    const committedNpcInitiations = worldRepo.getRecentCanonicalCommandEvents(storyId, 32)
+      .filter((event: any) =>
+        event?.type === 'NPC_INITIATED_INTERACTION' &&
+        String(event?.locationId || '') === currentSituation.location.id &&
+        String(event?.summary || '').trim().length > 0,
+      )
+      .map((event: any) => ({
+        id: String(event.eventId || ''),
+        type: 'NPC_INITIATED_INTERACTION',
+        summary: String(event.summary).trim(),
+      }));
+    const canonicalSceneEvents = new Map<string, { id: string; type: string; summary: string }>();
+    for (const event of [...projectedSceneEvents, ...committedNpcInitiations]) {
+      const key = event.id || event.type + '|' + event.summary;
+      if (!canonicalSceneEvents.has(key)) canonicalSceneEvents.set(key, event);
+    }
+    const canonicalSceneEventContext = [...canonicalSceneEvents.values()]
       .sort((left, right) =>
         Number(right.type === 'NPC_INITIATED_INTERACTION') - Number(left.type === 'NPC_INITIATED_INTERACTION'),
       )
       .slice(0, 4)
-      .map((event) => `[${String(event.type || 'EVENT').slice(0, 48)}] ${String(event.summary || '').slice(0, 220)}`)
+      .map((event) => `[${event.type.slice(0, 48)}] ${event.summary.slice(0, 220)}`)
       .filter((line) => line.trim().length > 0)
       .join(' | ') || 'None';
 

@@ -199,8 +199,12 @@ test('HTTP action commits eligible NPC initiative before the live narration prom
   assert.ok(
     matchingPromptCalls.length >= 1,
     'the already-committed NPC interaction must reach the configured narration provider prompt; ' +
-      'provider calls=' + adapter.callHistory.length + '; prompt previews=' +
-      JSON.stringify(adapter.callHistory.map((call: any) => String(call.prompt || '').slice(0, 2400))),
+      'provider calls=' + adapter.callHistory.length + '; event summary=' + String(event.summary || '') +
+      '; protected scene-context snippets=' + JSON.stringify(adapter.callHistory.map((call: any) => {
+        const prompt = String(call.prompt || '');
+        const start = prompt.indexOf('Visible current-scene events (canonical or projected):');
+        return start >= 0 ? prompt.slice(start, start + 900) : 'protected scene-event anchor missing';
+      })) ,
   );
 
   const afterCount = worldRepository.getCanonicalCommandEventCount(storyId);

@@ -66,6 +66,15 @@ The release is not considered green unless:
 5. Manual scenario coverage above is exercised on the integration target.
 6. The Phase 20 orphan/connection audit has no unresolved release-critical entry.
 
-## Environment status for this implementation session
+## Verified status at the 2026-10-16 integration candidate
 
-The working environment could not access the repository over the network, so the npm commands were not executed locally. GitHub Actions has nevertheless executed the release gate on this branch: contract verification and TypeScript have passed, while the full test suite is still red on remaining earlier-phase/integration regressions. Therefore Phase 21 is implemented but the release candidate is not yet green. The final main-branch gate remains the authoritative release verification.
+The integration candidate is PR #76, branch `integration/narrative-grounding-runtime-2026-10-16-v2`. At the evidence snapshot documented in `docs/DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md`, the following GitHub Actions checks passed:
+
+- PR #76 candidate `bd32e2f7f9ccc205ca8d88f67fd4906e5e2a23b3`: both verification workflows passed; the 125-turn deterministic/mock HTTP integration test and Phase 24 system-wide architecture audit were among the passing tests.
+- Integration branch follow-up commit `e05f60d7dcde2f12ccac4f77dc23b69144ed82e2`: the release gate passed all steps — release-contract verification, type-check, full test suite (1,500/1,500), and production build.
+
+Evidence: [release gate for e05f60d](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38885769653), [verification for bd32e2f (1)](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38862436764), and [verification for bd32e2f (2)](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38862436773).
+
+These results supersede earlier notes that the integrated automated suite was red. They do **not** complete the release decision on their own: PR #76 remains unmerged; a fresh real-provider 125-turn run through the application-level HTTP action route has not been verified; and the manual scenarios listed above still require execution on the integration target. See `docs/DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md` for the scoped evidence and remaining work.
+
+The standard automated test and release-gate runs do not execute `scripts/run_125_turn_stress_test.ts`. That standalone provider stress script calls the orchestrator directly, so it is not a substitute for the required application-level live-provider run.

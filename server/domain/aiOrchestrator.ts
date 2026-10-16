@@ -9399,6 +9399,18 @@ export class MultiModelOrchestrator {
                   }
                 }
               }
+              const emergencyNarrativeRichnessEvaluation = isNarrativeTask && narrativePlan
+                ? NarrativeRichnessEvaluator.evaluate({
+                    intent: playerIntent,
+                    situation: currentSituation,
+                    plan: narrativePlan,
+                    turnPackage: emergencyTurnPackage,
+                    previousNarrations: currentSituation.recentTurns
+                      .map((entry) => String(entry.narration || ''))
+                      .filter(Boolean),
+                  })
+                : undefined;
+
               const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,
                 repo,
@@ -9493,6 +9505,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview: emergencyNarrativeReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
               attemptsTrail: [...turnAttemptsTrail, {
                 providerId: emergencyModel.providerId,
@@ -9524,6 +9537,7 @@ export class MultiModelOrchestrator {
               narrativePlan,
               narrativeReview: emergencyNarrativeReview,
               literaryReview: emergencyLiteraryReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,

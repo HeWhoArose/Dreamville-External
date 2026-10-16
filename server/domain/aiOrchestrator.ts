@@ -8046,7 +8046,7 @@ export class MultiModelOrchestrator {
         ? 'CANONICAL_NPC_INITIATION'
         : 'CURRENT_SITUATION_PROJECTION',
     }));
-    const mergedVisibleSceneEvents = new Map<string, typeof currentSceneVisibleEvents[number]>();
+    const mergedVisibleSceneEvents = new Map<string, CurrentSituation['visibleEvents'][number] | typeof currentSceneVisibleEvents[number]>();
     for (const event of [...currentSituation.visibleEvents, ...currentSceneVisibleEvents]) {
       if (event.locationId && event.locationId !== currentSituation.location.id) continue;
       const key = event.id || event.type + '|' + event.summary;

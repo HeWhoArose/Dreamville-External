@@ -1,16 +1,18 @@
 # Dreamville Documentation Index — Read This Before Planning or Coding
 
 **Index status:** CURRENT  
-**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and integration candidate `76748e083ab5b29758032afe9656fa1bd8ec5111` (2026-10-16). Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
+**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and current integration candidate `50061df2565a7d1d37ce013cf524228aae8ba8a8` (2026-10-16). Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
 **Purpose:** tell future developers/AI agents which documents are authoritative, what is complete, what is still planned, and which files must not be used as implementation instructions.
 
 ## Current integration status — 2026-10-16
 
-The last fully verified runtime integration candidate is commit `76748e083ab5b29758032afe9656fa1bd8ec5111` on draft PR #76. Its GitHub release gate and both verification workflows passed: **1,502/1,502 tests**, release-contract verification, lint, type-check, and production build.
+The current verified runtime integration candidate is commit `50061df2565a7d1d37ce013cf524228aae8ba8a8` on draft PR #76. Its exact-head GitHub release gate and both verification workflows passed: **1,503/1,503 tests**, zero failures, release-contract verification, TypeScript check, and production build.
 
-Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38889356173), [verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38889356224), [second verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38889356223).
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307064), [verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307058), [second verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307061).
 
-PR #76 is still open and unmerged. The documentation/archive cleanup is being applied after that verified runtime candidate, so inspect CI for the newest commit before declaring documentation work green. The deterministic/mock 125-turn HTTP integration remains in CI. The separate 125-turn real-provider play session is deliberately deferred to the player after integrations are complete, to avoid repetitive Gemini/provider token and quota usage in CI. It is a manual acceptance step, not an automated gate.
+PR #76 remains open and unmerged. The deterministic/mock 125-turn HTTP integration remains in CI. The separate 125-turn real-provider play session is deliberately deferred to the player after integrations are complete, to avoid repetitive Gemini/provider token and quota usage in CI. It is a manual acceptance step, not an automated gate.
+
+Use [the open-PR integration triage](DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md) before adopting any older open branch: PRs #70–#75 are consolidated in PR #76, while older recording and long-session branches need scoped review rather than blind merges.
 
 The current root Phase 20 and Phase 21 documents remain active integration/status summaries; their counterparts under `docs/outdated/phase-17-to-24/` are historical records and must not override the current summary.
 

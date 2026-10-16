@@ -1381,7 +1381,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                                 <span className="hidden xs:inline">Listen</span>
                               </button>
                             )}
-                            {entry.narrativeResponse && (
+                            {(entry.narrativeResponse || entry.narrativeError) && (
                               <button
                                 type="button"
                                 onClick={() => regenerateNarration(entry)}

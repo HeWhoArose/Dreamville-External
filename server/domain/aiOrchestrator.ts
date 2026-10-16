@@ -8021,7 +8021,7 @@ export class MultiModelOrchestrator {
       .slice(0, 4)
       .map((event) => `[${String(event.type || 'EVENT').slice(0, 48)}] ${String(event.summary || '').slice(0, 220)}`)
       .filter((line) => line.trim().length > 0)
-      .join('\\n') || 'None';
+      .join(' | ') || 'None';
 
     const canonicalSceneAnchor = [
       `Location ID: ${currentSituation.location.id}`,

@@ -292,7 +292,7 @@ test('N18 scoring consumes the resolved N13 scene composition in both narration 
 	const fs = await import('node:fs/promises');
 	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');
 	assert.match(source, /const resolvedSceneComposition =\s*'sceneComposition' in narrationPrompt \? narrationPrompt\.sceneComposition : undefined;/);
-	assert.match(source, /const richnessEvaluationPlan: EphemeralNarrativePlan(?: \\| undefined)? = [\\s\\S]*?sceneComposition: resolvedSceneComposition/);
+	assert.match(source, /const richnessEvaluationPlan: EphemeralNarrativePlan(?: \| undefined)? = [\s\S]*?sceneComposition: resolvedSceneComposition/);
 	assert.ok((source.match(/plan: richnessEvaluationPlan/g) || []).length >= 4,
 		'N18 scoring and final candidate validation should use the N13-resolved plan, not only the pre-composition director plan.');
 	assert.match(source, /narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation/);

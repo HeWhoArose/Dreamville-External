@@ -107,16 +107,11 @@ function escapePointerSegment(value: string): string {
 }
 
 function hash(value: unknown): string {
-	// Canonical snapshot comparison intentionally excludes the denormalized
-	// StoryRun runtimeState bundle: its component engines are captured in
-	// dedicated snapshot partitions, and saveStoryRun may reserialize this
-	// cache between commands. Keep the same boundary for recorder hash identity.
-	const canonicalRunSnapshot = (value as any)?.adaptation?.ch16Run;
-	const serialized = JSON.stringify(value ?? null, function (this: any, key: string, nestedValue: unknown) {
-		if (key === 'runtimeState' && this === canonicalRunSnapshot) return undefined;
-		return nestedValue;
-	});
-	return crypto.createHash('sha256').update(serialized, 'utf8').digest('hex');
+	// Session-recording integrity hashes cover the entire lossless snapshot,
+	// including denormalized runtimeState fields. Intervening changes are
+	// represented by explicit AUXILIARY bridge interactions rather than omitted
+	// from the hash and made invisible to tamper detection.
+	return crypto.createHash('sha256').update(JSON.stringify(value ?? null), 'utf8').digest('hex');
 }
 
 interface ReconstructedRecordingTail {
@@ -320,6 +315,66 @@ export class StorySessionRecorder {
 			lastPatchHash,
 		});
 		return state;
+	}
+
+	/**
+	 * Preserve state changes observed between interaction recorder boundaries.
+	 * This does not relax append-time hash checks: the gap becomes its own,
+	 * explicitly labelled AUXILIARY interaction with a normal before/after hash
+	 * and patch. It must never be attributed silently to the next command.
+	 */
+	public static appendBoundaryTransitionIfNeeded(
+		recording: StorySessionRecording,
+		params: {
+			storyId: string;
+			stateBefore: unknown;
+			nextInteractionKind: StorySessionInteractionKind;
+			nextInteractionSource: string;
+		},
+	): boolean {
+		if (recording.interactions.length === 0 || recording.endedAt) return false;
+		const candidate = params.stateBefore as any;
+		const isCanonicalSnapshot = Boolean(
+			candidate &&
+			typeof candidate === 'object' &&
+			typeof candidate.storyId === 'string' &&
+			candidate.storyId === params.storyId &&
+			Object.prototype.hasOwnProperty.call(candidate, 'worldClock') &&
+			Object.prototype.hasOwnProperty.call(candidate, 'player') &&
+			candidate.adaptation &&
+			typeof candidate.adaptation === 'object',
+		);
+		if (!isCanonicalSnapshot) return false;
+
+		const previousState = this.reconstructedTail(recording);
+		if (hash(previousState) === hash(params.stateBefore)) return false;
+
+		const stateBefore = clone(previousState);
+		const stateAfter = clone(params.stateBefore);
+		const changedPaths = diff(stateBefore, stateAfter).map((operation) => operation.path);
+		const timestamp = new Date().toISOString();
+		this.append(recording, {
+			storyId: params.storyId,
+			kind: 'AUXILIARY',
+			source: 'STORY_SESSION_BOUNDARY_RECONCILIATION',
+			startedAt: timestamp,
+			completedAt: timestamp,
+			success: true,
+			rolledBack: false,
+			request: {
+				nextInteractionKind: params.nextInteractionKind,
+				nextInteractionSource: params.nextInteractionSource,
+			},
+			result: {
+				kind: 'OUT_OF_BAND_STATE_TRANSITION',
+				note: 'Observed state changes between recorder boundaries were preserved as a separate AUXILIARY interaction and are not attributed to the next command.',
+				changedPathCount: changedPaths.length,
+			},
+			stateBefore,
+			stateAfter,
+			mutationPaths: changedPaths.slice(0, 128),
+		});
+		return true;
 	}
 
 	public static append(

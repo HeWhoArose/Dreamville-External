@@ -286,9 +286,10 @@ test('repository starts a distinct recording when a storyId is reused for a new 
 });
 
 
-test('story session recorder preserves a continuous patch chain across denormalized runtimeState resaves', () => {
+test('story session recorder preserves runtimeState and hashes it across explicit boundary-gap interactions', () => {
 	const initial = {
 		storyId: 'story_runtime_state_reserialization',
+		worldClock: { seconds: 10 },
 		player: { locationId: 'loc_orrery', hp: 10 },
 		adaptation: {
 			ch16Run: {
@@ -322,8 +323,9 @@ test('story session recorder preserves a continuous patch chain across denormali
 		stateAfter: firstAfter,
 	});
 
-	// A repository save reserializes denormalized StoryRun.runtimeState after the
-	// previous canonical-command recorder boundary. Canonical state is unchanged.
+	// A persistence/runtime subsystem changes runtimeState between the previous
+	// recorded post-state and the next command boundary. The mismatch is recorded
+	// as its own AUXILIARY transition, never silently merged into the next command.
 	const secondBefore = JSON.parse(JSON.stringify(firstAfter));
 	secondBefore.adaptation.ch16Run.runtimeState = {
 		...secondBefore.adaptation.ch16Run.runtimeState,
@@ -335,6 +337,12 @@ test('story session recorder preserves a continuous patch chain across denormali
 	secondAfter.adaptation.ch16Run.runtimeState.narrativeContextHistory.push({ actionId: 'turn_2' });
 	secondAfter.adaptation.ch16Run.runtimeState.materializedEngineState = { revision: 4 };
 
+	assert.equal(StorySessionRecorder.appendBoundaryTransitionIfNeeded(recording, {
+		storyId: 'story_runtime_state_reserialization',
+		stateBefore: secondBefore,
+		nextInteractionKind: 'DIRECT_TURN',
+		nextInteractionSource: 'HTTP_ACTION',
+	}), true);
 	StorySessionRecorder.append(recording, {
 		storyId: 'story_runtime_state_reserialization',
 		kind: 'DIRECT_TURN',
@@ -347,18 +355,28 @@ test('story session recorder preserves a continuous patch chain across denormali
 		stateAfter: secondAfter,
 	});
 
-	assert.equal(recording.interactions.length, 2);
+	assert.equal(recording.interactions.length, 3);
+	assert.equal(recording.interactions[1].kind, 'AUXILIARY');
+	assert.equal(recording.interactions[1].source, 'STORY_SESSION_BOUNDARY_RECONCILIATION');
 	assert.ok(
 		recording.interactions[1].statePatch.some((operation) =>
 			operation.path.startsWith('/adaptation/ch16Run/runtimeState'),
 		),
-		'the second patch must retain intervening StoryRun runtimeState updates for reconstruction',
+		'the gap patch must retain intervening runtimeState updates for reconstruction',
 	);
 	assert.equal(StorySessionRecorder.validate(recording).valid, true);
 	assert.deepEqual(StorySessionRecorder.applyPatches(recording), secondAfter);
 
-	// The normalization applies only to the denormalized runtimeState bundle;
-	// a real canonical player-location change in stateBefore must still fail.
+	// Hashing must cover runtimeState too: a tampered runtimeState patch is an
+	// integrity failure, while a real canonical location mismatch is still rejected.
+	const tamperedRecording = StorySessionRecorder.export(recording);
+	const runtimeStatePatch = tamperedRecording.interactions[1].statePatch.find((operation) =>
+		operation.path.startsWith('/adaptation/ch16Run/runtimeState') && Object.prototype.hasOwnProperty.call(operation, 'value'),
+	);
+	assert.ok(runtimeStatePatch, 'the test must find a value-bearing runtimeState patch');
+	runtimeStatePatch!.value = { tampered: true };
+	assert.equal(StorySessionRecorder.validate(tamperedRecording).valid, false);
+
 	const tamperedCanonicalBefore = JSON.parse(JSON.stringify(secondAfter));
 	tamperedCanonicalBefore.player.locationId = 'loc_fabricated';
 	assert.throws(
@@ -375,5 +393,57 @@ test('story session recorder preserves a continuous patch chain across denormali
 		}),
 		/Story session state-before mismatch/,
 	);
-	assert.equal(recording.interactions.length, 2);
+	assert.equal(recording.interactions.length, 3);
+});
+
+
+test('repository records out-of-band canonical snapshot changes as explicit AUXILIARY interactions', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'story_boundary_gap_' + Date.now();
+	repository.seedStory(storyId);
+	const initial = {
+		storyId,
+		worldClock: { seconds: 10 },
+		player: { locationId: 'loc_orrery', hp: 10 },
+		adaptation: { ch16Run: { storyId, canonicalEvents: [], runtimeState: { cacheRevision: 1 } } },
+	};
+	const afterFirst = JSON.parse(JSON.stringify(initial));
+	afterFirst.player.locationId = 'loc_gate';
+	const now = '2026-10-16T11:10:00.000Z';
+	repository.recordStorySessionInteraction({
+		storyId,
+		kind: 'DIRECT_TURN',
+		source: 'HTTP_ACTION',
+		startedAt: now,
+		completedAt: now,
+		success: true,
+		rolledBack: false,
+		stateBefore: initial,
+		stateAfter: afterFirst,
+	});
+
+	const afterBoundaryMutation = JSON.parse(JSON.stringify(afterFirst));
+	afterBoundaryMutation.adaptation.ch16Run.runtimeState.cacheRevision = 2;
+	afterBoundaryMutation.adaptation.ch16Run.runtimeState.derivedProjection = { refreshed: true };
+	const afterSecond = JSON.parse(JSON.stringify(afterBoundaryMutation));
+	afterSecond.player.locationId = 'loc_vault';
+	repository.recordStorySessionInteraction({
+		storyId,
+		kind: 'DIRECT_TURN',
+		source: 'HTTP_ACTION',
+		startedAt: '2026-10-16T11:10:01.000Z',
+		completedAt: '2026-10-16T11:10:01.100Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: afterBoundaryMutation,
+		stateAfter: afterSecond,
+	});
+
+	const recording = repository.getStorySessionRecording(storyId);
+	assert.ok(recording);
+	assert.equal(recording!.interactions.length, 3);
+	assert.equal(recording!.interactions[1].kind, 'AUXILIARY');
+	assert.equal(recording!.interactions[1].source, 'STORY_SESSION_BOUNDARY_RECONCILIATION');
+	assert.equal(StorySessionRecorder.validate(recording).valid, true);
+	assert.deepEqual(StorySessionRecorder.applyPatches(recording), afterSecond);
 });

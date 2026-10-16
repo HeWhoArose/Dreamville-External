@@ -8972,10 +8972,12 @@ export class MultiModelOrchestrator {
         const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
     const resolvedSceneComposition =
       'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
-    const richnessEvaluationPlan: EphemeralNarrativePlan = {
-      ...narrativePlan,
-      ...(resolvedSceneComposition ? { sceneComposition: resolvedSceneComposition } : {}),
-    };
+    const richnessEvaluationPlan: EphemeralNarrativePlan | undefined = narrativePlan
+      ? {
+          ...narrativePlan,
+          ...(resolvedSceneComposition ? { sceneComposition: resolvedSceneComposition } : {}),
+        }
+      : undefined;
 
     const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);

@@ -68,15 +68,15 @@ The release is not considered green unless:
 
 ## Verified status at the 2026-10-16 integration candidate
 
-The latest verified integration candidate is PR #76 at `9597f0ca0d85c83a631763eb1ce17d231105c7c1`. All three exact-head GitHub Actions checks passed:
+The latest verified integration candidate is PR #76 at `88882c96ee15ee0fef0a64d47a6ee032a43612d1`. All three exact-head GitHub Actions checks passed:
 
 - `npm run verify:contracts`: passed.
 - `npm run lint` / TypeScript check: passed.
-- `npm test`: **1,522/1,522 passed**.
+- `npm test`: **1,523/1,523 passed**.
 - `npm run build`: passed.
 - Both verification workflows: passed.
 
-Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058248), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058356), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058389).
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458038), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458017), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458006).
 
 The 125-turn live-provider play session is deliberately deferred to the player after code integrations are complete because repeated automated calls can consume provider token/quota limits. It is a documented final player acceptance test, not a routine CI gate. The deterministic/mock HTTP marathon remains part of automated regression coverage. Manual UI/model scenarios also remain post-integration acceptance work.
 

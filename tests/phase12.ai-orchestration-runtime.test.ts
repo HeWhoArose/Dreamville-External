@@ -1327,3 +1327,60 @@ test('Phase 12 regression: deterministic emergency floor answers direct NPC soci
 	assert.match(result.turnPackage?.dialogue[0]?.text || '', /appeal|impressive/i);
 	assert.match(result.turnPackage?.narrative.join(' ') || '', /Barren|question/i);
 });
+
+
+test('Phase 12 regression: environment-heavy narration fails closed when the N18 rewrite is skipped', async () => {
+	const storyId = 'phase12_environment_gate_skipped_rewrite';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	// Make this a continuing turn rather than an exempt opening scene.
+	repository.appendCanonicalCommandEvent(storyId, {
+		eventId: 'phase12_environment_gate_prior_event',
+		kind: 'TEST_PRIOR_TURN',
+		storyId,
+	});
+
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const location = repository.getGeographyGraph(storyId).getNode(player.locationId);
+	assert.ok(location);
+
+	const orchestrator = createTestOrchestrator(repository);
+	const scenery = new DeterministicMockAdapter('phase12_environment_heavy_provider');
+	scenery.cannedResponses.set('narrative.generate', JSON.stringify({
+		narrative: [
+			`You look around ${location!.name}, taking in the chamber from the central walkway.`,
+			`The ${location!.name}'s bronze rings hold their exact alignment beneath the high ceiling.`,
+			'Fine lines and engraved marks cover the instrument’s metal surfaces in orderly circles.',
+			'Cool reflections cross the stone arches and settle over the flagstones in muted bands.',
+			'A faint layer of dust softens the edges of the brass housing without obscuring its details.',
+		],
+		dialogue: [],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	}));
+	orchestrator.registerAdapter(scenery);
+	orchestrator.registerModel(model('phase12_environment_heavy_provider', 'environment-heavy-model', ['narrative.generate']));
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_environment_heavy_provider::environment-heavy-model',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const result = await orchestrator.generateNarrativeOnly({
+		storyId,
+		playerAction: 'Look around the room.',
+		hardTokenBudget: 1100,
+		timeoutMs: 100,
+		maxRetries: 0,
+	});
+
+	assert.equal(result.success, false, 'Environment-heavy original narration must not be shown when its rewrite gate is skipped.');
+	assert.equal(result.turnPackage, undefined);
+	assert.match(result.error || result.fallbackReason || '', /environment-only|environment-heavy|substance/i);
+	assert.ok(
+		(result.narrativeQualityAudit?.environmentExcessEmissions || 0) > 3 ||
+		/rewrit|environment-only|environment-heavy|substance/i.test(result.error || result.fallbackReason || ''),
+		'The failure must carry an actionable N18 environment/substance diagnostic.',
+	);
+});

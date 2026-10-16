@@ -3735,9 +3735,9 @@ export class MultiModelOrchestrator {
       "narrative.generate": [
         "google_gemini::gemini-3.5-flash",
         "google_gemini::gemini-3.5-flash-lite",
+        "google_gemini::gemini-3.8-flash",
         "google_gemini::gemini-2.5-flash",
         "google_gemini::gemini-3.1-flash-lite",
-        "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
         "openrouter::google/gemma-4-31b-it:free",
         "openrouter::inclusionai/ling-3.0-flash:free"

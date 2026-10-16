@@ -20,16 +20,23 @@
 
 ## Integration status update — 2026-10-16
 
-This plan's original source audit remains anchored to `main` at `090b7d7b8c8b9c6ef47a0f643af3b15a303e1179`; older branch references in the baseline sections are point-in-time evidence, not current PR status.
+The current consolidated integration candidate is PR #76 at `9597f0ca0d85c83a631763eb1ce17d231105c7c1`, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head GitHub Actions workflows passed on this commit:
 
-The consolidated integration candidate is PR #76 at `91fe1545b27d9d19d1b900f5050a3135f6342802`, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head verification/release workflows passed: **1,517/1,517 tests**, release-contract verification, lint/type-check, and production build. Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727238), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727068), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727299).
+- Full suite: **1,522/1,522 tests passed**, zero failures.
+- Lint and TypeScript checks: passed.
+- Release-contract verification: passed.
+- Production build: passed.
 
-The source audit confirms PRs #70–#75's relevant movement, opening-population, fail-closed repair validation, Gemini routing, Phase 12 regression work, and recorder adjustments are represented in the current integration candidate. Recorder state changes between operation boundaries are now captured as explicit AUXILIARY transitions with full-state integrity hashes.
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058248), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058356), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058389).
 
-**Player-testing boundary:** the live-provider 125-turn session is deferred until code integrations are complete, because repeated automated calls can consume Gemini/provider token and quota limits. Keep the deterministic/mock HTTP marathon in CI. Do not mark the real-provider session as passed until the player performs it through the actual UI. PR #76 remains draft/unmerged, and the final merged-main release gate is still required. The Phase 4 source audit still requires verification of the complete NPC/social-opportunity handoff through the canonical interaction path; do not mark that as complete merely because ambient cues and opening population tests pass.
+The exact-head test output verifies the HTTP NPC-initiative prompt regression, opening-scene ambient population and restricted-occupancy behavior, opening-dialogue provenance, fail-closed final narration review, configured Gemini routing, explicit movement destinations, unfinished-travel continuation, and multiple persistence/reload cases. The bounded current-scene event summary is included in full and compact narration prompt modes to protect canonical evidence under tight token budgets.
+
+PRs #69–#75 are overlapping source branches to reconcile against #76, not independent changes to stack blindly. Their relevant documentation cleanup, fail-closed narration, opening population, model-routing, movement, and test-fixture work is represented in the integration candidate; see the open-PR triage document for scoped treatment.
+
+**Player-testing boundary:** the live-provider 125-turn session remains deferred until code integrations are complete, because repeated automated calls can consume Gemini/provider token and quota limits. The deterministic/mock HTTP marathon remains in CI. Do not mark the real-provider session as passed until the player performs it through the actual UI. PR #76 remains open and unmerged, and the final merged-main release gate is still required. Broader living-world/social-opportunity and manual UI behavior must not be declared completely validated solely from the specific passing NPC-initiative regression.
 
 ---
- 
+
 ## 1. Executive decision
 
 **Do not discard or replace the existing Phase 1 live-model validation plan. Expand it and make it the first behavioural gate of this larger plan.**

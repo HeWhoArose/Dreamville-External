@@ -34,11 +34,14 @@ The following improvements from PR #60 are **not** present in the current integr
 
 - per-run `runSessionId` isolation when a story ID is reused;
 - recording schema 1.1 and persistence partitioning by run session;
-- capturing the exact pre-mutation initial state for the first recorded interaction;
 - append-time rejection when the recorded `stateBefore` does not match the previous state hash;
 - the `ACTION_SUBSTANCE` richness dimension and its dedicated test cases.
 
-These are plausible follow-ups, especially recording integrity before a player-run acceptance session, but PR #60 must not be merged as-is. Its last recorded release-gate run failed TypeScript checks, including undefined narrative-plan values and inconsistent 1.0.0/1.1.0 recorder version types. Port and test individual changes on the current candidate before deciding which are necessary.
+One proposed PR #60 fix — preserving the exact pre-mutation initial state — appears to be functionally covered already: the current `recordStorySessionInteraction` passes `params.stateBefore` into recording initialization, and `StorySessionRecorder.append` resets `initialState` to that same pre-interaction state when the recording has no interactions. The dedicated regression assertion is still worth adding, but do not duplicate the implementation without first proving a failing case.
+
+The missing run-session isolation and append-time state-before hash check are concrete recording-integrity candidates. The action-substance dimension is an unmerged enhancement, not proof that the current quality path is absent: current narration already has an N18 richness evaluation and a live environment-excess detector/rewrite path. Review whether the existing final-candidate path can still accept an environment-heavy original after a skipped/failed rewrite before porting the extra dimension.
+
+PR #60 must not be merged as-is. Its last recorded release-gate run failed TypeScript checks, including undefined narrative-plan values and inconsistent 1.0.0/1.1.0 recorder version types. Port and test individual changes on the current candidate only after a focused regression establishes the gap.
 
 - [PR #60](https://github.com/HeWhoArose/Dreamville-External/pull/60)
 - [Failed historical release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/37386761068)

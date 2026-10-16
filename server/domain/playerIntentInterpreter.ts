@@ -51,13 +51,18 @@ export interface PlayerIntentInterpretation {
 const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|draw nearer|move closer|move nearer|make (?:my|our|your) way|proceed|continue toward|continue towards)\b/i;
 const CONTINUE_ACTION_PATTERN = /^(?:continue|continue on|keep going|go on|proceed|carry on|keep moving)[.!\s]*$/i;
 
+function movementDestination(text: string): string | undefined {
+	const match = clean(text).match(
+		/\b(?:towards?|into)\s+(?:the\s+)?(.+?)(?=\s+(?:and then|and|while|before|after|so I can)\b|\s+to\s+(?:inspect|watch|look|listen|hear|ask|talk|speak|read|check|search|examine)\b|[.!?]|$)/i,
+	);
+	const destination = clean(match?.[1] || '').replace(/^(?:the|a|an)\s+/i, '').trim();
+	return destination.length >= 3 ? destination : undefined;
+}
+
 function pendingMovementDestination(situation?: CurrentSituation): string | undefined {
 	const previous = situation?.recentTurns.slice(-1)[0];
 	if (!previous?.playerAction || !MOVEMENT_PATTERN.test(previous.playerAction)) return undefined;
-	const action = previous.playerAction;
-	const destination = action.match(/\b(?:toward|towards|to|into)\s+(?:the\s+)?(.+?)(?:[.!?]|$)/i)?.[1];
-	if (destination) return clean(destination).replace(/\s+(?:as|while|and then|and)\s+.*$/i, '').trim();
-	return undefined;
+	return movementDestination(previous.playerAction);
 }
 const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|fight|cast at|defend|parry)\b/i;
 const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;

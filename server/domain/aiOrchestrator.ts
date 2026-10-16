@@ -8200,6 +8200,12 @@ export class MultiModelOrchestrator {
     });
 
     const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+    const resolvedSceneComposition =
+      'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+    const richnessEvaluationPlan: EphemeralNarrativePlan = {
+      ...narrativePlan,
+      sceneComposition: resolvedSceneComposition,
+    };
 
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
@@ -8411,7 +8417,7 @@ export class MultiModelOrchestrator {
     let finalNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
       intent: playerIntent,
       situation: currentSituation,
-      plan: narrativePlan,
+      plan: richnessEvaluationPlan,
       turnPackage: validation.turnPackage,
       previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
     });
@@ -8516,7 +8522,7 @@ export class MultiModelOrchestrator {
                 playerAction,
                 intent: playerIntent,
                 situation: currentSituation,
-                plan: narrativePlan,
+                plan: richnessEvaluationPlan,
                 storyBeat,
                 turnPackage: rewriteValidation.turnPackage,
                 repository: worldRepo,
@@ -8540,7 +8546,7 @@ export class MultiModelOrchestrator {
                 playerAction,
                 intent: playerIntent,
                 situation: currentSituation,
-                plan: narrativePlan,
+                plan: richnessEvaluationPlan,
                 storyBeat,
                 turnPackage: rewriteValidation.turnPackage,
                 repository: worldRepo,
@@ -8556,7 +8562,7 @@ export class MultiModelOrchestrator {
             const postRewriteEvaluation = NarrativeRichnessEvaluator.evaluate({
               intent: playerIntent,
               situation: currentSituation,
-              plan: narrativePlan,
+              plan: richnessEvaluationPlan,
               turnPackage: rewriteValidation.turnPackage,
               previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
             });
@@ -8708,7 +8714,7 @@ export class MultiModelOrchestrator {
       playerAction,
       intent: playerIntent,
       situation: currentSituation,
-      plan: narrativePlan,
+      plan: richnessEvaluationPlan,
       storyBeat,
       turnPackage: validation.turnPackage,
       repository: worldRepo,
@@ -8964,6 +8970,12 @@ export class MultiModelOrchestrator {
           };
 
         const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+    const resolvedSceneComposition =
+      'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+    const richnessEvaluationPlan: EphemeralNarrativePlan = {
+      ...narrativePlan,
+      sceneComposition: resolvedSceneComposition,
+    };
 
     const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);
@@ -9278,7 +9290,7 @@ export class MultiModelOrchestrator {
               narrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
                 intent: playerIntent,
                 situation: currentSituation,
-                plan: narrativePlan,
+                plan: richnessEvaluationPlan || narrativePlan,
                 turnPackage: reviewedTurnPackage,
                 previousNarrations,
               });
@@ -9345,7 +9357,7 @@ export class MultiModelOrchestrator {
                 const postRichness = NarrativeRichnessEvaluator.evaluate({
                   intent: playerIntent,
                   situation: currentSituation,
-                  plan: narrativePlan,
+                  plan: richnessEvaluationPlan || narrativePlan,
                   turnPackage: literaryValidation.turnPackage,
                   previousNarrations,
                 });
@@ -9596,6 +9608,7 @@ export class MultiModelOrchestrator {
               let emergencyTurnPackage = validation.turnPackage;
               let emergencyNarrativeReview: NarrativeReview | undefined;
               let emergencyLiteraryReview: LiteraryReview | undefined;
+              let emergencyNarrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
               if (isNarrativeTask && narrativePlan) {
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
@@ -9639,6 +9652,15 @@ export class MultiModelOrchestrator {
                     emergencyLiteraryReview = emergencyLiterary;
                   }
                 }
+              }
+              if (isNarrativeTask && narrativePlan) {
+                emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: richnessEvaluationPlan || narrativePlan,
+                  turnPackage: emergencyTurnPackage,
+                  previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                });
               }
               const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,
@@ -9734,6 +9756,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview: emergencyNarrativeReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
               attemptsTrail: [...turnAttemptsTrail, {
                 providerId: emergencyModel.providerId,

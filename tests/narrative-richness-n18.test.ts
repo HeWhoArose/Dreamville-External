@@ -287,3 +287,13 @@ test('N18 ACTION_SUBSTANCE accepts an explicit bounded lack of answer without re
 	assert.ok(substance);
 	assert.ok((substance?.score || 0) >= 0.50);
 });
+
+test('N18 scoring consumes the resolved N13 scene composition in both narration paths', async () => {
+	const fs = await import('node:fs/promises');
+	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');
+	assert.match(source, /const resolvedSceneComposition =\s*'sceneComposition' in narrationPrompt \? narrationPrompt\.sceneComposition : undefined;/);
+	assert.match(source, /const richnessEvaluationPlan: EphemeralNarrativePlan = \{[\s\S]*?sceneComposition: resolvedSceneComposition/);
+	assert.ok((source.match(/plan: richnessEvaluationPlan/g) || []).length >= 4,
+		'N18 scoring and final candidate validation should use the N13-resolved plan, not only the pre-composition director plan.');
+	assert.match(source, /narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation/);
+});

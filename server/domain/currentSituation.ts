@@ -966,18 +966,10 @@ export class CurrentSituationBuilder {
 
 	public static toPromptContext(situation: CurrentSituation): string {
 		const visibleEntities = situation.nearbyEntities
-			.filter((entity) => entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive)
+			.filter((entity) => entity.visibleToPlayer)
 			.slice(0, 8)
-			.map((entity) => {
-				const activity = String(entity.currentActivity || '').trim().slice(0, 160);
-				return `${entity.name} [${entity.kind}; ${entity.distanceBand}]${activity ? ` — currently ${activity}` : ''}`;
-			})
+			.map((entity) => `${entity.name} [${entity.kind}; ${entity.distanceBand}]`)
 			.join('; ') || 'None';
-		const visibleSceneEvents = situation.visibleEvents
-			.filter((event) => event.locationId === situation.location.id && Boolean(String(event.summary || '').trim()))
-			.slice(0, 8)
-			.map((event) => `[${String(event.type || 'SCENE_EVENT').slice(0, 48)}] ${String(event.summary).trim().slice(0, 240)}`)
-			.join('\n') || 'No additional current-location events are established.';
 
 		const recentTurns = situation.recentTurns
 			.slice(-4)
@@ -1016,10 +1008,8 @@ export class CurrentSituationBuilder {
 			`Region: ${situation.location.regionId}`,
 			`Location description: ${situation.location.description}`,
 			situation.location.ambientSensory ? `Ambient: ${situation.location.ambientSensory}` : '',
-				`Visible entities and current activity: ${visibleEntities}`,
-				`Current-location activity/events:\n${visibleSceneEvents}`,
-				'Scene-event boundary: current-location activity supports only the described observable beat. An NPC-initiated cue does not by itself commit a quest, contract, combat, agreement, or other canonical state change.',
-				situation.activeDialogue ? `Active dialogue: ${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}` : '',
+			`Visible entities: ${visibleEntities}`,
+			situation.activeDialogue ? `Active dialogue: ${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}` : '',
 			`Current action: ${situation.currentAction?.action || 'None'}`,
 			`Plot: ${situation.plot.currentArc} — ${situation.plot.summary || 'No compressed plot summary.'}`,
 			`Open threads:\n${openThreads}`,

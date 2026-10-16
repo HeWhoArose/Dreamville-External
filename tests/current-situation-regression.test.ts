@@ -471,14 +471,24 @@ test('current-scene activity and NPC-initiated events reach the canonical narrat
 	assert.ok(initiation, 'CurrentSituation must receive the grounded NPC-initiated interaction cue');
 	assert.equal(initiation!.locationId, player.locationId);
 
-	const context = CurrentSituationBuilder.toPromptContext(situation);
-	assert.match(context, /Visible entities and current activity:[^\n]*Mira Fen/);
-	assert.match(context, /Mira Fen.*currently calling out wares to passersby/);
-	assert.match(context, /Current-location activity\/events:[\s\S]*NPC_INITIATED_INTERACTION/);
-	assert.ok(context.includes(initiation!.summary), 'the narrator context must include the exact observable interaction cue');
-	const sceneEventSection = context.split('Current-location activity/events:\n')[1]?.split('\nScene-event boundary:')[0] || '';
-	assert.ok(sceneEventSection.includes(initiation!.summary));
-	assert.doesNotMatch(sceneEventSection, /Distant archive marker/);
+	const workingContext = WorkingContextEngine.assembleTurnContext({
+		storyId,
+		playerAction: 'I watch Mira Fen and the nearby stalls.',
+		viewerActorId: player.actorId,
+		currentSituation: situation,
+		currentAction: situation.currentAction,
+		worldRepo: repository,
+		hardTokenBudget: 1200,
+	});
+	assert.match(workingContext.assembledText, /CURRENT-LOCATION ACTIVITY & OBSERVABLE EVENTS/i);
+	assert.match(workingContext.assembledText, /Mira Fen.*currently calling out wares to passersby/);
+	assert.match(workingContext.assembledText, /NPC_INITIATED_INTERACTION/);
+	assert.ok(workingContext.assembledText.includes(initiation!.summary), 'the assembled narrator context must include the exact observable interaction cue');
+	assert.doesNotMatch(workingContext.assembledText, /Distant archive marker/);
+	assert.ok(
+		workingContext.includedChunks.some((chunk) => chunk.id === 'b2_current_scene_activity'),
+		'current-scene activity should be a bounded B2 block and must not inflate the critical B1 scene chunk',
+	);
 
 	assert.equal(
 		situation.visibleEvents.some((event) => /Distant archive marker/.test(event.summary)),

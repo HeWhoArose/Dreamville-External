@@ -802,9 +802,49 @@ export class WorkingContextEngine {
       });
     }
 
+    const currentSceneActivityContent = [
+      currentSituation.nearbyEntities
+        .filter((entity) =>
+          entity.kind !== 'PLAYER' &&
+          entity.visibleToPlayer &&
+          entity.presence === 'present' &&
+          entity.isAlive &&
+          Boolean(String(entity.currentActivity || '').trim())
+        )
+        .slice(0, 4)
+        .map((entity) =>
+          `${entity.name} is currently ${String(entity.currentActivity || '').trim().slice(0, 120)}.`,
+        )
+        .join(' '),
+      ...currentSituation.visibleEvents
+        .filter((event) => event.locationId === currentSituation.location.id && Boolean(String(event.summary || '').trim()))
+        .slice(0, 4)
+        .map((event) =>
+          `[${String(event.type || 'SCENE_EVENT').slice(0, 48)}] ${String(event.summary).trim().slice(0, 180)}`,
+        ),
+    ].filter(Boolean).join('\n');
+    const currentSceneActivityBlock = currentSceneActivityContent
+      ? [
+          currentSceneActivityContent,
+          'Boundary: these are observable, current-location cues only. An NPC-initiated cue does not by itself commit a quest, contract, combat, agreement, or other canonical state change.',
+        ].join('\n')
+      : '';
     const authorizedKnowledgeContent = authorizedWorldFacts.length
       ? authorizedWorldFacts.slice(0, 8).join(' | ')
       : '';
+    if (currentSceneActivityBlock) {
+      candidateChunks.push({
+        id: 'b2_current_scene_activity',
+        band: 'B2_IMMEDIATE',
+        label: 'Current-Location Activity & Observable Events',
+        content: currentSceneActivityBlock,
+        estimatedTokens: WorkingContextEngine.estimateTokens(currentSceneActivityBlock),
+        sourceAuthority: 'CurrentSituationBuilder + WorldActivityDirector same-location projection',
+        isProtected: true,
+        relevanceScore: 0.96,
+      });
+    }
+
     if (authorizedKnowledgeContent) {
       candidateChunks.push({
         id: 'b2_authorized_knowledge',

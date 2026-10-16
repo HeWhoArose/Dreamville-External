@@ -1,4 +1,4 @@
-# Live-Provider 125-Turn Audit — Current Evidence and Exit Criteria
+# Player-Run 125-Turn Acceptance Test — Evidence and Checklist
 
 **Audit date:** 2026-10-16  
 **Integration candidate:** `bd32e2f7f9ccc205ca8d88f67fd4906e5e2a23b3` (PR #76; open, not merged)
@@ -35,23 +35,24 @@ The checked-in `tests/artifacts/125_turn_live_telemetry.json` is historical evid
 
 That artifact is a **historical warning, not a fresh measurement of the current integration candidate**. The high emergency-fallback rate is not enough to assign a single root cause because the artifact is stale and does not provide a complete, current per-candidate trace. Do not silently treat it as proof that the current routing change failed, but do not discard it either.
 
-## Remaining release-critical work
+## Player-run acceptance after integration
 
-Run a fresh, provider-enabled 125-turn audit against the chosen integration commit, with credentials supplied through the execution environment (never committed to the repository). The live audit should use the application-level action pipeline, not only the direct orchestrator method.
+**Do not run the 125-turn live-provider test as part of routine CI.** The user has explicitly deferred this test until the integrations are complete so Gemini/provider token and quota limits are not consumed by repeated automated runs. The deterministic/mock 125-turn HTTP integration remains part of automated regression coverage.
 
-Record the exact commit SHA, timestamp, story/session identifier, action/turn number, HTTP result, selected provider/model, every attempted or preflight-skipped candidate with a reason, validation outcome, latency, AI call count, and whether emergency fallback was used.
+After the integration candidate has landed and the remaining manual scenarios are ready, the player should run one continuous 125-turn play session in the actual DreamVille UI using their normal configured provider. Record the candidate/release version and provider/model used, and export or retain available session diagnostics. The play session should be treated as a final acceptance test, not as an automated GitHub Actions gate.
 
-Review the results for:
+### Player acceptance checklist
 
-1. All 125 actions are accounted for and tied to one continuous story/session.
-2. No successful response is marked validated while its narration is missing or blank.
-3. Candidate ordering and every skipped/failing provider are observable; do not collapse missing adapters, preflight rejection, timeouts, quota/rate-limit errors, and semantic validation rejection into one generic fallback reason.
-4. Canonical location/time, inventory, entities, knowledge boundaries, NPC presence, and persistence/idempotency invariants survive the long run.
-5. The server-held secret does not reach player-visible output.
-6. Fallback use is summarized by reason and reviewed against the intended policy. Planned outage-injection turns must be distinguished from unexpected provider failures.
-7. Manual UI retry, malformed output, and all-provider outage scenarios are exercised on the integration target.
+1. **Turn and session continuity:** finish the 125-turn play session without restarting the story; check that action history and narrative continuity stay attached to the same run.
+2. **Narration substance:** use a mixture of movement, inspection, dialogue, information gathering, combat, item interaction, success/failure outcomes, and quiet/empty scenes. Verify each turn responds to the actual action, not just generic atmosphere.
+3. **Movement and scene continuity:** move toward known destinations; verify the intended destination is retained while travelling and that a new location is not described as reached before canonical arrival.
+4. **Canonical and knowledge boundaries:** check inventory and locations before/after actions; investigate an unknown NPC/location and a hidden or unauthorized fact; verify the narrator does not invent the answer or leak server-held secrets.
+5. **Population and NPC continuity:** check that public/populated places have grounded residents when appropriate, restricted locations are not populated without canonical evidence, and NPC activities/knowledge remain consistent.
+6. **Persistence:** reload the story at suitable checkpoints and confirm the player location, inventory, action history, NPC presence, and narrative context are consistent.
+7. **Provider degradation:** if the configured provider actually fails during normal play, verify alternate routing and the visible retry/error path. Do not deliberately inject repeated outages or trigger extra model calls just to populate a test log.
+8. **Report defects with evidence:** capture the turn/action number, player action, visible result, selected model/provider if displayed, error/diagnostic message, and whether a reload changed the result. Never include API keys or secrets.
 
-A mocked 125-turn pass is necessary regression evidence, but it is not a substitute for this provider-enabled run. Until that run and the required manual scenarios are recorded, keep the live-provider/release-validation item marked **pending**.
+A partial or interrupted session should be reported as partial, not counted as a completed 125-turn pass. A green mocked marathon proves the deterministic integration path; the player's session adds the real-provider and real-UI evidence that CI cannot safely guarantee.
 
 ## Evidence links
 

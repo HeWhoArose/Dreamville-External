@@ -8581,6 +8581,48 @@ export class MultiModelOrchestrator {
       narrativeQualityAudit.rewriteSkippedReason = 'The narrative review task has already exhausted its per-turn call budget; rewrite was skipped.';
     }
 
+    // N18 may authorize a rewrite, but a skipped, unavailable, invalid, or
+    // ineffective rewrite must never make the original environment-heavy prose
+    // player-visible. Recheck the actual final candidate after every rewrite path.
+    const finalEnvironmentSentenceCounts = countNarrativeEnvironmentSentences(
+      finalNarrationText,
+      currentSituation.player.name,
+    );
+    const finalEnvironmentExcess = detectNarrativeEnvironmentExcess(
+      finalNarrationText,
+      (validation.turnPackage.dialogue || []).length > 0,
+      currentSituation.player.name,
+    ) && !openingTurn;
+    if (finalEnvironmentExcess) {
+      const environmentFailure =
+        'N18 environment/substance gate rejected final narration: environment-only description remained after the available rewrite budget was skipped or exhausted.';
+      narrativeQualityAudit.finalDecision = 'IMPROVE';
+      narrativeQualityAudit.environmentExcessEmissions = finalEnvironmentSentenceCounts.environment;
+      narrativeQualityAudit.rewriteErrorReason = narrativeQualityAudit.rewriteErrorReason || environmentFailure;
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: environmentFailure,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        storyBeat,
+        researchAudit: {
+          blocks: researchResult.blocks,
+          excluded: researchResult.excluded,
+          budgets: researchResult.budgets,
+          totalTokens: researchResult.totalTokens,
+          query: researchResult.query,
+        },
+        contextAudit,
+        narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
+        narrativeQualityAudit,
+        error: environmentFailure,
+      };
+    }
+
     const finalTemporalContinuity = this.validateNarrativeTemporalContinuity(finalNarrationText, worldRepo, storyId);
     if (!finalTemporalContinuity.valid) {
       return {

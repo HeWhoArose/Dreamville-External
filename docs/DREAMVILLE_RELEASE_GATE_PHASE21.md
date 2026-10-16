@@ -68,18 +68,18 @@ The release is not considered green unless:
 
 ## Verified status at the 2026-10-16 integration candidate
 
-The latest verified integration candidate is PR #76 at `91fe1545b27d9d19d1b900f5050a3135f6342802`. All three exact-head GitHub Actions checks passed:
+The latest verified integration candidate is PR #76 at `9597f0ca0d85c83a631763eb1ce17d231105c7c1`. All three exact-head GitHub Actions checks passed:
 
 - `npm run verify:contracts`: passed.
 - `npm run lint` / TypeScript check: passed.
-- `npm test`: **1,517/1,517 passed**.
+- `npm test`: **1,522/1,522 passed**.
 - `npm run build`: passed.
 - Both verification workflows: passed.
 
-Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727238), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727068), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727299).
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058248), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058356), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38964058389).
 
 The 125-turn live-provider play session is deliberately deferred to the player after code integrations are complete because repeated automated calls can consume provider token/quota limits. It is a documented final player acceptance test, not a routine CI gate. The deterministic/mock HTTP marathon remains part of automated regression coverage. Manual UI/model scenarios also remain post-integration acceptance work.
 
 The forensic recorder now preserves between-command state changes in explicit `AUXILIARY` interactions. It keeps full-snapshot hashes—including `runtimeState`—and has regression coverage for both boundary gaps and state-patch tampering. The final CI runs show no real `default_story` or marathon state-before mismatch; the remaining warning is deliberately produced by the invalid-state negative test.
 
-PR #76 remains open and unmerged. The final merged-main gate must still be run after integration. See `docs/DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md` for the player checklist and historical telemetry context.
+PR #76 remains open and unmerged. The exact-head PR #76 release gate passed. The final merged-main gate must still be run after integration. See `docs/DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md` for the player checklist and historical telemetry context.

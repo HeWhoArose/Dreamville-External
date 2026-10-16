@@ -161,7 +161,7 @@ function inheritedInformationGoal(situation?: CurrentSituation): string | undefi
 		// after the player has moved on to another action or topic.
 		if (FOLLOW_UP_INFORMATION_PATTERN.test(action)) continue;
 		const opportunityQuestion = OPPORTUNITY_TOPIC_PATTERN.test(action) &&
-			/\\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing)|look(?:ing)?|search(?:ing)?|check(?:ing)?|find|finding|read|review|inspect|available|offered|request(?:s|ed|ing)?)\\b/i.test(action);
+			/\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing)|look(?:ing)?|search(?:ing)?|check(?:ing)?|find|finding|read|review|inspect|available|offered|request(?:s|ed|ing)?)\b/i.test(action);
 		if (opportunityQuestion) {
 			return 'find available work, jobs, contracts, tasks, or notices';
 		}

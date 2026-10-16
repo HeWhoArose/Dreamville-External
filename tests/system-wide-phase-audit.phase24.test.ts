@@ -18,13 +18,13 @@ function mustContain(relativePath: string, pattern: RegExp, label: string): void
 test('Phase 24 — system-wide architecture audit: release-critical phases are represented', () => {
 	const requiredPaths = [
 		'docs/SURGICAL_ARCHITECTURE_REGISTRY_V1.md',
-		'docs/DREAMVILLE_INTEGRATION_MATRIX_PHASE17.md',
+		'docs/outdated/phase-17-to-24/DREAMVILLE_INTEGRATION_MATRIX_PHASE17_HISTORICAL.md',
 		'docs/DREAMVILLE_VERIFICATION_DISCIPLINE_PHASE19.md',
-		'docs/DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20.md',
-		'docs/DREAMVILLE_RELEASE_GATE_PHASE21.md',
-		'docs/DREAMVILLE_RELEASE_STABILIZATION_PHASE22.md',
-		'docs/DREAMVILLE_ARCHITECTURE_CLOSURE_PHASE23.md',
-		'docs/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24.md',
+		'docs/outdated/phase-17-to-24/DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20_HISTORICAL.md',
+		'docs/outdated/phase-17-to-24/DREAMVILLE_RELEASE_GATE_PHASE21_HISTORICAL.md',
+		'docs/outdated/phase-17-to-24/DREAMVILLE_RELEASE_STABILIZATION_PHASE22_HISTORICAL.md',
+		'docs/outdated/phase-17-to-24/DREAMVILLE_ARCHITECTURE_CLOSURE_PHASE23_HISTORICAL.md',
+		'docs/outdated/phase-17-to-24/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24_HISTORICAL.md',
 		'server/domain/currentSituation.ts',
 		'server/domain/playerIntentInterpreter.ts',
 		'server/domain/narrativeResearchPipeline.ts',
@@ -100,7 +100,7 @@ test('Phase 24 — verification/release contracts include the complete executabl
 	for (const script of ['verify:contracts', 'lint', 'test', 'build']) {
 		assert.equal(typeof pkg.scripts?.[script], 'string', 'Missing required npm script: ' + script);
 	}
-	mustContain('scripts/verify-release-contract.mjs', /DREAMVILLE_INTEGRATION_MATRIX_PHASE17\.md/, 'Release contract does not require Phase 17 integration matrix.');
+	mustContain('scripts/verify-release-contract.mjs', /DREAMVILLE_INTEGRATION_MATRIX_PHASE17_HISTORICAL\.md/, 'Release contract does not require Phase 17 integration matrix.');
 	mustContain('scripts/verify-release-contract.mjs', /phase22-release-stabilization\.test\.ts/, 'Release contract does not require Phase 22 stabilization test.');
 	mustContain('scripts/verify-release-contract.mjs', /system-wide-phase-audit\.phase24\.test\.ts/, 'Release contract does not require the Phase 24 system-wide audit test.');
 });
@@ -138,7 +138,7 @@ test('Phase 24 — all audited phase-specific regression suites remain present',
 });
 
 test('Phase 24 — merged audit record is explicit about merge and manual-test boundaries', () => {
-	const audit = source('docs/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24.md');
+	const audit = source('docs/outdated/phase-17-to-24/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24_HISTORICAL.md');
 	assert.match(audit, /Merged into:.*main/s);
 	assert.match(audit, /4546899723dd9cfa6821f1313ebb1e62ef715a24/);
 	assert.match(audit, /37003743071/);

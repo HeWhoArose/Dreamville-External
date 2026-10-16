@@ -1,7 +1,10 @@
-# DreamBook — Surgical Architecture Registry
+# Dreamville — Surgical Architecture Registry
 ## Version 1.0 — 2026-09-27
 
-**Status:** ACTIVE ARCHITECTURE INDEX
+**Status:** ACTIVE ARCHITECTURE / AUTHORITY INDEX  
+**Current document index:** `docs/README.md`  
+**Current cross-system narrative plan:** `docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`  
+**Reviewed for this reorganization:** 2026-10-15
 **Master Plan:** DreamBook_Master_Implementation_Plan_v3.pdf — **COMPLETE / FROZEN**
 **Operating mode:** SURGICAL FIXING
 
@@ -9,7 +12,7 @@
 
 The Master Implementation Plan is no longer the active work queue. It remains the master architectural baseline and must not be rewritten by the surgical documents.
 
-The supporting documents indexed here each own a distinct concern. If two documents describe the same state, the owner listed here wins.
+The supporting documents indexed here each own a distinct concern. If two documents describe the same state, the owner listed here wins. The root README and docs/README.md define the current repository boundary and document status. Historical phase snapshots have been moved under `docs/outdated/`; they are not an active execution queue.
 
 The governing rule remains:
 > Simulation determines what happened. Narration describes what happened. AI proposes or transforms information but does not become canonical authority.
@@ -84,7 +87,7 @@ A supporting specification may define an adapter, projection, validator, or cons
 - Detailed world-bible lore is no longer copied directly into working context; it is projected through authorized world knowledge.
 - Dedicated 11-pass S3 audit added.
 - Final verification on commit `b2d3ea6d2bbbf245d7b02091a636fdfc6c505138`: 1002/1002 tests passed, lint/typecheck passed, production build passed, both verification workflows passed.
-- Full surgical record: `docs/S3_NARRATION_CONTEXT_OOC_SURGICAL_AUDIT_2026-09-27.md`.
+- Full surgical record: `docs/outdated/historical-audits/S3_NARRATION_CONTEXT_OOC_SURGICAL_AUDIT_2026-09-27_HISTORICAL.md`.
 
 ### S4 — AI orchestration consolidation
 **Status:** VERIFIED — RUNTIME TESTED 2026-09-27
@@ -95,7 +98,7 @@ Merge model routing, task contracts, context contracts and fallback rules into o
 - Model/task readiness is centralized through evaluateAiTaskReadiness().
 - Provider response validation and bounded fallback are enforced by MultiModelOrchestrator.
 - Typed AI context adapters compose existing canonical projections; they do not replace WorkingContextEngine or NarrativeContinuityEngine.
-- Full surgical record: docs/S4_AI_ORCHESTRATION_CONSOLIDATION_AUDIT_2026-09-27.md.
+- Full surgical record: docs/outdated/historical-audits/S4_AI_ORCHESTRATION_CONSOLIDATION_AUDIT_2026-09-27_HISTORICAL.md.
 
 ### S5 — Persistent multi-world
 **Status:** VERIFIED — RUNTIME TESTED 2026-09-27
@@ -106,7 +109,7 @@ Harden universe/world/run identity, cross-world continuity, dormant-world catch-
 - Story/world deletion detaches stale universe bindings.
 - Travel has a failure-safe archive rollback path.
 - Existing WorldSimulationService remains the dormant-world catch-up authority.
-- Full surgical record: docs/S5_PERSISTENT_MULTIWORLD_SURGICAL_AUDIT_2026-09-27.md.
+- Full surgical record: docs/outdated/historical-audits/S5_PERSISTENT_MULTIWORLD_SURGICAL_AUDIT_2026-09-27_HISTORICAL.md.
 
 ### S6 — Spatial world
 **Status:** VERIFIED — RUNTIME TESTED 2026-09-27
@@ -118,7 +121,7 @@ Harden universe/world/run identity, cross-world continuity, dormant-world catch-
 - Geography remains part of canonical snapshots and restoration.
 - Ten-pass S6 runtime audit added in `tests/spatial-world-surgical.audit-loop.test.ts`.
 - Spatial ownership remains separate from rules, capability, combat resolution, epistemic authority and persistence.
-- Full verification is recorded in `docs/FINAL_S1_S7_SURGICAL_10_PASS_AUDIT_2026-09-27.md`.
+- Full verification is recorded in `docs/outdated/historical-audits/FINAL_S1_S7_SURGICAL_10_PASS_AUDIT_2026-09-27_HISTORICAL.md`.
 
 ### S7 — Final integration
 **Status:** VERIFIED — RUNTIME TESTED 2026-09-27
@@ -127,7 +130,7 @@ Harden universe/world/run identity, cross-world continuity, dormant-world catch-
 - The audit covers canonical ownership, caller boundaries, cross-system connectivity and forbidden duplicate authority paths.
 - Intermediate CI failures caused by the tactical refactor were diagnosed and surgically repaired before final verification.
 - The Master Plan remains unchanged and frozen.
-- Final audit record: `docs/FINAL_S1_S7_SURGICAL_10_PASS_AUDIT_2026-09-27.md`.
+- Final audit record: `docs/outdated/historical-audits/FINAL_S1_S7_SURGICAL_10_PASS_AUDIT_2026-09-27_HISTORICAL.md`.
 
 ## 5. Status vocabulary
 
@@ -152,8 +155,8 @@ When two documents disagree:
 
 ## 7. Master Plan rule
 
-The Master Plan remains unchanged.
+The frozen Master Plan v3 remains historical architectural baseline only. Current work queues and active-phase status are indexed in docs/README.md.
 
-**MASTER ROADMAP COMPLETE.**
+**MASTER ROADMAP COMPLETE.** Current narrative grounding work is separately tracked in docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md.
 
 The surgical documents describe remaining fixes, consolidation and extensions rather than redefining Master Phases 0–15.

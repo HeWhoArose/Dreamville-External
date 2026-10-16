@@ -226,7 +226,7 @@ test('opening semantic review rejects hidden canonical facts from both primary a
     'At Cycle 42, Hero Vael stands within Elysium Solar Citadel. Footsteps cross the pale stone arcade while people carry out their recorded routines.',
     'Unknown to Vael, a sealed alien engine beneath the citadel remains active. The council has kept the sealed alien engine beneath the citadel hidden from ordinary visitors.',
     'The traveler remains focused on the immediate situation, with the wider mystery unresolved and the next decision left to the player.',
-  ].join('\\n\\n');
+  ].join('\n\n');
 
   (rig.orchestrator as any).executeTaskGeneration = async (task: string, prompt: string, _system: string, options: any) => {
     const text = JSON.stringify({

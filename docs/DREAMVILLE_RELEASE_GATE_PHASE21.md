@@ -68,13 +68,17 @@ The release is not considered green unless:
 
 ## Verified status at the 2026-10-16 integration candidate
 
-The integration candidate is PR #76, branch `integration/narrative-grounding-runtime-2026-10-16-v2`. At the evidence snapshot documented in `docs/DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md`, the following GitHub Actions checks passed:
+The latest verified integration candidate is PR #76 at `f1a5e6af1d88473475a731d8d8360b133df17e4f`. The exact-head GitHub Actions checks passed:
 
-- PR #76 candidate `bd32e2f7f9ccc205ca8d88f67fd4906e5e2a23b3`: both verification workflows passed; the 125-turn deterministic/mock HTTP integration test and Phase 24 system-wide architecture audit were among the passing tests.
-- Integration branch follow-up commit `e05f60d7dcde2f12ccac4f77dc23b69144ed82e2`: the release gate passed all steps — release-contract verification, type-check, full test suite (1,500/1,500), and production build.
+- `npm run verify:contracts`: passed.
+- `npm run lint`: passed.
+- TypeScript check: passed.
+- `npm test`: 1,514/1,514 passed.
+- `npm run build`: passed.
+- Both verification workflows: passed.
 
-Evidence: [release gate for e05f60d](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38885769653), [verification for bd32e2f (1)](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38862436764), and [verification for bd32e2f (2)](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38862436773).
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493496), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493522), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493102).
 
-These results supersede earlier notes that the integrated automated suite was red. PR #76 remains unmerged, and the listed manual scenarios still need execution on the integration target. The 125-turn live-provider acceptance run is deliberately deferred to the player after the code integrations are complete, because repeatedly calling real Gemini models in CI can consume provider token/quota limits. It is a documented final acceptance test, not a CI gate. See `docs/DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md` for the historical telemetry and player-run checklist.
+The 125-turn live-provider play session is deliberately deferred to the player after code integrations are complete because repeated automated calls can consume provider token/quota limits. It is a documented final player acceptance test, not a routine CI gate. The deterministic/mock HTTP marathon remains part of automated regression coverage. Manual UI/model scenarios also remain post-integration acceptance work.
 
-The standard automated test and release-gate runs do not execute `scripts/run_125_turn_stress_test.ts`. That standalone provider stress script calls the orchestrator directly, so it is not a substitute for the required application-level live-provider run.
+PR #76 remains open and unmerged. The final merged-main gate must still be run after integration. See `docs/DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md` for the player checklist and historical telemetry context.

@@ -2,15 +2,15 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Last verified runtime commit:** `50061df2565a7d1d37ce013cf524228aae8ba8a8`  
-**Current working candidate:** `e7e94c8ca55906c3fc4a4c2829aedf000f8b36fc` (recorder-integrity changes awaiting CI)  
+**Last verified integration commit:** `f1a5e6af1d88473475a731d8d8360b133df17e4f`  
+**Current working candidate:** `f1a5e6af1d88473475a731d8d8360b133df17e4f` (PR #76)  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 is open and unmerged. Its exact-head release gate and both verification workflows passed; the release gate reported 1,503/1,503 tests, zero failures, and successful build.
+**Status:** PR #76 remains open and unmerged. Both verification workflows and the release gate passed on this exact commit: 1,514/1,514 tests, release-contract verification, TypeScript check, lint, and production build.
 
 Evidence:
-- [Release gate — 50061df](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307064)
-- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307058)
-- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307061)
+- [Release gate — f1a5e6a](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493496)
+- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493522)
+- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493102)
 
 ## 1. Consolidated into the current integration candidate
 
@@ -25,30 +25,30 @@ PRs #70–#75 were separate branches based on the same earlier main commit. Thei
 | #74 | Preserve explicit destination and Continue travel intent | Movement helper and continuation regressions are present in the integrated candidate. |
 | #75 | Phase 12 fixture/assertion alignment | Relevant test adjustments are included in the integrated candidate. |
 
-PR #63 is an older, non-draft fail-closed narration branch with an outdated base. Its central protections are already represented in the current candidate: narration generation fails visibly when AI candidates are exhausted rather than silently returning deterministic emergency prose; attempts are preserved for diagnostics; question-only output is not treated as an answer. One narrow temporal-validation adjustment from that PR is not present: the rule that avoids rejecting a natural reference to approaching dusk at a late-afternoon clock time. Revisit this only with a focused regression test; do not merge PR #63 wholesale.
+PR #63 is an older fail-closed narration branch with an outdated base. Source inspection at `f1a5e6af1d88473475a731d8d8360b133df17e4f` confirms that its important protections are already present: exhausted AI candidates fail visibly without deterministic emergency narration, attempts remain available for diagnostics, question-only wording is not accepted as an answer, and late-afternoon prose may naturally mention approaching dusk. The current configured narration routes also retain the emergency floor and the current Gemini/OpenRouter ordering. Do not merge PR #63 wholesale; only revisit a concrete missing regression if one is demonstrated.
 
 ## 2. Older branches that require separate, scoped review
 
 ### PR #60 — story-session recording isolation and action-substance gate
 
-The following improvements from PR #60 are **not** present in the current integration candidate at the time of this audit:
+The current integration candidate already contains the unique runtime capabilities that were missing in the earlier audit snapshot:
 
-- per-run `runSessionId` isolation when a story ID is reused;
-- recording schema 1.1 and persistence partitioning by run session;
-- the `ACTION_SUBSTANCE` richness dimension and its dedicated test cases.
+- recording schema 1.1 with `runSessionId`;
+- recording storage partitioned by story ID and run-session ID;
+- repository loading that rejects a recording from a different run session;
+- the N18 `ACTION_SUBSTANCE` dimension, its final presentation-gate use, and focused regression tests;
+- immutable initial-state and append-time state-before hash validation;
+- a repository boundary that keeps forensic recording failures from failing canonical gameplay.
 
-One proposed PR #60 fix — preserving the exact pre-mutation initial state — appears to be functionally covered already: the current `recordStorySessionInteraction` passes `params.stateBefore` into recording initialization, and `StorySessionRecorder.append` resets `initialState` to that same pre-interaction state when the recording has no interactions. The dedicated regression assertion is still worth adding, but do not duplicate the implementation without first proving a failing case.
+Source evidence is present in `server/domain/storySessionRecorder.ts`, `server/services/storySessionRecordingStore.ts`, `server/repositories/worldRepository.ts`, `server/domain/narrativeRichnessEvaluation.ts`, and their tests.
 
-**Recorder-integrity follow-up:** commit `e7e94c8ca55906c3fc4a4c2829aedf000f8b36fc` now adds append-time state-before hash validation and rejects appends after stop. It also catches recorder failures at the repository boundary so recording problems cannot fail canonical gameplay. This change is awaiting exact-head CI; do not call it verified until those runs finish.
+**Remaining recorder caution:** the successful CI logs still contain state-before hash mismatch warnings for legacy `default_story` interactions. The repository correctly prevents these forensic-recording errors from turning into gameplay failures, but this does not prove every interaction is retained in a continuous recording. Keep this as a focused observability/recording-integrity follow-up; do not weaken hash validation or silently rebase the initial state to make the warnings disappear.
 
-The remaining run-session isolation is a concrete recording-integrity candidate. The action-substance dimension is an unmerged enhancement, not proof that the current quality path is absent: current narration already has an N18 richness evaluation and a live environment-excess detector/rewrite path. Review whether the existing final-candidate path can still accept an environment-heavy original after a skipped/failed rewrite before porting the extra dimension.
-
-PR #60 must not be merged as-is. Its last recorded release-gate run failed TypeScript checks, including undefined narrative-plan values and inconsistent 1.0.0/1.1.0 recorder version types. Port and test individual changes on the current candidate only after a focused regression establishes the gap.
+PR #60 should not be merged wholesale: its older branch has conflicting version/type assumptions and overlapping edits. PRs #58 and #59 are older recording branches; their distinct behaviour is already substantially represented in the current candidate. Port only a specifically reproduced gap, with a focused test, rather than stacking those branches.
 
 - [PR #60](https://github.com/HeWhoArose/Dreamville-External/pull/60)
-- [Failed historical release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/37386761068)
-
-PRs #58 and #59 are earlier overlapping story-session-recording branches on older bases. Audit their unique changes only if they are not superseded by the scoped PR #60 improvements; do not stack them blindly.
+- [PR #59](https://github.com/HeWhoArose/Dreamville-External/pull/59)
+- [PR #58](https://github.com/HeWhoArose/Dreamville-External/pull/58)
 
 ### PRs #50–#52 — earlier long-session audits
 

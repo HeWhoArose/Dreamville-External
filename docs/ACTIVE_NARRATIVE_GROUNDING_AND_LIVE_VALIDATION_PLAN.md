@@ -20,12 +20,16 @@
 
 ## Integration status update — 2026-10-16
 
-This plan's original source audit remains anchored to `main` at `090b7d7b8c8b9c6ef47a0f643af3b15a303e1179`; statements about draft PRs later in the baseline audit are point-in-time evidence, not current branch status.
+This plan's original source audit remains anchored to `main` at `090b7d7b8c8b9c6ef47a0f643af3b15a303e1179`; older branch references in the baseline sections are point-in-time evidence, not current PR status.
 
-The consolidated draft integration candidate on PR #76 is based on current `main` at `18d7831cf51503920396067279b21af7b615b319`. Its latest verified runtime commit is `50061df2565a7d1d37ce013cf524228aae8ba8a8`; the exact-head release gate and both verification workflows passed **1,503/1,503 automated tests**, lint, release-contract verification, TypeScript check, and production build. Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307064), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307058), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307061). This proves the automated integration path at that commit only; it is not a live-provider narrative-quality pass.
+The consolidated integration candidate is PR #76 at `f1a5e6af1d88473475a731d8d8360b133df17e4f`, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. Both verification workflows and the release gate passed on the exact candidate: **1,514/1,514 tests**, lint, release-contract verification, TypeScript check, and production build. Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493496), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493522), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493102).
 
-The live-provider 125-turn play session is **deferred to the player after integrations are complete** because of provider token/quota limits. Keep the deterministic/mock HTTP marathon in CI. Do not turn the real-provider marathon into a repeated automated workflow. PR #76 remains draft/unmerged, and the final merged-main release gate is still required. Use `docs/DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md` to distinguish changes already consolidated into PR #76 from older branches requiring separate review.
+The source audit confirms that PR #70–#75's relevant movement, opening-population, fail-closed repair validation, Gemini routing, and Phase 12 regression work are represented in the current integration candidate. The current candidate also includes run-session recording isolation and the N18 action-substance gate; see `docs/DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md` for the source-based triage of older overlapping PRs.
 
+**Player-testing boundary:** the live-provider 125-turn session is deferred until code integrations are complete, because repeated automated calls can consume Gemini/provider token and quota limits. Keep the deterministic/mock HTTP marathon in CI. Do not mark the real-provider session as passed until the player performs it through the actual UI. PR #76 remains draft/unmerged, and the final merged-main release gate is still required.
+
+---
+ 
 ## 1. Executive decision
 
 **Do not discard or replace the existing Phase 1 live-model validation plan. Expand it and make it the first behavioural gate of this larger plan.**

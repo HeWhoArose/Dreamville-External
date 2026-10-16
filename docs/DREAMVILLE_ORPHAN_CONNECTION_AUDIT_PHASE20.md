@@ -73,14 +73,17 @@ At the time of the earlier audit run, the release candidate was stacked on separ
 
 ## Current integration update (2026-10-16)
 
-The integrated candidate's GitHub Actions release gate passed on commit `e05f60d7dcde2f12ccac4f77dc23b69144ed82e2`:
-- `npm run verify:contracts`: passed.
-- `npm run lint`: passed.
-- `npm test`: 1,500/1,500 passed.
-- `npm run build`: passed.
+The latest verified PR #76 integration commit is `f1a5e6af1d88473475a731d8d8360b133df17e4f`. GitHub Actions passed on this exact commit:
 
-Evidence: [passing release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38885769653) and [passing integration verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38885769669).
+- release-contract verification: passed;
+- lint: passed;
+- TypeScript check: passed;
+- `npm test`: 1,514/1,514 passed;
+- production build: passed;
+- both verification workflows: passed.
 
-The live-provider 125-turn play session is deliberately deferred to the player after the code integrations are complete because repeated automated calls can consume provider token/quota limits. The deterministic/mock 125-turn HTTP integration remains automated regression coverage. The player-run session and manual UI scenarios are acceptance checks, not CI gate steps.
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493496), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493522), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493102).
 
-Current follow-up work must use the latest commit-specific GitHub status and must not repeat the superseded statement that the integrated automated suite is still red. PR #76 remains open and unmerged, and the final merged-main release gate is still required.
+The live-provider 125-turn play session is deliberately deferred to the player after code integration because repeated automated calls can consume provider token/quota limits. The deterministic/mock 125-turn HTTP integration remains automated regression coverage. The player-run session and manual UI scenarios are acceptance checks, not CI gate steps.
+
+PR #76 remains open and unmerged. A green automated gate is evidence for this exact candidate, not a claim that the final merged-main gate or player acceptance session has happened.

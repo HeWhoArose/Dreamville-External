@@ -296,4 +296,5 @@ test('N18 scoring consumes the resolved N13 scene composition in both narration 
 	assert.ok((source.match(/plan: richnessEvaluationPlan/g) || []).length >= 4,
 		'N18 scoring and final candidate validation should use the N13-resolved plan, not only the pre-composition director plan.');
 	assert.match(source, /narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation/);
+	assert.match(source, /narrativePlan: richnessEvaluationPlan/);
 });

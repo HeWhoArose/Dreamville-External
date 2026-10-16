@@ -8745,6 +8745,7 @@ export class MultiModelOrchestrator {
         ...validation.turnPackage,
         stateChanges: [],
       },
+      narrativePlan: richnessEvaluationPlan,
       modelId: generated.modelId,
       providerId: generated.providerId,
       source: generated.source,

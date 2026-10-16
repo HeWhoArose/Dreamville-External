@@ -1249,6 +1249,40 @@ export class ServerMockAuthority {
       }));
     }
 
+    // NPC-initiated contact is a real turn event, not a read-only narration cue.
+    // Commit it before the narrator rebuilds CurrentSituation so that retry and
+    // later turns read the same canonical event. Never interrupt explicit speech
+    // or a request for currently available work.
+    const initiativePlayer = worldRepository.getPlayerLifecycle(targetStoryId);
+    const initiativeLocationId = initiativePlayer?.locationId || location?.id;
+    const initiativeActionId = String(baseResult?.actionId || actionResolution?.resolutionId || '').trim();
+    if (initiativeLocationId && initiativeActionId && !initiativePlayer?.isDead && !initiativePlayer?.isTraveling) {
+      const initiativeEntities = worldRepository.getEntityCards(targetStoryId, { status: 'ACTIVE' })
+        .map((card: any) => ({
+          id: String(card.id || ''),
+          name: String(card.name || card.id || 'Unknown person'),
+          kind: String(card.kind || ''),
+          role: String(card.classification?.role || card.social?.role || card.classification?.profession || card.kind || ''),
+          locationId: String(card.worldState?.locationId || ''),
+          currentActivity: String(card.worldState?.currentActivity || card.metadata?.ambientActivity || ''),
+          presence: String(card.worldState?.presence || 'unknown'),
+          isAlive: card.worldState?.isAlive !== false,
+          visibleToPlayer: !(
+            card.metadata?.hidden === true ||
+            card.metadata?.isHidden === true ||
+            String(card.metadata?.visibility || '').toUpperCase() === 'HIDDEN'
+          ),
+        }));
+      WorldActivityDirector.commitEligibleNpcInitiatedInteraction(
+        worldRepository,
+        targetStoryId,
+        initiativeLocationId,
+        initiativeActionId,
+        String(freeformText || ''),
+        initiativeEntities,
+      );
+    }
+
     let narrativeResponse = '';
     let narrativeTurnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage | undefined;
     let narrativeError: import('../../src/types').ActionLog['narrativeError'];

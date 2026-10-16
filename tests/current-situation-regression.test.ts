@@ -7,6 +7,7 @@ import { formatCanonicalTimestamp, hashStringToSeed } from '../server/domain/det
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import type { KnowledgeFact, WorldTimestamp } from '../server/domain/types';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { WorldActivityDirector } from '../server/domain/worldActivityDirector';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 function makeKnowledgeFact(
@@ -439,25 +440,42 @@ test('current-scene activity and NPC-initiated events reach the canonical narrat
 		metadata: { ...(template.metadata || {}), hidden: false, ambientPopulation: true },
 	});
 
-	// The NPC-initiation cue is deterministic on the upcoming event count.
-	// Add only off-location markers until a qualifying slot/roll is reached.
-	let upcomingTurn = repository.getCanonicalCommandEventCount(storyId) + 1;
-	let marker = 0;
+	repository.appendCanonicalCommandEvent(storyId, {
+		eventId: 'off_location_activity_marker',
+		type: 'OBSERVE',
+		summary: 'Distant archive marker',
+		locationId: 'loc_lantern_vault',
+		timestamp: 'fixture-off-location',
+	});
+	let actionId = 'activity-handoff-action';
+	let attempts = 0;
 	while (
-		(upcomingTurn % 5 !== 0 || hashStringToSeed(merchantId + '|init|' + upcomingTurn) % 3 !== 0) &&
-		marker < 200
+		(hashStringToSeed(storyId + '|' + player.locationId + '|' + actionId + '|init-slot') % 5 !== 0 ||
+		 hashStringToSeed(merchantId + '|init|' + actionId) % 3 !== 0) &&
+		attempts < 1000
 	) {
-		repository.appendCanonicalCommandEvent(storyId, {
-			eventId: 'off_location_activity_marker_' + marker,
-			type: 'OBSERVE',
-			summary: 'Distant archive marker ' + marker,
-			locationId: 'loc_lantern_vault',
-			timestamp: 'fixture-' + marker,
-		});
-		marker += 1;
-		upcomingTurn = repository.getCanonicalCommandEventCount(storyId) + 1;
+		actionId = 'activity-handoff-action-' + (++attempts);
 	}
-	assert.ok(marker < 200, 'a deterministic current-scene interaction slot should be found');
+	assert.ok(attempts < 1000, 'a deterministic action seed should qualify');
+	const canonicalInitiation = WorldActivityDirector.commitEligibleNpcInitiatedInteraction(
+		repository,
+		storyId,
+		player.locationId!,
+		actionId,
+		'I watch Mira Fen and the nearby stalls.',
+		[{
+			id: merchantId,
+			name: 'Mira Fen',
+			kind: 'MERCHANT',
+			role: 'merchant',
+			locationId: player.locationId!,
+			currentActivity: 'calling out wares to passersby',
+			presence: 'present',
+			isAlive: true,
+			visibleToPlayer: true,
+		}],
+	);
+	assert.ok(canonicalInitiation, 'authority helper should commit a qualifying visible interaction');
 
 	const situation = CurrentSituationBuilder.build({
 		storyId,
@@ -468,7 +486,9 @@ test('current-scene activity and NPC-initiated events reach the canonical narrat
 	const initiation = situation.visibleEvents.find((event) =>
 		event.type === 'NPC_INITIATED_INTERACTION' && event.entityId === merchantId
 	);
-	assert.ok(initiation, 'CurrentSituation must receive the grounded NPC-initiated interaction cue');
+	assert.ok(initiation, 'CurrentSituation must receive the committed NPC-initiated interaction');
+	assert.equal(initiation!.id, canonicalInitiation!.id, 'the scene projection must preserve canonical event identity');
+	assert.equal(initiation!.source, 'WORLD_ACTIVITY_DIRECTOR');
 	assert.equal(initiation!.locationId, player.locationId);
 
 	const workingContext = WorkingContextEngine.assembleTurnContext({

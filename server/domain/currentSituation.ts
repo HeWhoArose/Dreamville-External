@@ -743,13 +743,14 @@ export class CurrentSituationBuilder {
 		const lastEvents = canonicalEvents
 			.slice(-6)
 			.map((event: any, index: number) => ({
-				id: normalizeText(event?.id) || deterministicId('situation_event', String(index), eventText(event)),
+				id: normalizeText(event?.eventId || event?.id) || deterministicId('situation_event', String(index), eventText(event)),
 				type: normalizeText(event?.type || event?.commandType || 'EVENT'),
 				summary: eventText(event),
 				turnNumber: eventTurnNumber(event, canonicalEvents.length - 6 + index),
 				timestamp: normalizeText(event?.timestamp || event?.worldTime || '') || undefined,
 				locationId: normalizeText(event?.locationId) || undefined,
-				source: 'CANONICAL_COMMAND_EVENT',
+				entityId: normalizeText(event?.entityId || event?.actorId) || undefined,
+				source: normalizeText(event?.source) || 'CANONICAL_COMMAND_EVENT',
 			}))
 			.filter((event) => event.summary);
 

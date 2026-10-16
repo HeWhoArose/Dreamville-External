@@ -189,18 +189,20 @@ test('CombatEncounterService recognizes intervention actions for active crimes',
 	assert.equal(service.isHostileAction('I ask the merchant about the price'), false);
 });
 
-test('WorldActivityDirector allows visible NPCs to initiate occasional, grounded interactions', () => {
+test('WorldActivityDirector keeps the ambient scene projection read-only for NPC initiative', () => {
 	const merchant = { id: 'merchant-init', name: 'Mira Fen', kind: 'MERCHANT', role: 'merchant', locationId: 'loc_market', currentActivity: 'calling out wares to passersby', visibleToPlayer: true };
-	let qualifyingTurn = 5;
-	while (qualifyingTurn < 200 && hashStringToSeed(merchant.id + '|init|' + qualifyingTurn) % 3 !== 0) qualifyingTurn += 5;
-	assert.ok(qualifyingTurn < 200, 'a deterministic interaction turn should be found');
-	const events = WorldActivityDirector.buildAmbientEvents([merchant], 'loc_market', qualifyingTurn);
-	assert.ok(events.some((event) => event.type === 'NPC_INITIATED_INTERACTION' && /calls out to you/i.test(event.summary)));
+	const events = WorldActivityDirector.buildAmbientEvents([merchant], 'loc_market', 5);
+	assert.ok(events.some((event) => event.type === 'SOCIAL_OPPORTUNITY' && /Mira Fen is calling out wares to passersby/i.test(event.summary)));
+	assert.equal(
+		events.some((event) => event.type === 'NPC_INITIATED_INTERACTION'),
+		false,
+		'only the authoritative action path may commit an NPC-initiated interaction; scene projection cannot invent one',
+	);
 
 	const hiddenEvents = WorldActivityDirector.buildAmbientEvents([
 		{ ...merchant, visibleToPlayer: false },
-	], 'loc_market', qualifyingTurn);
-	assert.equal(hiddenEvents.length, 0, 'hidden NPCs must not initiate player-visible interactions');
+	], 'loc_market', 5);
+	assert.equal(hiddenEvents.length, 0, 'hidden NPC activity must not enter player-visible scene context');
 });
 
 test('WorldActivityDirector persists generated NPCs in the story runtime entity registry', () => {
@@ -250,4 +252,67 @@ test('WorldActivityDirector varies public market NPC identities across story see
 		.map(rosterFor);
 	assert.ok(alternatives.some((roster) => roster.map((person) => person.name).join('|') !== first.map((person) => person.name).join('|')),
 		'different stories should not all receive the same fixed NPC roster');
+});
+
+
+test('WorldActivityDirector commits NPC initiative canonically once per action and only for visible present locals', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'story_npc_initiative_commit';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+	const template = repository.getEntityCards(storyId, { status: 'ACTIVE' })[0];
+	assert.ok(template);
+
+	const merchant = {
+		id: 'merchant_npc_initiative_commit',
+		name: 'Mira Fen',
+		kind: 'MERCHANT',
+		role: 'merchant',
+		locationId: player.locationId!,
+		currentActivity: 'calling out wares to passersby',
+		presence: 'present',
+		isAlive: true,
+		visibleToPlayer: true,
+	};
+	let actionId = 'npc-init-action';
+	let attempts = 0;
+	while (
+		(hashStringToSeed(storyId + '|' + player.locationId + '|' + actionId + '|init-slot') % 5 !== 0 ||
+		 hashStringToSeed(merchant.id + '|init|' + actionId) % 3 !== 0) &&
+		attempts < 1000
+	) {
+		actionId = 'npc-init-action-' + (++attempts);
+	}
+	assert.ok(attempts < 1000, 'a deterministic action seed should qualify');
+
+	const committed = WorldActivityDirector.commitEligibleNpcInitiatedInteraction(
+		repository, storyId, player.locationId!, actionId, 'I observe the stalls.', [merchant],
+	);
+	assert.ok(committed);
+	assert.match(committed!.summary, /Mira Fen calls out to you/i);
+	const countAfterCommit = repository.getCanonicalCommandEventCount(storyId);
+	const eventInLog = repository.getRecentCanonicalCommandEvents(storyId, 32)
+		.find((event: any) => event.eventId === committed!.id);
+	assert.ok(eventInLog, 'the player-visible interaction must be persisted in canonical event history');
+	assert.equal(eventInLog?.type, 'NPC_INITIATED_INTERACTION');
+
+	const duplicate = WorldActivityDirector.commitEligibleNpcInitiatedInteraction(
+		repository, storyId, player.locationId!, actionId, 'I observe the stalls.', [merchant],
+	);
+	assert.equal(duplicate?.id, committed!.id);
+	assert.equal(repository.getCanonicalCommandEventCount(storyId), countAfterCommit, 'retrying the same action must not append a duplicate event');
+
+	const hiddenResult = WorldActivityDirector.commitEligibleNpcInitiatedInteraction(
+		repository, storyId, player.locationId!, actionId + '-hidden', 'I observe the stalls.', [
+			{ ...merchant, id: 'hidden-merchant', visibleToPlayer: false },
+		],
+	);
+	assert.equal(hiddenResult, null, 'hidden entities cannot initiate player-visible interactions');
+	const offLocationResult = WorldActivityDirector.commitEligibleNpcInitiatedInteraction(
+		repository, storyId, player.locationId!, actionId + '-off-location', 'I observe the stalls.', [
+			{ ...merchant, id: 'off-location-merchant', locationId: 'loc_lantern_vault' },
+		],
+	);
+	assert.equal(offLocationResult, null, 'off-location entities cannot initiate current-scene interactions');
 });

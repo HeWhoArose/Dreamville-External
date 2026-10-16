@@ -1,6 +1,6 @@
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { EntityCard, EntityKind } from './entityCard';
-import { deterministicId, hashStringToSeed } from './deterministicRng';
+import { deterministicId, formatCanonicalTimestamp, hashStringToSeed } from './deterministicRng';
 
 export interface WorldActivityEvent {
 	id: string;
@@ -276,6 +276,97 @@ export class WorldActivityDirector {
 		return created;
 	}
 
+	/**
+	 * Commit a rare NPC-initiated scene beat before narration can describe it.
+	 * The caller supplies the already-projected visible entities; this method
+	 * never promotes hidden/off-location/dead/absent people into scene evidence.
+	 *
+	 * Idempotency is scoped to the committed player action. The canonical event
+	 * log, not CurrentSituationBuilder, owns whether the interaction happened.
+	 */
+	public static commitEligibleNpcInitiatedInteraction(
+		repository: WorldRepository,
+		storyId: string,
+		locationId: string,
+		actionId: string,
+		playerAction: string,
+		entities: Array<{
+			id: string;
+			name: string;
+			kind?: string;
+			role?: string;
+			locationId?: string;
+			currentActivity?: string;
+			presence?: string;
+			isAlive?: boolean;
+			visibleToPlayer?: boolean;
+		}>,
+	): WorldActivityEvent | null {
+		if (!storyId || !locationId || !actionId) return null;
+		// An explicit dialogue or availability request owns the turn. Do not
+		// interrupt it with an unrequested side conversation.
+		if (/\\b(?:ask|tell|talk|speak|reply|answer|inquire|enquire|question|discuss|call out|shout|yell|jobs?|work|contracts?|quests?|tasks?|postings?|notices?)\\b/i.test(String(playerAction || ''))) {
+			return null;
+		}
+		const eventId = deterministicId('npc_initiated_interaction', storyId, locationId, actionId);
+		const existing = repository.getRecentCanonicalCommandEvents(storyId, 32)
+			.find((event: any) => event?.eventId === eventId);
+		if (existing) {
+			return {
+				id: eventId,
+				type: 'NPC_INITIATED_INTERACTION',
+				summary: String(existing.summary || ''),
+				locationId,
+				source: 'WORLD_ACTIVITY_DIRECTOR',
+				entityId: String(existing.entityId || existing.actorId || ''),
+			};
+		}
+		// Stable per-action cadence means a retry cannot reroll the encounter.
+		if (hashStringToSeed(storyId + '|' + locationId + '|' + actionId + '|init-slot') % 5 !== 0) return null;
+		const eligible = entities.filter((entity) => {
+			if (
+				entity.visibleToPlayer === false ||
+				entity.isAlive === false ||
+				entity.presence !== 'present' ||
+				entity.locationId !== locationId ||
+				!entity.currentActivity
+			) return false;
+			const role = String(entity.role || entity.kind || '').toLowerCase();
+			return /merchant|shady contact|guild challenger|travell?er/.test(role) &&
+				hashStringToSeed(entity.id + '|init|' + actionId) % 3 === 0;
+		}).sort((a, b) => a.id.localeCompare(b.id));
+		const entity = eligible[0];
+		if (!entity) return null;
+		const role = String(entity.role || entity.kind || '').toLowerCase();
+		const summary = role.includes('merchant')
+			? entity.name + ' calls out to you, inviting you to look over the wares.'
+			: role.includes('shady contact')
+				? entity.name + ' catches your eye and quietly beckons you over, keeping a folded map close.'
+				: role.includes('guild challenger')
+					? entity.name + ' turns from the disputed contract and challenges you to explain what business you have here.'
+					: entity.name + ' approaches with a cautious question about the road ahead.';
+		const event = {
+			eventId,
+			type: 'NPC_INITIATED_INTERACTION',
+			summary,
+			locationId,
+			timestamp: formatCanonicalTimestamp(repository.getWorldClock(storyId).getTimestamp()),
+			actorId: entity.id,
+			entityId: entity.id,
+			source: 'WORLD_ACTIVITY_DIRECTOR',
+			triggerActionId: actionId,
+		};
+		repository.appendCanonicalCommandEvent(storyId, event);
+		return {
+			id: eventId,
+			type: 'NPC_INITIATED_INTERACTION',
+			summary,
+			locationId,
+			source: 'WORLD_ACTIVITY_DIRECTOR',
+			entityId: entity.id,
+		};
+	}
+
 	public static buildAmbientEvents(entities: Array<{
 		id: string;
 		name: string;
@@ -309,30 +400,6 @@ export class WorldActivityDirector {
 				source: 'WORLD_ACTIVITY_DIRECTOR',
 				entityId: entity.id,
 			});
-
-			// NPCs sometimes initiate contact without being addressed. This is a
-			// deterministic, low-frequency scene beat, not a mandatory quest/fight.
-			// Its evidence exists for this turn only and names the visible initiator.
-			const canInitiate = /merchant|shady contact|guild challenger|traveller|traveler/i.test(role);
-			const initiationSlot = Math.trunc(Math.max(1, turnNumber)) % 5 === 0;
-			const initiationRoll = hashStringToSeed(entity.id + '|init|' + Math.trunc(Math.max(1, turnNumber))) % 3;
-			if (canInitiate && initiationSlot && initiationRoll === 0) {
-				const initiation = role.includes('merchant')
-					? entity.name + ' calls out to you, inviting you to look over the wares.'
-					: role.includes('shady contact')
-						? entity.name + ' catches your eye and quietly beckons you over, keeping a folded map close.'
-						: role.includes('guild challenger')
-							? entity.name + ' turns from the disputed contract and challenges you to explain what business you have here.'
-							: entity.name + ' approaches with a cautious question about the road ahead.';
-				events.push({
-					id: deterministicId('npc_initiated_interaction', locationId, entity.id, turnNumber),
-					type: 'NPC_INITIATED_INTERACTION',
-					summary: initiation,
-					locationId,
-					source: 'WORLD_ACTIVITY_DIRECTOR',
-					entityId: entity.id,
-				});
-			}
 		}
 		return events.slice(0, 8);
 	}

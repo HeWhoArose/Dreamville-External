@@ -336,9 +336,9 @@ const CLOSED_OPPORTUNITY_STATUSES = new Set([
 export function isAvailableLocationScopedOpportunityThread(raw: unknown, currentLocationId: string): boolean {
 	if (!raw || typeof raw !== 'object') return true;
 	const candidate = raw as Record<string, unknown>;
-	const category = normalizeText(candidate.category).toUpperCase().replace(/[\\s-]+/g, '_');
+	const category = normalizeText(candidate.category).toUpperCase().replace(/[\s-]+/g, '_');
 	if (!LOCATION_SCOPED_OPPORTUNITY_CATEGORIES.has(category)) return true;
-	const status = normalizeText(candidate.status || candidate.state).toUpperCase().replace(/[\\s-]+/g, '_');
+	const status = normalizeText(candidate.status || candidate.state).toUpperCase().replace(/[\s-]+/g, '_');
 	if (CLOSED_OPPORTUNITY_STATUSES.has(status)) return false;
 	const postingLocationId = normalizeText(candidate.locationId);
 	return Boolean(currentLocationId && postingLocationId && postingLocationId === currentLocationId);

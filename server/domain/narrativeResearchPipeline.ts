@@ -421,7 +421,7 @@ export class NarrativeResearchPipeline {
 				});
 				continue;
 			}
-			const categoryText = normalize((thread as any)?.category).replace(/[\\s_-]+/g, ' ');
+			const categoryText = normalize((thread as any)?.category).replace(/[\s_-]+/g, ' ');
 			const threadText = [title, categoryText, normalize((thread as any)?.summary), normalize((thread as any)?.status)].filter(Boolean).join(' | ');
 			const overlap = overlapScore(tokens(threadText), queryTokens);
 			const currentSituationThread = situation.openThreads.some((candidate) => {

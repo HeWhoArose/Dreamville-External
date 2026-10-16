@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import express from 'express';
 import { Server } from 'http';
 import { gameRouter } from '../server/api/gameRoutes';
+import { DeterministicMockAdapter } from '../server/domain/aiOrchestrator';
 import { serverMockAuthority } from '../server/mockEngine/serverMockAuthority';
 import { worldRepository } from '../server/repositories/worldRepository';
 import { worldSimulationService } from '../server/simulation/worldSimulationService';
@@ -1289,33 +1290,81 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
   });
 
   it('CH12 Live API: POST /api/game/orchestrator/turn executes full turn orchestration with context assembly, adjudication, and continuation checkpoint (DEF-CH12-01, DEF-CH12-05, DEF-CH12-06)', async () => {
-    const res = await fetch(`${baseUrl}/orchestrator/turn`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        storyId: 'default_story',
-        playerAction: 'Consult the brass astronomical charts and align the third lens',
-        task: 'narrative.generate',
-        hardTokenBudget: 400,
-      }),
+    // This is a deterministic HTTP integration test, not a real-provider test.
+    // Register a test adapter explicitly so CI never depends on Gemini credentials
+    // or silently accepts emergency fallback prose as a successful narration.
+    const storyId = 'ch12_live_orchestrator_turn';
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const providerId = 'live_runtime_proof_mock';
+    const modelId = 'live-runtime-proof-narrator';
+    const previousFallbackChain = orchestrator.getFallbackChain('narrative.generate');
+    const adapter = new DeterministicMockAdapter(providerId);
+    adapter.cannedResponses.set('narrative.generate', JSON.stringify({
+      narrative: [
+        'You read the brass astronomical charts, turn the third lens into alignment, and see its marker settle on the marked meridian.',
+      ],
+      dialogue: [],
+      events: [],
+      stateChanges: [],
+      memoryCandidates: [],
+      audioCues: [],
+    }));
+    orchestrator.registerAdapter(adapter);
+    orchestrator.registerModel({
+      providerId,
+      modelId,
+      displayName: 'Live Runtime Proof Narrator',
+      pool: 'fast',
+      capabilities: ['text_generation', 'structured_output'],
+      contextWindow: 128000,
+      health: 'Healthy',
+      quota: 'Healthy',
+      latencyMs: 5,
+      userPriority: 100,
+      roleEligibility: ['narrative.generate'],
+      fallbackEligibility: true,
+      accessStatus: 'accessible',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
     });
+    orchestrator.setFallbackChain('narrative.generate', [
+      `${providerId}::${modelId}`,
+      'provider_deterministic_emergency::emergency-fallback-local',
+    ]);
 
-    assert.strictEqual(res.status, 200);
-    const data = (await res.json()) as any;
-    assert.strictEqual(data.success, true);
-    assert.ok(data.turnPackage);
-    assert.ok(Array.isArray(data.turnPackage.narrative));
-    assert.ok(data.turnPackage.narrative.length > 0);
-    assert.ok(data.telemetry);
-    assert.ok(data.checkpoint);
-    assert.strictEqual(data.checkpoint.storyId, 'default_story');
+    try {
+      const res = await fetch(`${baseUrl}/orchestrator/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storyId,
+          playerAction: 'Consult the brass astronomical charts and align the third lens',
+          task: 'narrative.generate',
+          hardTokenBudget: 400,
+          maxRetries: 0,
+        }),
+      });
 
-    // Retrieve checkpoint via live GET API
-    const cpRes = await fetch(`${baseUrl}/orchestrator/checkpoint/${data.checkpoint.checkpointId}`);
-    assert.strictEqual(cpRes.status, 200);
-    const cpData = (await cpRes.json()) as any;
-    assert.strictEqual(cpData.success, true);
-    assert.strictEqual(cpData.checkpoint.checkpointId, data.checkpoint.checkpointId);
+      assert.strictEqual(res.status, 200);
+      const data = (await res.json()) as any;
+      assert.strictEqual(data.success, true);
+      assert.ok(data.turnPackage);
+      assert.ok(Array.isArray(data.turnPackage.narrative));
+      assert.ok(data.turnPackage.narrative.length > 0);
+      assert.ok(data.telemetry);
+      assert.ok(data.checkpoint);
+      assert.strictEqual(data.checkpoint.storyId, storyId);
+
+      // Retrieve checkpoint via live GET API
+      const cpRes = await fetch(`${baseUrl}/orchestrator/checkpoint/${data.checkpoint.checkpointId}`);
+      assert.strictEqual(cpRes.status, 200);
+      const cpData = (await cpRes.json()) as any;
+      assert.strictEqual(cpData.success, true);
+      assert.strictEqual(cpData.checkpoint.checkpointId, data.checkpoint.checkpointId);
+    } finally {
+      orchestrator.setFallbackChain('narrative.generate', previousFallbackChain);
+      orchestrator.updateModelHealth(providerId, modelId, 'DisabledByUser');
+    }
   });
 
   it('CH12 Live API: GET /api/game/orchestrator/telemetry returns runtime metrics and stats', async () => {

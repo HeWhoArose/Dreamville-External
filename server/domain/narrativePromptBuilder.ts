@@ -96,6 +96,13 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		].filter(Boolean).join(' '))
 		.join('; ') || 'None';
 
+	const visibleSceneEvents = (Array.isArray(situation.visibleEvents) ? situation.visibleEvents : [])
+		.filter((event) => !event.locationId || event.locationId === situation.location?.id)
+		.slice(0, 8)
+		.map((event) => '[' + String(event.type || 'EVENT').slice(0, 48) + '] ' + String(event.summary || '').slice(0, 220))
+		.filter((event) => event.trim().length > 0)
+		.join(' | ') || 'None';
+
 	const recentTurns = (Array.isArray(situation.recentTurns) ? situation.recentTurns : [])
 		.slice(-2)
 		.map((turn) => [
@@ -115,6 +122,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		situation.location?.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
 		'Visible entities: ' + visibleEntities,
 		'Canonical visible scene objects: ' + visibleObjects,
+		'Visible current-scene events (canonical or projected): ' + visibleSceneEvents,
 		'Canonical location occupancy: ' + JSON.stringify(situation.sceneEvidence?.occupancy || { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' }),
 		'Occupancy rule: UNKNOWN does not mean ABANDONED. Do not assert a location is empty, deserted, evacuated, or populated unless canonical occupancy, visible entities, sensory evidence, or a committed event supports that claim. If occupancy is unknown, preserve uncertainty and let observation/search actions investigate.',
 		'Canonical scene structures/features: ' + ((situation.sceneEvidence?.structures || []).join('; ') || 'None explicitly registered.'),

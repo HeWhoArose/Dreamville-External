@@ -8036,6 +8036,25 @@ export class MultiModelOrchestrator {
       const key = event.id || event.type + '|' + event.summary;
       if (!canonicalSceneEvents.has(key)) canonicalSceneEvents.set(key, event);
     }
+    // Merge these authoritative current-location events into the situation projection
+    // consumed by buildNarrationPrompt. B1 context chunks can be evicted when a small
+    // turn budget is tight, so important visible events cannot exist only in a chunk.
+    const currentSceneVisibleEvents = [...canonicalSceneEvents.values()].map((event) => ({
+      ...event,
+      locationId: currentSituation.location.id,
+      source: event.type === 'NPC_INITIATED_INTERACTION'
+        ? 'CANONICAL_NPC_INITIATION'
+        : 'CURRENT_SITUATION_PROJECTION',
+    }));
+    const mergedVisibleSceneEvents = new Map<string, typeof currentSceneVisibleEvents[number]>();
+    for (const event of [...currentSituation.visibleEvents, ...currentSceneVisibleEvents]) {
+      if (event.locationId && event.locationId !== currentSituation.location.id) continue;
+      const key = event.id || event.type + '|' + event.summary;
+      if (!mergedVisibleSceneEvents.has(key)) mergedVisibleSceneEvents.set(key, event);
+    }
+    currentSituation.visibleEvents = [...mergedVisibleSceneEvents.values()];
+    currentSituation.sceneEvidence.events = [...mergedVisibleSceneEvents.values()];
+
     const canonicalSceneEventContext = [...canonicalSceneEvents.values()]
       .sort((left, right) =>
         Number(right.type === 'NPC_INITIATED_INTERACTION') - Number(left.type === 'NPC_INITIATED_INTERACTION'),

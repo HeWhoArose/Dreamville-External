@@ -73,16 +73,17 @@ At the time of the earlier audit run, the release candidate was stacked on separ
 
 ## Current integration update (2026-10-16)
 
-The latest verified PR #76 integration commit is `f1a5e6af1d88473475a731d8d8360b133df17e4f`. GitHub Actions passed on this exact commit:
+The latest verified PR #76 integration commit is `91fe1545b27d9d19d1b900f5050a3135f6342802`. GitHub Actions passed on this exact commit:
 
 - release-contract verification: passed;
-- lint: passed;
-- TypeScript check: passed;
-- `npm test`: 1,514/1,514 passed;
+- lint and TypeScript check: passed;
+- `npm test`: **1,517/1,517 passed**;
 - production build: passed;
 - both verification workflows: passed.
 
-Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493496), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493522), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493102).
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727238), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727068), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727299).
+
+The session-recorder continuity gap is now represented as explicit AUXILIARY state-transition patches when the captured state changes between recorder boundaries. Hashes remain over the full snapshot, including `runtimeState`, and regression tests prove that runtime-state patch tampering fails validation. At this exact head, no state-before mismatch warnings remain for `default_story`, `run_legacy`, or the marathon; the only mismatch log is the expected negative test with an invalid state shape.
 
 The live-provider 125-turn play session is deliberately deferred to the player after code integration because repeated automated calls can consume provider token/quota limits. The deterministic/mock 125-turn HTTP integration remains automated regression coverage. The player-run session and manual UI scenarios are acceptance checks, not CI gate steps.
 

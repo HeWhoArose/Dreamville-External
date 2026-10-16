@@ -2,15 +2,15 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Last verified integration commit:** `f1a5e6af1d88473475a731d8d8360b133df17e4f`  
-**Current working candidate:** `f1a5e6af1d88473475a731d8d8360b133df17e4f` (PR #76)  
+**Last verified integration commit:** `91fe1545b27d9d19d1b900f5050a3135f6342802`  
+**Current working candidate:** `91fe1545b27d9d19d1b900f5050a3135f6342802` (PR #76)  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. Both verification workflows and the release gate passed on this exact commit: 1,514/1,514 tests, release-contract verification, TypeScript check, lint, and production build.
+**Status:** PR #76 remains open and unmerged. Both verification workflows and the release gate passed on this exact commit: **1,517/1,517 tests**, zero failures, release-contract verification, lint/type-check, and production build.
 
 Evidence:
-- [Release gate — f1a5e6a](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493496)
-- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493522)
-- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38918493102)
+- [Release gate — 91fe154](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727238)
+- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727068)
+- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727299)
 
 ## 1. Consolidated into the current integration candidate
 
@@ -25,7 +25,7 @@ PRs #70–#75 were separate branches based on the same earlier main commit. Thei
 | #74 | Preserve explicit destination and Continue travel intent | Movement helper and continuation regressions are present in the integrated candidate. |
 | #75 | Phase 12 fixture/assertion alignment | Relevant test adjustments are included in the integrated candidate. |
 
-PR #63 is an older fail-closed narration branch with an outdated base. Source inspection at `f1a5e6af1d88473475a731d8d8360b133df17e4f` confirms that its important protections are already present: exhausted AI candidates fail visibly without deterministic emergency narration, attempts remain available for diagnostics, question-only wording is not accepted as an answer, and late-afternoon prose may naturally mention approaching dusk. The current configured narration routes also retain the emergency floor and the current Gemini/OpenRouter ordering. Do not merge PR #63 wholesale; only revisit a concrete missing regression if one is demonstrated.
+PR #63 is an older fail-closed narration branch with an outdated base. Source inspection at `91fe1545b27d9d19d1b900f5050a3135f6342802` confirms that its important protections are already present: exhausted AI candidates fail visibly without deterministic emergency narration, attempts remain available for diagnostics, question-only wording is not accepted as an answer, and late-afternoon prose may naturally mention approaching dusk. The current configured narration routes also retain the emergency floor and the current Gemini/OpenRouter ordering. Do not merge PR #63 wholesale; only revisit a concrete missing regression if one is demonstrated.
 
 ## 2. Older branches that require separate, scoped review
 
@@ -42,7 +42,7 @@ The current integration candidate already contains the unique runtime capabiliti
 
 Source evidence is present in `server/domain/storySessionRecorder.ts`, `server/services/storySessionRecordingStore.ts`, `server/repositories/worldRepository.ts`, `server/domain/narrativeRichnessEvaluation.ts`, and their tests.
 
-**Remaining recorder caution:** the successful CI logs still contain state-before hash mismatch warnings for legacy `default_story` interactions. The repository correctly prevents these forensic-recording errors from turning into gameplay failures, but this does not prove every interaction is retained in a continuous recording. Keep this as a focused observability/recording-integrity follow-up; do not weaken hash validation or silently rebase the initial state to make the warnings disappear.
+**Recorder mismatch follow-up resolved at the current candidate:** CI for `91fe1545b27d9d19d1b900f5050a3135f6342802` no longer reports state-before mismatch warnings for `default_story`, `run_legacy`, or the 125-turn marathon. The sole remaining mismatch log is the deliberately invalid `story_recorder_boundary` negative test. The fix records observed state changes between recorder boundaries as explicit `AUXILIARY` transitions, rather than silently attributing them to the next command. Full snapshot hashes still include `runtimeState`, and a new regression confirms a tampered runtime-state patch fails integrity validation.
 
 PR #60 should not be merged wholesale: its older branch has conflicting version/type assumptions and overlapping edits. PRs #58 and #59 are older recording branches; their distinct behaviour is already substantially represented in the current candidate. Port only a specifically reproduced gap, with a focused test, rather than stacking those branches.
 

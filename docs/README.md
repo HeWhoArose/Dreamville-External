@@ -6,11 +6,13 @@
 
 ## Current integration status — 2026-10-16
 
-The current verified runtime integration candidate is commit `50061df2565a7d1d37ce013cf524228aae8ba8a8` on draft PR #76. Its exact-head GitHub release gate and both verification workflows passed: **1,503/1,503 tests**, zero failures, release-contract verification, TypeScript check, and production build.
+The latest verified runtime integration candidate is commit `91fe1545b27d9d19d1b900f5050a3135f6342802` on draft PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. Its exact-head release gate and both verification workflows passed: **1,517/1,517 tests**, zero failures, release-contract verification, lint/TypeScript check, and production build.
 
-Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307064), [verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307058), [second verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307061).
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727238), [verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727068), [second verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727299).
 
 PR #76 remains open and unmerged. The deterministic/mock 125-turn HTTP integration remains in CI. The separate 125-turn real-provider play session is deliberately deferred to the player after integrations are complete, to avoid repetitive Gemini/provider token and quota usage in CI. It is a manual acceptance step, not an automated gate.
+
+The forensic session recorder now captures unexpected snapshot changes between recorder boundaries as explicit `AUXILIARY` patches; hashes still cover the complete lossless snapshot and the new integrity regression rejects runtime-state patch tampering. The current recorder tests and long-session CI no longer emit state-before mismatches for `default_story` or the marathon. See the latest open-PR triage for source-level evidence and remaining gaps.
 
 Use [the open-PR integration triage](DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md) before adopting any older open branch: PRs #70–#75 are consolidated in PR #76, while older recording and long-session branches need scoped review rather than blind merges.
 

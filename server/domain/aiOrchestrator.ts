@@ -8933,6 +8933,35 @@ export class MultiModelOrchestrator {
         viewerActorId: initialSituation.player.actorId,
         worldRepo: repo,
       });
+
+      // The HTTP action route reaches executeTurn(), not only the standalone
+      // narration helper above. Restore committed NPC-initiation evidence here
+      // before research, planning, context budgeting, and prompt construction.
+      const committedNpcInitiationsForTurn = repo.getRecentCanonicalCommandEvents(storyId, 32)
+        .filter((event: any) =>
+          event?.type === 'NPC_INITIATED_INTERACTION' &&
+          String(event?.locationId || '') === currentSituation.location.id &&
+          String(event?.summary || '').trim().length > 0,
+        )
+        .map((event: any) => ({
+          id: String(event.eventId || ''),
+          type: 'NPC_INITIATED_INTERACTION',
+          summary: String(event.summary).trim(),
+          entityId: event.entityId ? String(event.entityId) : undefined,
+          turnNumber: Number.isFinite(Number(event.turnNumber)) ? Number(event.turnNumber) : undefined,
+          timestamp: event.timestamp ? String(event.timestamp) : undefined,
+          locationId: currentSituation.location.id,
+          source: 'CANONICAL_NPC_INITIATION',
+        }));
+      const visibleEventsForTurn = new Map<string, typeof currentSituation.visibleEvents[number]>();
+      for (const event of [...currentSituation.visibleEvents, ...committedNpcInitiationsForTurn]) {
+        if (event.locationId && event.locationId !== currentSituation.location.id) continue;
+        const key = event.id || event.type + '|' + event.summary;
+        if (!visibleEventsForTurn.has(key)) visibleEventsForTurn.set(key, event);
+      }
+      currentSituation.visibleEvents = [...visibleEventsForTurn.values()];
+      currentSituation.sceneEvidence.events = [...visibleEventsForTurn.values()];
+
       const isNarrativeTask = task === 'narrative.generate';
       const rawResearchResult = isNarrativeTask
         ? NarrativeResearchPipeline.research({

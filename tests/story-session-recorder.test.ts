@@ -284,3 +284,96 @@ test('repository starts a distinct recording when a storyId is reused for a new 
 	assert.deepEqual(second.initialState, secondInitialState);
 	assert.equal(first.interactions.length, 1, 'The prior run recording remains intact in its own object.');
 });
+
+
+test('story session recorder preserves a continuous patch chain across denormalized runtimeState resaves', () => {
+	const initial = {
+		storyId: 'story_runtime_state_reserialization',
+		player: { locationId: 'loc_orrery', hp: 10 },
+		adaptation: {
+			ch16Run: {
+				storyId: 'story_runtime_state_reserialization',
+				canonicalEvents: [],
+				runtimeState: { narrativeContextHistory: [], materializedEngineState: { revision: 1 } },
+			},
+		},
+	};
+	const recording = StorySessionRecorder.start({
+		storyId: 'story_runtime_state_reserialization',
+		initialState: initial,
+	});
+
+	const firstAfter = JSON.parse(JSON.stringify(initial));
+	firstAfter.player.locationId = 'loc_gate';
+	firstAfter.adaptation.ch16Run.runtimeState = {
+		...firstAfter.adaptation.ch16Run.runtimeState,
+		narrativeContextHistory: [{ actionId: 'turn_1' }],
+		materializedEngineState: { revision: 2 },
+	};
+	StorySessionRecorder.append(recording, {
+		storyId: 'story_runtime_state_reserialization',
+		kind: 'DIRECT_TURN',
+		source: 'HTTP_ACTION',
+		startedAt: '2026-10-16T11:00:00.000Z',
+		completedAt: '2026-10-16T11:00:00.100Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: initial,
+		stateAfter: firstAfter,
+	});
+
+	// A repository save reserializes denormalized StoryRun.runtimeState after the
+	// previous canonical-command recorder boundary. Canonical state is unchanged.
+	const secondBefore = JSON.parse(JSON.stringify(firstAfter));
+	secondBefore.adaptation.ch16Run.runtimeState = {
+		...secondBefore.adaptation.ch16Run.runtimeState,
+		workingContextPins: ['scene:current'],
+		materializedEngineState: { revision: 3 },
+	};
+	const secondAfter = JSON.parse(JSON.stringify(secondBefore));
+	secondAfter.player.locationId = 'loc_vault';
+	secondAfter.adaptation.ch16Run.runtimeState.narrativeContextHistory.push({ actionId: 'turn_2' });
+	secondAfter.adaptation.ch16Run.runtimeState.materializedEngineState = { revision: 4 };
+
+	StorySessionRecorder.append(recording, {
+		storyId: 'story_runtime_state_reserialization',
+		kind: 'DIRECT_TURN',
+		source: 'HTTP_ACTION',
+		startedAt: '2026-10-16T11:00:01.000Z',
+		completedAt: '2026-10-16T11:00:01.100Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: secondBefore,
+		stateAfter: secondAfter,
+	});
+
+	assert.equal(recording.interactions.length, 2);
+	assert.ok(
+		recording.interactions[1].statePatch.some((operation) =>
+			operation.path.startsWith('/adaptation/ch16Run/runtimeState'),
+		),
+		'the second patch must retain intervening StoryRun runtimeState updates for reconstruction',
+	);
+	assert.equal(StorySessionRecorder.validate(recording).valid, true);
+	assert.deepEqual(StorySessionRecorder.applyPatches(recording), secondAfter);
+
+	// The normalization applies only to the denormalized runtimeState bundle;
+	// a real canonical player-location change in stateBefore must still fail.
+	const tamperedCanonicalBefore = JSON.parse(JSON.stringify(secondAfter));
+	tamperedCanonicalBefore.player.locationId = 'loc_fabricated';
+	assert.throws(
+		() => StorySessionRecorder.append(recording, {
+			storyId: 'story_runtime_state_reserialization',
+			kind: 'DIRECT_TURN',
+			source: 'HTTP_ACTION',
+			startedAt: '2026-10-16T11:00:02.000Z',
+			completedAt: '2026-10-16T11:00:02.100Z',
+			success: true,
+			rolledBack: false,
+			stateBefore: tamperedCanonicalBefore,
+			stateAfter: { ...tamperedCanonicalBefore, turn: 3 },
+		}),
+		/Story session state-before mismatch/,
+	);
+	assert.equal(recording.interactions.length, 2);
+});

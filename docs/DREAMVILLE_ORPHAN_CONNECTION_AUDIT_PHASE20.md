@@ -65,11 +65,22 @@ Research is sanitized through the epistemic boundary before being handed to narr
 
 At source-audit level, no release-critical subsystem introduced by Phases 11–16 is currently orphaned: each has a documented consumer and at least one regression or contract test. The Phase 17–22 closure layers were then checked against the same producer → contract → consumer rule, with no known release-critical orphan remaining.
 
-This is not a substitute for runtime verification. GitHub CI has now executed the repository release gate repeatedly. The current release sequence is `npm run lint`, `npm test`, and `npm run build`; contract verification and TypeScript pass, while the full test gate remains red on earlier-phase/integration regressions still visible in the stacked branch.
+This source-level audit is not a substitute for runtime verification. The original branch-specific gate notes below are historical snapshots, not current status.
 
-## Open release risks
+## Historical release risks — prior stacked branch snapshot
 
-1. GitHub CI has executed `npm run verify:contracts` and `npm run lint` successfully on the release branch; the latest full test gate remains red, so `npm run build` has not yet become an authoritative release-pass result.
-2. External provider behaviour still requires live provider/fallback scenario verification.
-3. The release branch remains stacked on the Phase 11–15 integration branch until the earlier PR is integrated.
-4. Phase 18 end-to-end fallback coverage and Phase 20 source-level orphan checks are passing in the release workflow.
+At the time of the earlier audit run, the release candidate was stacked on separate Phase 11–15 implementation work and the full test gate was red. Those findings explain the original investigation but have been superseded by later integration validation.
+
+## Current integration update (2026-10-16)
+
+The integrated candidate's GitHub Actions release gate passed on commit `e05f60d7dcde2f12ccac4f77dc23b69144ed82e2`:
+- `npm run verify:contracts`: passed.
+- `npm run lint`: passed.
+- `npm test`: 1,500/1,500 passed.
+- `npm run build`: passed.
+
+Evidence: [passing release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38885769653) and [passing integration verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38885769669).
+
+The live-provider 125-turn play session is deliberately deferred to the player after the code integrations are complete because repeated automated calls can consume provider token/quota limits. The deterministic/mock 125-turn HTTP integration remains automated regression coverage. The player-run session and manual UI scenarios are acceptance checks, not CI gate steps.
+
+Current follow-up work must use the latest commit-specific GitHub status and must not repeat the superseded statement that the integrated automated suite is still red. PR #76 remains open and unmerged, and the final merged-main release gate is still required.

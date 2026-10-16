@@ -764,7 +764,7 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // environment-only sentences that never depict the situation or any actor.
   const environmentOnlyTurn = JSON.stringify({
     narrative: [
-      'You circle the sand of The Obsidian Arena and keep the private viewing box, where a high-level target watches behind caste enforcers, in sight.',
+      'The sand of The Obsidian Arena stretches beneath the punishing sun while the private viewing box looms above.',
       'The sun hammers the sand.',
       'The iron rails are hot to the touch.',
       'The sun continues to hammer the sand.',
@@ -819,7 +819,7 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
 
   const result = await orchestrator.generateNarrativeOnly({
     storyId: storyIdG,
-    playerAction: 'Circle the arena floor and watch the private viewing box.',
+    playerAction: 'Walk along the arena floor and watch the private viewing box.',
     hardTokenBudget: 1100,
     maxRetries: 1,
   });

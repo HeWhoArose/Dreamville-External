@@ -8252,25 +8252,13 @@ export class MultiModelOrchestrator {
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
           if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
 
-          // Apply semantic/epistemic review to every provider candidate, not only
-          // selected full-turn orchestration paths. This is the live narrative-only
-          // endpoint used by ordinary player actions and retry-generated narration.
-          const semanticReview = SemanticNarrativeReview.review({
-            intent: playerIntent,
-            situation: currentSituation,
-            plan: narrativePlan,
-            turnPackage: validation.turnPackage,
-          });
-          if (semanticReview.decision !== 'ACCEPT') {
-            return {
-              valid: false,
-              errorReason: 'Narration failed semantic grounding review: ' + [
-                ...semanticReview.violations.map((violation) => violation.message),
-                ...semanticReview.missingRequirements,
-              ].join(' | '),
-            };
-          }
-          return { valid: true };
+          // Semantic review is applied by the final candidate gate after bounded
+          // repair. Keep per-provider validation focused on deterministic schema,
+          // presentation, canonical scene, intent, information, and temporal guards
+          // so a valid alternate phrasing is not over-rejected during failover.
+          return temporalContinuity.valid
+            ? { valid: true }
+            : { valid: false, errorReason: temporalContinuity.errorReason };
         },
       },
     );

@@ -103,7 +103,8 @@ function extractConcreteObjectClaims(narration: string): string[] {
 	for (const pattern of patterns) {
 		let match: RegExpExecArray | null;
 		while ((match = pattern.exec(narration)) !== null) {
-			const claim = normalize(match[1]).replace(/\b(?:nearby|there|present)\b/g, '').trim();
+			let claim = normalize(match[1]).replace(/\b(?:nearby|there|present)\b/g, '').trim();
+			claim = claim.replace(/\s+(?:where|when|which|that|who|whose|whom|without|standing|sitting|leaning|resting|lying|hanging|with|into|onto|over|under|above|below|beside|behind|near|before|after|while|during|because|since|unless|until|although|though|if|and|or|but|to|from|for)\b.*$/gi, '').trim();
 			if (claim && !claims.includes(claim)) claims.push(claim);
 		}
 	}
@@ -119,7 +120,8 @@ function extractEnvironmentalClaims(narration: string): string[] {
 	for (const pattern of patterns) {
 		let match: RegExpExecArray | null;
 		while ((match = pattern.exec(narration)) !== null) {
-			const claim = normalize(match[1]).trim();
+			let claim = normalize(match[1]).trim();
+			claim = claim.replace(/\s+(?:where|when|which|that|who|whose|whom|without|standing|sitting|leaning|resting|lying|hanging|with|into|onto|over|under|above|below|beside|behind|near|before|after|while|during|because|since|unless|until|although|though|if|and|or|but|to|from|for)\b.*$/gi, '').trim();
 			if (claim && !claims.includes(claim)) claims.push(claim);
 		}
 	}
@@ -155,8 +157,7 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 
 	// A location's own canonical name and exact authored environmental phrases
 	// are valid evidence for broad environmental claims (e.g. "the bridge" when
-	// the location description explicitly names a bridge). Exact phrase matching
-	// does not let "brass architecture" authorize a separate "brass lamp".
+	// the location description explicitly names a bridge).
 	const authoredEnvironment = [
 		situation.location.name,
 		situation.location.description,
@@ -169,6 +170,18 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 		normalizedClaim.includes(source) && source.length >= 8
 	)) {
 		return true;
+	}
+
+	// Word/stem overlap support for multi-word claims against authored environment
+	const claimWords = normalizedClaim.split(/\s+/).filter((w) => w.length >= 3);
+	if (claimWords.length > 0) {
+		for (const source of authoredEnvironment) {
+			const sourceWords = source.split(/\s+/).filter((w) => w.length >= 3);
+			const matchedAll = claimWords.every((word) =>
+				sourceWords.some((sw) => sw === word || sw.startsWith(word) || word.startsWith(sw) || sw.replace(/s$/, '') === word.replace(/s$/, ''))
+			);
+			if (matchedAll) return true;
+		}
 	}
 
 	return false;
@@ -220,7 +233,12 @@ export class SemanticNarrativeReview {
 		}
 
 		if (intent.speechIntent === false && intent.observationIntent) {
-			if (containsAny(lower, /\b(?:you|the protagonist|your character)\s+(?:(?!\b(?:them|him|her|they|someone|someone else)\b)[a-z'-]+\s+){0,6}(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|shout|shouts|shouted|call out|calls out)\b/i)) {
+			const sentences = lower.split(/[.!?]+/).map((s) => s.trim()).filter(Boolean);
+			const hasUnauthorizedSpeech = sentences.some((sentence) =>
+				/\b(?:you|the protagonist|your character)\b/i.test(sentence) &&
+				/\b(?:you|the protagonist|your character)\s+(?:(?!\b(?:them|him|her|they|someone|someone else|one|enforcer|guard|target|npc)\b)[a-z'-]+\s+){0,6}(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|shout|shouts|shouted|call out|calls out)\b/i.test(sentence)
+			);
+			if (hasUnauthorizedSpeech) {
 				violations.push({ code: 'UNAUTHORIZED_SPEECH', message: 'Narration converted a non-speaking observation/listening action into protagonist speech.', severity: 'HIGH' });
 			}
 		}

@@ -184,3 +184,44 @@ The remaining seven failures block the release gate. PR #74's main-based branch 
 6. After code CI is green, run provider-backed Phase 1 sessions through the actual player-facing UI and persistence/reload tests. Those human tests remain BLOCKED until actually executed.
 
 No merge is recorded by this audit.
+
+## 11. Combined integration CI outcome and next caller gap (2026-10-16)
+
+Draft [PR #76](https://github.com/HeWhoArose/Dreamville-External/pull/76), head `9381e3bb4c10edfec6cc4c4a19082972169b79cf`, combines PRs #71–#75 on their shared `main` baseline for cross-branch validation. It deliberately does not merge anything to `main`.
+
+### Exact-head automated evidence
+
+All three GitHub Actions runs for this exact integration commit completed successfully:
+
+- [Dreamville Verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38860499553) — PASS; `npm test` reported **1,495 passed, 0 failed** and the production build completed.
+- [Dreamville Release Gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38860499645) — PASS.
+- [Second Dreamville Verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38860499689) — PASS.
+
+This supersedes the older per-PR reports as the current combined automated baseline. The old per-PR failures were real outcomes on separate heads lacking one or more fixes; they are not proof that this integrated head is broken. Conversely, this green run does not certify provider-backed narrative quality or actual UI behaviour.
+
+### Cross-branch conflict resolution confirmed in the combined tree
+
+- `WorldRepository` geography projection preserves **both** `sceneObjects` and `population`; neither PR #71 nor PR #72 overwrites the other's field.
+- `MultiModelOrchestrator` combines the shared final candidate validator from PR #71 with Gemini 3.8-before-2.5 order for `narrative.generate` and `narrative.review`.
+- The Phase 12 test file combines PR #75's strict-review-compatible fixtures with PR #73's persisted-config route-order assertion.
+- PR #74's named-destination and Continue-goal fixes are present in the same testable tree.
+
+### Additional real-caller audit: combat fallback presentation
+
+Source inspection of `CombatPlayerActionService.generateNarration` and `CombatEncounterService.generateNarration` confirms:
+
+1. Each helper runs after the combat mechanics/target result is resolved and requests presentation-only narration using that committed outcome.
+2. Provider exception or unsuccessful generation falls back to a grounded mechanical summary and target HP; the precombat helper additionally states that combat is initiated and initiative must be rolled.
+3. The helpers return plain strings. They do not currently set the existing optional `CombatNarrativeResolution.fallbackUsed` flag. `TacticalCombatView` renders `mechanicalSummary` and `narrativeResponse` under “What happened” but does not display a fallback-provenance label.
+4. The traced combat routes resolve the action inside the canonical command boundary and return the resulting resolution. The fallback helper itself does not execute combat mechanics again; a failed narration call is not a second attack/roll.
+
+This is a **transparency/provenance gap**, not evidence of duplicate combat mutation. Follow-up should set `fallbackUsed` accurately for provider failure/empty response, render a small “Deterministic combat summary” label when true, and test both normal AI output and fallback without changing the committed combat result. Do not refactor the combat rules or turn ownership merely to label narration.
+
+### Still required (not covered by green CI)
+
+- Actual configured-provider session(s) through the real Story UI, including information-seeking, movement continuation, public-citadel opening, rejected primary/rewrite, outage and retry.
+- Human UI confirmation that withheld narration presents a useful retry/error state and retry does not replay the canonical action.
+- Fresh-story/reload validation for population idempotency, visibility and authored `RESTRICTED`/`ABANDONED`/`NONE` constraints.
+- Targeted combat-fallback provenance regression described above.
+
+Status: **AUTOMATED CI PASS for PR #76 exact head; HUMAN LIVE-MODEL and HUMAN UI gates NOT RUN.** Keep PR #76 draft until those separate requirements are handled and reviewed.

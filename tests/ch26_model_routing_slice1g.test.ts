@@ -55,6 +55,9 @@ describe('Model Routing Slice 1G - Fallback Chain Management & Real Model Connec
       'google_gemini::gemini-2.5-flash',
     ];
     orchestrator.setFallbackChain('narrative.generate', customChain);
+    // Make the test scenario explicit rather than depending on the changing
+    // seeded availability of Gemini 2.5 Flash.
+    orchestrator.updateModelHealth('google_gemini', 'gemini-2.5-flash', 'Unavailable');
 
     const selection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 1000 });
     assert.ok(selection.selectedModel);

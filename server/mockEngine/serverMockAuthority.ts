@@ -32,6 +32,7 @@ import { narrativeStateBroker, type ItemUseResolution } from '../domain/narrativ
 import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
+import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { PlayerStateQueryResolver } from '../domain/playerStateQueryResolver';
 import { ResolutionGate } from '../domain/resolutionGate';
@@ -565,7 +566,9 @@ export class ServerMockAuthority {
     }
 
     // Reflect any dialogue from the opening scene into dialogue history
-    const dialogueEvents = opening.structuredEvents.filter((e: StructuredNarrativeEvent) => e.type === 'dialogue');
+    const dialogueEvents = opening.structuredEvents.filter((e: StructuredNarrativeEvent) =>
+      e.type === 'dialogue' && isOpeningDialogueSupportedByNarrative(opening.narrativeText, e)
+    );
     for (const d of dialogueEvents) {
       if (!dState.dialogueHistory.some((dh) => dh.text === d.text)) {
         dState.dialogueHistory.push({

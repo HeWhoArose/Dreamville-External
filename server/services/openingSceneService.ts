@@ -12,6 +12,7 @@ import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
 import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
+import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
 
 function parseLooseOpeningResponse(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
 	const cleaned = String(rawText || '')
@@ -449,7 +450,9 @@ export class OpeningSceneService {
 			text: String(evt.text || '').trim(),
 			speaker: evt.speaker || undefined,
 			timestamp: facts.time.formattedHeader,
-		}));
+		})).filter((event) =>
+			event.type !== 'dialogue' || isOpeningDialogueSupportedByNarrative(finalNarrativeText, event)
+		);
 		if (generatedEvents.length < 4 || !generatedEvents.some((e) => e.type === 'location') || !generatedEvents.some((e) => e.type === 'normal')) {
 			generatedEvents = OpeningSceneService.deriveOpeningEvents(finalNarrativeText, storyId, facts);
 		}

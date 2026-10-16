@@ -323,6 +323,38 @@ test('movement phrasing preserves the named destination in make-my-way actions',
 	assert.equal(result.locationTarget?.id, undefined, 'an unlisted destination stays name-only until canonical resolution');
 });
 
+
+test('movement to a named destination preserves it before a second action clause', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic(
+		'I want to move to the Lantern Vault and inspect the sealed gate.',
+		currentSituation,
+	);
+
+	assert.equal(result.movementIntent, true);
+	assert.equal(result.locationTarget?.name, 'Lantern Vault');
+	assert.equal(result.locationTarget?.source, 'EXPLICIT');
+	assert.equal(result.locationTarget?.id, undefined, 'an unlisted destination remains name-only until canonical resolution');
+});
+
+test('Continue retains a destination from movement phrasing with an extra action clause', () => {
+	const { currentSituation } = situation();
+	currentSituation.recentTurns.push({
+		turnId: 'previous-travel-with-extra-action',
+		playerAction: 'I make my way to the Lantern Vault and inspect the sealed gate.',
+		narration: 'You begin moving toward the Lantern Vault while keeping the gate in view.',
+		locationId: currentSituation.location.id,
+		stateChanges: [],
+		isOpeningScene: false,
+	});
+	const result = PlayerIntentInterpreter.deterministic('Continue', currentSituation);
+
+	assert.equal(result.movementIntent, true);
+	assert.equal(result.action, 'continue_travel');
+	assert.equal(result.locationTarget?.name, 'Lantern Vault');
+	assert.equal(result.locationTarget?.source, 'IMPLIED');
+});
+
 test('Continue inherits an unfinished travel destination from the immediately previous movement turn', () => {
 	const { currentSituation } = situation();
 	currentSituation.recentTurns.push({

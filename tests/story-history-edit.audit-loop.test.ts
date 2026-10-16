@@ -83,6 +83,11 @@ test('past-action edits remain distinct from presentation-only narration regener
   assert.ok(presentationOnlyIndex >= 0);
   assert.notEqual(historyEditIndex, presentationOnlyIndex);
   assert.ok(view.includes('regenerateNarration(entry'));
-  assert.ok(view.includes('(entry.narrativeResponse || entry.narrativeError)'), 'retry must remain available when fail-closed validation clears narration but keeps a retryable error');
+  const narrationErrorStart = view.indexOf('{entry.narrativeError ? (');
+  const narrationErrorEnd = view.indexOf(') : (', narrationErrorStart);
+  assert.ok(narrationErrorStart >= 0 && narrationErrorEnd > narrationErrorStart);
+  const narrationErrorBranch = view.slice(narrationErrorStart, narrationErrorEnd);
+  assert.ok(narrationErrorBranch.includes('onClick={() => regenerateNarration(entry)}'));
+  assert.ok(narrationErrorBranch.includes('Retry narration'), 'retry must remain available when fail-closed validation clears narration but keeps a retryable error');
   assert.ok(view.includes('editPastAction(entry'));
 });

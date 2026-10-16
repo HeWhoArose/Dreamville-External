@@ -7966,6 +7966,7 @@ export class MultiModelOrchestrator {
     });
 
     const canonicalSceneAnchor = [
+      'CANONICAL CURRENT SCENE ANCHOR — authoritative current location and scene state:',
       `Location ID: ${currentSituation.location.id}`,
       `Location name: ${currentSituation.location.name}`,
       currentSituation.location.regionId ? `Region: ${currentSituation.location.regionId}` : '',

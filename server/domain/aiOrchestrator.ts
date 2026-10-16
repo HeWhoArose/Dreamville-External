@@ -7772,10 +7772,31 @@ export class MultiModelOrchestrator {
       previousNarrations: params.situation.recentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
     });
     const actionSubstance = actionSubstanceEvaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
-    if (actionSubstance && actionSubstance.score < 0.50) {
+    const actionSubstanceEvidence = actionSubstance?.evidence.join(' ').toLowerCase() || '';
+    const isInformationSeekingTurn =
+      Boolean(params.intent.informationGoal) ||
+      params.intent.interactionMode === 'INFORMATION_SEEKING' ||
+      params.intent.interactionMode === 'DIALOGUE' ||
+      Boolean(params.intent.speechIntent);
+    const environmentalPaddingDominates = actionSubstanceEvidence.includes(
+      'environmental detail outweighs substantive action signals',
+    );
+    const informationResponseIsMissing = isInformationSeekingTurn && actionSubstanceEvidence.includes(
+      'the action result or information response is not clearly communicated',
+    );
+    // Keep N18 diagnostic scoring advisory for compact, semantically grounded
+    // action descriptions. Fail closed only for clear scenery-padding cases or
+    // an information-seeking turn that did not answer (or bound) the question.
+    if (
+      actionSubstance &&
+      actionSubstance.score < 0.50 &&
+      (environmentalPaddingDominates || informationResponseIsMissing)
+    ) {
       return {
         valid: false,
-        errorReason: 'Narration failed the action-substance gate: it does not sufficiently resolve the player action before environmental description.',
+        errorReason: informationResponseIsMissing
+          ? 'Narration failed the action-substance gate: the information-seeking turn has no grounded answer or bounded lack of answer.'
+          : 'Narration failed the action-substance gate: environmental description outweighs the current-turn action.',
       };
     }
 

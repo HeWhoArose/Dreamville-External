@@ -2,7 +2,8 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Current integration candidate:** PR #76, commit `50061df2565a7d1d37ce013cf524228aae8ba8a8`  
+**Last verified runtime commit:** `50061df2565a7d1d37ce013cf524228aae8ba8a8`  
+**Current working candidate:** `e7e94c8ca55906c3fc4a4c2829aedf000f8b36fc` (recorder-integrity changes awaiting CI)  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
 **Status:** PR #76 is open and unmerged. Its exact-head release gate and both verification workflows passed; the release gate reported 1,503/1,503 tests, zero failures, and successful build.
 
@@ -34,12 +35,13 @@ The following improvements from PR #60 are **not** present in the current integr
 
 - per-run `runSessionId` isolation when a story ID is reused;
 - recording schema 1.1 and persistence partitioning by run session;
-- append-time rejection when the recorded `stateBefore` does not match the previous state hash;
 - the `ACTION_SUBSTANCE` richness dimension and its dedicated test cases.
 
 One proposed PR #60 fix — preserving the exact pre-mutation initial state — appears to be functionally covered already: the current `recordStorySessionInteraction` passes `params.stateBefore` into recording initialization, and `StorySessionRecorder.append` resets `initialState` to that same pre-interaction state when the recording has no interactions. The dedicated regression assertion is still worth adding, but do not duplicate the implementation without first proving a failing case.
 
-The missing run-session isolation and append-time state-before hash check are concrete recording-integrity candidates. The action-substance dimension is an unmerged enhancement, not proof that the current quality path is absent: current narration already has an N18 richness evaluation and a live environment-excess detector/rewrite path. Review whether the existing final-candidate path can still accept an environment-heavy original after a skipped/failed rewrite before porting the extra dimension.
+**Recorder-integrity follow-up:** commit `e7e94c8ca55906c3fc4a4c2829aedf000f8b36fc` now adds append-time state-before hash validation and rejects appends after stop. It also catches recorder failures at the repository boundary so recording problems cannot fail canonical gameplay. This change is awaiting exact-head CI; do not call it verified until those runs finish.
+
+The remaining run-session isolation is a concrete recording-integrity candidate. The action-substance dimension is an unmerged enhancement, not proof that the current quality path is absent: current narration already has an N18 richness evaluation and a live environment-excess detector/rewrite path. Review whether the existing final-candidate path can still accept an environment-heavy original after a skipped/failed rewrite before porting the extra dimension.
 
 PR #60 must not be merged as-is. Its last recorded release-gate run failed TypeScript checks, including undefined narrative-plan values and inconsistent 1.0.0/1.1.0 recorder version types. Port and test individual changes on the current candidate only after a focused regression establishes the gap.
 

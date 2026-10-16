@@ -1,7 +1,7 @@
 import type { WorldRepository } from '../repositories/worldRepository';
 import { WorkingContextEngine } from './workingContextEngine';
 import { formatCanonicalTimestamp } from './deterministicRng';
-import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
+import { CurrentSituationBuilder, isAvailableLocationScopedOpportunityThread, type CurrentSituation } from './currentSituation';
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
@@ -412,7 +412,17 @@ export class NarrativeResearchPipeline {
 			const id = normalize((thread as any)?.id || (thread as any)?.threadId || title);
 			if (seenThreads.has(id)) continue;
 			seenThreads.add(id);
-			const threadText = [title, normalize((thread as any)?.summary), normalize((thread as any)?.status)].filter(Boolean).join(' | ');
+			if (!isAvailableLocationScopedOpportunityThread(thread, situation.location.id)) {
+				excluded.push({
+					label: title,
+					kind: 'THREAD',
+					sourceId: id,
+					reason: 'Work/contract opportunity is closed or is not an explicitly posted opportunity at the player’s current location.',
+				});
+				continue;
+			}
+			const categoryText = normalize((thread as any)?.category).replace(/[\\s_-]+/g, ' ');
+			const threadText = [title, categoryText, normalize((thread as any)?.summary), normalize((thread as any)?.status)].filter(Boolean).join(' | ');
 			const overlap = overlapScore(tokens(threadText), queryTokens);
 			const currentSituationThread = situation.openThreads.some((candidate) => {
 				const candidateId = normalize(candidate.id || '');

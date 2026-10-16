@@ -516,3 +516,74 @@ test('current-scene activity and NPC-initiated events reach the canonical narrat
 		'off-location canonical events belong in recent history, not current-scene event evidence',
 	);
 });
+
+
+test('current situation scopes actionable work and contract threads to open postings at the current location', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'current_situation_location_scoped_work';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+	const currentLocationId = player.locationId!;
+
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'local_cistern_contract',
+		title: 'Available work: repair the cistern pump',
+		description: 'A local guild contract seeks a repair hand for the damaged pump.',
+		category: 'CONTRACT',
+		status: 'OPEN',
+		locationId: currentLocationId,
+		createdAt: 'fixture-local-open',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'remote_caravan_job',
+		title: 'Available work: escort the eastern caravan',
+		description: 'A caravan job is posted at a different settlement.',
+		category: 'JOB_POSTING',
+		status: 'OPEN',
+		locationId: 'loc_lantern_vault',
+		createdAt: 'fixture-remote-open',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'resolved_archive_job',
+		title: 'Available work: sweep the archive',
+		description: 'This job was already completed.',
+		category: 'JOB_POSTING',
+		status: 'RESOLVED',
+		locationId: currentLocationId,
+		createdAt: 'fixture-local-resolved',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'unlocated_work_opportunity',
+		title: 'Available work: recover a map',
+		description: 'An unlocated opportunity with no canonical posting site.',
+		category: 'WORK_OPPORTUNITY',
+		status: 'OPEN',
+		createdAt: 'fixture-locationless',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'world_story_thread',
+		title: 'Investigate the starlight fissures',
+		description: 'The origin of the fissures remains unknown.',
+		category: 'QUEST',
+		status: 'OPEN',
+		createdAt: 'fixture-general-thread',
+	});
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I check what work is available here.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	assert.ok(situation.openThreads.some((thread) => thread.id === 'local_cistern_contract'));
+	assert.ok(situation.openThreads.some((thread) => thread.id === 'world_story_thread'), 'general quest/story threads keep their existing scope');
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'remote_caravan_job'), false);
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'resolved_archive_job'), false);
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'unlocated_work_opportunity'), false);
+});

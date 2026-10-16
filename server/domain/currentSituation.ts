@@ -111,6 +111,8 @@ export interface OpenThread {
 	relatedEntityIds?: string[];
 	summary?: string;
 	status?: string;
+	category?: string;
+	locationId?: string;
 	priority?: string | number;
 	lastUpdatedAt?: string;
 }
@@ -291,6 +293,57 @@ function eventTurnNumber(event: any, index: number): number | undefined {
 	return Number.isFinite(parsed) ? parsed : index + 1;
 }
 
+const LOCATION_SCOPED_OPPORTUNITY_CATEGORIES = new Set([
+	'JOB',
+	'JOB_POSTING',
+	'JOB_REQUEST',
+	'EMPLOYMENT',
+	'EMPLOYMENT_POSTING',
+	'WORK_OPPORTUNITY',
+	'WORK_REQUEST',
+	'AVAILABLE_WORK',
+	'CONTRACT',
+	'CONTRACT_POSTING',
+	'GUILD_CONTRACT',
+	'NOTICE',
+	'NOTICE_BOARD',
+	'COMMISSION',
+	'COMMISSION_POSTING',
+	'BOUNTY',
+	'BOUNTY_POSTING',
+	'TASK_POSTING',
+	'WORK_ORDER',
+]);
+
+const CLOSED_OPPORTUNITY_STATUSES = new Set([
+	'REJECTED',
+	'RESOLVED',
+	'ABANDONED',
+	'CLOSED',
+	'COMPLETED',
+	'CANCELLED',
+	'CANCELED',
+	'EXPIRED',
+	'WITHDRAWN',
+]);
+
+/**
+ * A work/contract opportunity is actionable only when it is a canonical
+ * location-scoped posting, still open, and attached to the player's current
+ * location. This predicate intentionally leaves ordinary plot/quest threads
+ * alone; it does not invent, promote, or move postings.
+ */
+export function isAvailableLocationScopedOpportunityThread(raw: unknown, currentLocationId: string): boolean {
+	if (!raw || typeof raw !== 'object') return true;
+	const candidate = raw as Record<string, unknown>;
+	const category = normalizeText(candidate.category).toUpperCase().replace(/[\\s-]+/g, '_');
+	if (!LOCATION_SCOPED_OPPORTUNITY_CATEGORIES.has(category)) return true;
+	const status = normalizeText(candidate.status || candidate.state).toUpperCase().replace(/[\\s-]+/g, '_');
+	if (CLOSED_OPPORTUNITY_STATUSES.has(status)) return false;
+	const postingLocationId = normalizeText(candidate.locationId);
+	return Boolean(currentLocationId && postingLocationId && postingLocationId === currentLocationId);
+}
+
 function normalizeThread(raw: any, index: number): OpenThread | null {
 	if (!raw || typeof raw !== 'object') return null;
 	const id = normalizeText(raw.threadId || raw.id || raw.key || `thread_${index + 1}`);
@@ -302,6 +355,8 @@ function normalizeThread(raw: any, index: number): OpenThread | null {
 		relatedEntityIds: Array.isArray(raw.relatedEntityIds) ? raw.relatedEntityIds.map(normalizeText).filter(Boolean).slice(0, 8) : undefined,
 		summary: normalizeText(raw.summary || raw.description || raw.details || '') || undefined,
 		status: normalizeText(raw.status || raw.state || '') || undefined,
+		category: normalizeText(raw.category) || undefined,
+		locationId: normalizeText(raw.locationId) || undefined,
 		priority: raw.priority ?? raw.importance ?? undefined,
 		lastUpdatedAt: normalizeText(raw.updatedAt || raw.lastUpdatedAt || raw.timestamp || '') || undefined,
 	};
@@ -816,6 +871,7 @@ export class CurrentSituationBuilder {
 		const openThreads = Array.from(
 			new Map(
 				threadCandidates
+					.filter((thread) => isAvailableLocationScopedOpportunityThread(thread, safeLocation.id))
 					.map(normalizeThread)
 					.filter((thread): thread is OpenThread => Boolean(thread))
 					.map((thread) => [thread.id, thread]),

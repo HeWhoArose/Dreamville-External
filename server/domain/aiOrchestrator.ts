@@ -9044,6 +9044,13 @@ export class MultiModelOrchestrator {
       const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, continuityState: narrativeContinuityState });
 
       // 1b. CH15 Source Adaptation Adjudication Check
+      const fallbackVisibleSceneEventContext = currentSituation.visibleEvents
+        .filter((event) => !event.locationId || event.locationId === currentSituation.location.id)
+        .slice(0, 8)
+        .map((event) => `[${String(event.type || 'EVENT').slice(0, 48)}] ${String(event.summary || '').slice(0, 220)}`)
+        .filter((event) => event.trim().length > 0)
+        .join(' | ') || 'None';
+
       const narrationPrompt = isNarrativeTask && researchResult && narrativePlan
         ? buildNarrationPrompt({
             situation: currentSituation,
@@ -9061,7 +9068,13 @@ export class MultiModelOrchestrator {
             maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {
-            prompt: assembledContext.assembledText,
+            prompt: [
+              assembledContext.assembledText,
+              'CURRENT SCENE — canonical fallback evidence',
+              'Location: ' + currentSituation.location.name + ' (' + currentSituation.location.id + ')',
+              'Visible current-scene events (canonical or projected): ' + fallbackVisibleSceneEventContext,
+              'Fallback grounding rule: preserve committed current-location events; do not infer events from other locations.',
+            ].join('\\n\\n'),
             styleInstruction: '',
             totalTokens: assembledContext.totalTokens,
             narrativeProviderHandoff: undefined,

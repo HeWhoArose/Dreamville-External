@@ -20,14 +20,14 @@
 
 ## Integration status update — 2026-10-16
 
-The current integration candidate is PR #76 at `88882c96ee15ee0fef0a64d47a6ee032a43612d1`, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head workflows passed on this commit:
+The latest code-bearing integration commit verified by all three exact-head workflows is `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. A documentation-only reconciliation may advance the branch head; always check CI for the actual latest head before release:
 
 - Full suite: **1,523/1,523 tests passed**, zero test failures.
 - Type-check and lint: passed.
 - Release-contract verification: passed.
 - Production build: passed.
 
-Evidence: [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458017), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458006), [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458038).
+Evidence: [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229050), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229076), [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229176).
 
 The latest change restores a durable repository-reconstruction regression for opening population and opening-scene text. It verifies authored occupancy metadata survives reload, canonical ambient resident IDs/count survive, the persisted StoryRun snapshot retains the entities, and forced opening regeneration does not duplicate residents. The test uses a temporary persistence directory and restores the environment variable in `finally`.
 
@@ -727,8 +727,8 @@ A separate deep-research investigation is being conducted into commercial and op
 1. Reconcile PR #69 after the newest documentation commits: verify index/archive references and exact-head CI. Older red checks do not establish the status of a newer head; keep it draft until latest results are inspected.
 2. Use combined [PR #76](https://github.com/HeWhoArose/Dreamville-External/pull/76) as the automated integration baseline. Exact head `9381e3bb4c10edfec6cc4c4a19082972169b79cf` passed 1,495 tests, lint/type-check, production build and release gate. Do not merge solely because CI is green.
 3. Run human-required Phase 1 and post-fix Phase 7 sessions through the actual player-facing Story UI and configured provider: information-seeking plus “check further,” explicit movement and Continue, public-citadel opening, rejected primary/repair, provider outage, Retry after withheld narration, and persistence/reload. Capture actual provider/model identity, visible output, canonical state diffs and retry outcomes. If access is unavailable, report BLOCKED rather than PASS.
-4. Finish opening candidate parity audit: the opening route now applies shared `SemanticNarrativeReview` to primary and repair, but equivalent freshness/full presentation-temporal/StoryBeat acceptance has not been proved. Reuse `validateNarrativeCandidate` if its context contract supports opening scenes; do not create a second full validator.
-5. Address the newly traced combat fallback provenance gap as a focused follow-up: `CombatPlayerActionService` and `CombatEncounterService` return grounded mechanical summaries when generation fails, but do not set existing optional `CombatNarrativeResolution.fallbackUsed`. `TacticalCombatView` labels both strings “What happened” without distinguishing deterministic fallback. Set the flag accurately, label fallback presentation, and test provider success/failure without re-running or mutating already-resolved combat.
+4. Finish opening candidate parity audit: opening candidates currently receive N18/N8 richness/pacing checks and `SemanticNarrativeReview` on both primary and repair, but the ordinary final presentation validator’s freshness, temporal and full presentation checks are not yet proven equivalent for opening scenes. First add focused tests that capture this gap. Reuse `validateNarrativeCandidate` only if its ordinary-turn assumptions can be adapted without misclassifying story setup as a player command; otherwise extract shared, context-neutral checks rather than duplicating the validator.
+5. Combat fallback provenance is already implemented in the current code-bearing candidate: both combat services return `fallbackUsed` and `narrativeSource`, both player-facing views label AI/deterministic fallback, and `tests/combat-narration-fallback-provenance.test.ts` covers success, empty output and thrown-provider paths. Do not reopen this item unless a new failing integration case is demonstrated.
 6. Continue the “check further” path audit end to end: notice/job/opportunity producers → retrieval filters → research packet → narrative plan → selected-model prompt → every candidate gate → continuity/open-thread storage → next-turn retrieval. Reuse canonical event/entity systems; no narrator-side NPC or quest invention.
 7. After any code follow-up, rerun targeted tests, relevant regressions, full test suite, lint/type-check, build and release contracts on the exact combined head. Keep PRs draft until evidence is complete and review decisions are deliberate.
 8. Record human provider-backed and UI/reload evidence separately from CI. Green automated tests do not complete the human live-session gate.

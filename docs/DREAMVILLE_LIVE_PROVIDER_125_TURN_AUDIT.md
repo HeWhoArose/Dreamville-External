@@ -1,11 +1,11 @@
 # Player-Run 125-Turn Acceptance Test — Evidence and Checklist
 
 **Audit date:** 2026-10-16  
-**Latest verified integration candidate:** `88882c96ee15ee0fef0a64d47a6ee032a43612d1` (PR #76; open, not merged)
+**Latest verified code-bearing integration commit:** `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` (PR #76; open, not merged)
 
 ## Current verdict
 
-The integration candidate at `88882c96ee15ee0fef0a64d47a6ee032a43612d1` has green exact-head automated checks, but a fresh 125-turn run with real provider calls has **not** been verified on this candidate. Do not describe the release as fully live-validated.
+The code-bearing integration commit `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` has green exact-head automated checks, but a fresh 125-turn run with real provider calls has **not** been verified on this candidate. Do not describe the release as fully live-validated.
 
 At the recorded integration head, GitHub Actions completed:
 - `npm test`: 1,523 tests passed, 0 failed.
@@ -13,7 +13,7 @@ At the recorded integration head, GitHub Actions completed:
 - Type-check: passed.
 - Production build: passed.
 
-The release gate and both verification workflows succeeded on the exact candidate commit `88882c96ee15ee0fef0a64d47a6ee032a43612d1`. These results establish automated repository correctness at that commit; they do not establish provider availability, live-model quality, or hands-on UI behavior.
+The release gate and both verification workflows succeeded on the exact code-bearing commit `13f9b8ce3f7463da1e8d23f69e824aa9b052a374`. These results establish automated repository correctness at that commit; they do not establish provider availability, live-model quality, or hands-on UI behavior.
 
 ## Two different 125-turn checks — do not conflate them
 
@@ -57,9 +57,9 @@ A partial or interrupted session should be reported as partial, not counted as a
 ## Evidence links
 
 - Integration PR: https://github.com/HeWhoArose/Dreamville-External/pull/76
-- Passing verification run: https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458017
-- Passing second verification run: https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458006
-- Passing release gate: https://github.com/HeWhoArose/Dreamville-External/actions/runs/38966458038
+- Passing verification run: https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229050
+- Passing second verification run: https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229076
+- Passing release gate: https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229176
 - Historical telemetry: https://github.com/HeWhoArose/Dreamville-External/blob/bd32e2f7f9ccc205ca8d88f67fd4906e5e2a23b3/tests/artifacts/125_turn_live_telemetry.json
 - Mocked 125-turn integration test: https://github.com/HeWhoArose/Dreamville-External/blob/bd32e2f7f9ccc205ca8d88f67fd4906e5e2a23b3/tests/marathon-125-turn.integration.test.ts
 - Separate provider stress script: https://github.com/HeWhoArose/Dreamville-External/blob/bd32e2f7f9ccc205ca8d88f67fd4906e5e2a23b3/scripts/run_125_turn_stress_test.ts

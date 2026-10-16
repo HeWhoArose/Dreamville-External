@@ -748,7 +748,7 @@ export class CurrentSituationBuilder {
 				summary: eventText(event),
 				turnNumber: eventTurnNumber(event, canonicalEvents.length - 6 + index),
 				timestamp: normalizeText(event?.timestamp || event?.worldTime || '') || undefined,
-				locationId: normalizeText(event?.locationId || locationId) || undefined,
+				locationId: normalizeText(event?.locationId) || undefined,
 				source: 'CANONICAL_COMMAND_EVENT',
 			}))
 			.filter((event) => event.summary);
@@ -768,19 +768,23 @@ export class CurrentSituationBuilder {
 			locationId,
 			repository.getCanonicalCommandEventCount(params.storyId) + 1,
 		);
+		// A scene projection can show activity only when it belongs to the player's
+		// current location. Off-location canonical events remain in recent history,
+		// but must not masquerade as current-scene evidence.
+		const lastSceneEvents = lastEvents.filter((event) => event.locationId === safeLocation.id);
 		const visibleEvents = activeDialogue
 			? [
 				{
 					id: activeDialogue.nodeId || deterministicId('dialogue_event', params.storyId, activeDialogue.speakerId, activeDialogue.text),
 					type: 'DIALOGUE',
 					summary: `${activeDialogue.speakerName}: ${activeDialogue.text}`,
-					locationId,
+					locationId: safeLocation.id,
 					source: 'CANONICAL_ACTIVE_DIALOGUE',
 				},
 				...ambientActivityEvents,
-				...lastEvents,
+				...lastSceneEvents,
 			]
-			: [...ambientActivityEvents, ...lastEvents];
+			: [...ambientActivityEvents, ...lastSceneEvents];
 
 		const runtime = (run?.runtimeState || {}) as Record<string, any>;
 		const plotRaw = runtime.plot || {};
@@ -962,10 +966,18 @@ export class CurrentSituationBuilder {
 
 	public static toPromptContext(situation: CurrentSituation): string {
 		const visibleEntities = situation.nearbyEntities
-			.filter((entity) => entity.visibleToPlayer)
+			.filter((entity) => entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive)
 			.slice(0, 8)
-			.map((entity) => `${entity.name} [${entity.kind}; ${entity.distanceBand}]`)
+			.map((entity) => {
+				const activity = String(entity.currentActivity || '').trim().slice(0, 160);
+				return `${entity.name} [${entity.kind}; ${entity.distanceBand}]${activity ? ` — currently ${activity}` : ''}`;
+			})
 			.join('; ') || 'None';
+		const visibleSceneEvents = situation.visibleEvents
+			.filter((event) => event.locationId === situation.location.id && Boolean(String(event.summary || '').trim()))
+			.slice(0, 8)
+			.map((event) => `[${String(event.type || 'SCENE_EVENT').slice(0, 48)}] ${String(event.summary).trim().slice(0, 240)}`)
+			.join('\n') || 'No additional current-location events are established.';
 
 		const recentTurns = situation.recentTurns
 			.slice(-4)
@@ -1004,8 +1016,10 @@ export class CurrentSituationBuilder {
 			`Region: ${situation.location.regionId}`,
 			`Location description: ${situation.location.description}`,
 			situation.location.ambientSensory ? `Ambient: ${situation.location.ambientSensory}` : '',
-			`Visible entities: ${visibleEntities}`,
-			situation.activeDialogue ? `Active dialogue: ${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}` : '',
+				`Visible entities and current activity: ${visibleEntities}`,
+				`Current-location activity/events:\n${visibleSceneEvents}`,
+				'Scene-event boundary: current-location activity supports only the described observable beat. An NPC-initiated cue does not by itself commit a quest, contract, combat, agreement, or other canonical state change.',
+				situation.activeDialogue ? `Active dialogue: ${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}` : '',
 			`Current action: ${situation.currentAction?.action || 'None'}`,
 			`Plot: ${situation.plot.currentArc} — ${situation.plot.summary || 'No compressed plot summary.'}`,
 			`Open threads:\n${openThreads}`,

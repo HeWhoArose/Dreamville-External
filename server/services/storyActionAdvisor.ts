@@ -1109,7 +1109,13 @@ export class StoryActionAdvisor {
 			sceneContext?.activeDialogue,
 			...(sceneContext?.recentActions || []),
 			situation?.location.ambientSensory,
-			situation?.visibleEvents.slice(-4).map((event) => event.summary).join(' '),
+			situation
+				? situation.visibleEvents
+					.filter((event) => event.locationId === situation.location.id)
+					.slice(-4)
+					.map((event) => event.summary)
+					.join(' ')
+				: '',
 			situation?.plot.summary,
 		].filter(Boolean).map((value) => String(value).trim()).filter(Boolean);
 

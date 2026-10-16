@@ -7743,7 +7743,9 @@ export class MultiModelOrchestrator {
       params.situation.location.description,
       params.situation.location.ambientSensory,
       params.situation.activeDialogue ? 'Active dialogue: ' + params.situation.activeDialogue.speakerName + ': ' + params.situation.activeDialogue.text : '',
-      ...params.situation.visibleEvents.map((event) => event.summary),
+      ...params.situation.visibleEvents
+        .filter((event) => event.locationId === params.situation.location.id)
+        .map((event) => event.summary),
       ...params.situation.relevantLore.map((fact) => 'Authorized lore: ' + fact.subjectEntityId + ' ' + fact.predicate + ' ' + fact.objectValue),
     ].filter(Boolean).slice(0, 10).join('\n');
 

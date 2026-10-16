@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeContinuityEngine } from '../server/domain/narrativeContinuityEngine';
-import { formatCanonicalTimestamp } from '../server/domain/deterministicRng';
+import { formatCanonicalTimestamp, hashStringToSeed } from '../server/domain/deterministicRng';
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import type { KnowledgeFact, WorldTimestamp } from '../server/domain/types';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
@@ -403,4 +403,86 @@ test('occupancy projection preserves authored inhabited, restricted, and abandon
 		if (population.status === 'RESTRICTED') assert.equal(situation.sceneEvidence.occupancy.accessControlled, true);
 		if (population.status === 'ABANDONED') assert.match(situation.sceneEvidence.occupancy.explanation || '', /Evacuated/i);
 	}
+});
+
+test('current-scene activity and NPC-initiated events reach the canonical narration context without off-location bleed', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'current_scene_activity_handoff';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+	const template = repository.getEntityCards(storyId, { status: 'ACTIVE' })[0];
+	assert.ok(template, 'seed story should provide a canonical entity card template');
+
+	const merchantId = 'merchant_activity_handoff_mira';
+	repository.saveEntityCard(storyId, {
+		...template,
+		id: merchantId,
+		name: 'Mira Fen',
+		kind: 'MERCHANT',
+		isTemplate: false,
+		identity: { ...(template.identity || {}), aliases: [] },
+		classification: {
+			...(template.classification || {}),
+			role: 'merchant',
+			profession: 'merchant',
+			tags: [...(template.classification?.tags || []), 'ambient_population'],
+		},
+		worldState: {
+			...(template.worldState || {}),
+			locationId: player.locationId,
+			presence: 'present',
+			isAlive: true,
+			currentActivity: 'calling out wares to passersby',
+		},
+		lifecycle: { ...(template.lifecycle || {}), status: 'ACTIVE' },
+		metadata: { ...(template.metadata || {}), hidden: false, ambientPopulation: true },
+	});
+
+	// The NPC-initiation cue is deterministic on the upcoming event count.
+	// Add only off-location markers until a qualifying slot/roll is reached.
+	let upcomingTurn = repository.getCanonicalCommandEventCount(storyId) + 1;
+	let marker = 0;
+	while (
+		(upcomingTurn % 5 !== 0 || hashStringToSeed(merchantId + '|init|' + upcomingTurn) % 3 !== 0) &&
+		marker < 200
+	) {
+		repository.appendCanonicalCommandEvent(storyId, {
+			eventId: 'off_location_activity_marker_' + marker,
+			type: 'OBSERVE',
+			summary: 'Distant archive marker ' + marker,
+			locationId: 'loc_lantern_vault',
+			timestamp: 'fixture-' + marker,
+		});
+		marker += 1;
+		upcomingTurn = repository.getCanonicalCommandEventCount(storyId) + 1;
+	}
+	assert.ok(marker < 200, 'a deterministic current-scene interaction slot should be found');
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I watch Mira Fen and the nearby stalls.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	const initiation = situation.visibleEvents.find((event) =>
+		event.type === 'NPC_INITIATED_INTERACTION' && event.entityId === merchantId
+	);
+	assert.ok(initiation, 'CurrentSituation must receive the grounded NPC-initiated interaction cue');
+	assert.equal(initiation!.locationId, player.locationId);
+
+	const context = CurrentSituationBuilder.toPromptContext(situation);
+	assert.match(context, /Visible entities and current activity:[^\n]*Mira Fen/);
+	assert.match(context, /Mira Fen.*currently calling out wares to passersby/);
+	assert.match(context, /Current-location activity\/events:[\s\S]*NPC_INITIATED_INTERACTION/);
+	assert.ok(context.includes(initiation!.summary), 'the narrator context must include the exact observable interaction cue');
+	const sceneEventSection = context.split('Current-location activity/events:\n')[1]?.split('\nScene-event boundary:')[0] || '';
+	assert.ok(sceneEventSection.includes(initiation!.summary));
+	assert.doesNotMatch(sceneEventSection, /Distant archive marker/);
+
+	assert.equal(
+		situation.visibleEvents.some((event) => /Distant archive marker/.test(event.summary)),
+		false,
+		'off-location canonical events belong in recent history, not current-scene event evidence',
+	);
 });

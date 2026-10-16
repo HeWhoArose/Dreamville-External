@@ -45,7 +45,7 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
     }
   });
 
-  it('1. Model Registry: Seed models contain Gemini 3.6 Flash, Gemini 2.5 Pro, Gemini 2.5 Flash, and Emergency Floor', () => {
+  it('1. Model Registry: Seed model health matches the current Gemini routes and Emergency Floor', () => {
     const models = orchestrator.getAllModels();
     assert.ok(models.length >= 4);
 
@@ -55,7 +55,9 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
 
     const flash25Model = models.find((m) => m.modelId === 'gemini-2.5-flash');
     assert.ok(flash25Model);
-    assert.equal(flash25Model?.health, 'Throttled');
+    assert.equal(flash25Model?.health, 'Healthy');
+    assert.equal(flash25Model?.quota, 'Healthy');
+    assert.equal(flash25Model?.accessStatus, 'accessible');
 
     const flash35Model = models.find((m) => m.modelId === 'gemini-3.5-flash');
     assert.ok(flash35Model);

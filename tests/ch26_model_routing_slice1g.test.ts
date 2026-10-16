@@ -56,6 +56,12 @@ describe('Model Routing Slice 1G - Fallback Chain Management & Real Model Connec
     ];
     orchestrator.setFallbackChain('narrative.generate', customChain);
 
+    // Keep this test deterministic as registry seed health changes: make both
+    // configured AI entries explicitly unusable, then verify strict route
+    // semantics land on the emergency floor instead of a global model.
+    orchestrator.updateModelHealth('google_gemini', 'gemini-3.6-flash', 'Unavailable');
+    orchestrator.updateModelHealth('google_gemini', 'gemini-2.5-flash', 'Unavailable');
+
     const selection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 1000 });
     assert.ok(selection.selectedModel);
     // Both configured AI entries are currently unusable in the seeded registry,

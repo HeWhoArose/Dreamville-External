@@ -736,7 +736,17 @@ export class InMemoryWorldRepository implements WorldRepository {
             ambientSensory: isObj && typeof nodeItem.ambientSensory === 'string'
               ? nodeItem.ambientSensory
               : `Visual: Distinct environment of ${name}. Sounds: Ambient murmurs. Scent: Fresh air. Tactile: Stable terrain.`,
+            // Authored visible props are canonical scene evidence; dropping them
+            // here makes CurrentSituationBuilder and SemanticNarrativeReview
+            // reject valid observation prose as if those props had been invented.
+            sceneObjects: isObj && Array.isArray(nodeItem.sceneObjects)
+              ? JSON.parse(JSON.stringify(nodeItem.sceneObjects))
+              : undefined,
             provenance: (isObj && nodeItem.provenance) || 'authored',
+            // Preserve the authored occupancy contract so ambient seeding respects restricted/abandoned/NONE locations.
+            population: isObj && nodeItem.population && typeof nodeItem.population === 'object'
+              ? { ...nodeItem.population }
+              : undefined,
           };
           registeredNodes.push(locNode);
           geographyGraph.addNode(locNode as any);

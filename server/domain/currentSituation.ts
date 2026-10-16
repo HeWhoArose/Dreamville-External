@@ -239,6 +239,12 @@ export interface BuildCurrentSituationParams {
 	worldRepo?: WorldRepository;
 	maxRecentTurns?: number;
 	maxNearbyEntities?: number;
+	/**
+	 * Optional canonical scene projection override. Used by opening-scene context to
+	 * project the starting location even if the player has since moved elsewhere.
+	 * This changes only the read-only projection; it never moves the canonical player.
+	 */
+	locationIdOverride?: string;
 }
 
 function clone<T>(value: T): T {
@@ -529,7 +535,7 @@ export class CurrentSituationBuilder {
 		const run = repository.getStoryRun(params.storyId);
 		const player = repository.getPlayerLifecycle(params.storyId);
 		const viewerActorId = params.viewerActorId || player?.actorId || run?.protagonist?.characterId || `player_actor_${params.storyId}`;
-		const locationId = player?.locationId || run?.currentLocationId || run?.startingLocationId;
+		const locationId = params.locationIdOverride || player?.locationId || run?.currentLocationId || run?.startingLocationId;
 		const timestamp = repository.getWorldClock(params.storyId).getTimestamp();
 		const worldId = String(run?.worldId || '');
 		const geography = repository.getGeographyGraph(params.storyId);

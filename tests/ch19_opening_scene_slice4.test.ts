@@ -648,6 +648,16 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
           description: 'A vast sand-and-iron fighting pit ringed by tiered stone benches under a punishing sun.',
           coordinates: { x: 10, y: 10 },
           ambientSensory: 'Sun hammering the sand, iron rails hot to the touch, the murmur of spectators above.',
+          sceneObjects: [
+            {
+              id: 'arena_private_viewing_box',
+              name: 'private viewing box',
+              kind: 'STRUCTURE',
+              description: 'An elevated private viewing box above the tiered benches, visible from the arena floor.',
+              visible: true,
+              interactable: false,
+            },
+          ],
         },
       ],
       connections: [],
@@ -676,15 +686,89 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     } as unknown as ConfirmedCharacter,
   });
 
+  // The target and their guard detail are canonical visible entities, not
+  // mere wording inside startingSituation/canonical event prose. This lets the
+  // semantic reviewer authorize their presence through CurrentSituation.
+  repository.saveEntityCard(storyIdG, {
+    id: 'npc_arena_high_level_target',
+    name: 'High-Level Target',
+    kind: 'NPC',
+    isTemplate: false,
+    identity: { species: 'Human', aliases: ['target', 'viewer'] },
+    classification: { role: 'high-level target', tags: ['target', 'arena'] },
+    personality: {
+      traits: ['composed'],
+      values: ['self-preservation'],
+      motivations: ['observe the arena'],
+      fears: [],
+      desires: [],
+    },
+    behavior: { priorities: ['watch the arena floor'], routines: ['observe from the private viewing box'] },
+    social: { factionIds: [], reputation: {}, relationships: {} },
+    worldState: {
+      locationId: 'loc_arena_floor',
+      currentActivity: 'watching the arena floor from the private viewing box',
+      isAlive: true,
+      presence: 'present',
+    },
+    traits: ['target'],
+    capabilities: [],
+    feats: [],
+    equipment: [],
+    memoryRefs: [],
+    provenance: { source: 'canonical arena test fixture', createdBy: 'SYSTEM' },
+    lifecycle: { status: 'ACTIVE' },
+    metadata: {},
+  });
+  repository.saveEntityCard(storyIdG, {
+    id: 'npc_arena_caste_enforcers',
+    name: 'Caste Enforcers',
+    kind: 'NPC',
+    isTemplate: false,
+    identity: { species: 'Human', aliases: ['enforcers', 'guard detail'] },
+    classification: { role: 'security detail', tags: ['guard', 'arena'] },
+    personality: {
+      traits: ['disciplined'],
+      values: ['duty'],
+      motivations: ['guard the private viewing box'],
+      fears: [],
+      desires: [],
+    },
+    behavior: { priorities: ['keep the viewing box guarded'], routines: ['guard the viewing box'] },
+    social: { factionIds: [], reputation: {}, relationships: {} },
+    worldState: {
+      locationId: 'loc_arena_floor',
+      currentActivity: 'guarding the private viewing box',
+      isAlive: true,
+      presence: 'present',
+    },
+    traits: ['guard'],
+    capabilities: [],
+    feats: [],
+    equipment: [],
+    memoryRefs: [],
+    provenance: { source: 'canonical arena test fixture', createdBy: 'SYSTEM' },
+    lifecycle: { status: 'ACTIVE' },
+    metadata: {},
+  });
+
+  // Verify the authored scene-object evidence survives the WorldTemplate ->
+  // StoryRun geography projection before it is used by narration review.
+  const arenaFloor = repository.getGeographyGraph(storyIdG).getNode('loc_arena_floor') as any;
+  assert.ok(
+    arenaFloor?.sceneObjects?.some((object: any) => object.name === 'private viewing box' && object.visible !== false),
+    'Authored private viewing box must survive StoryRun geography projection',
+  );
+
   // The user's reported defect: an action-anchored opener drowned by four
   // environment-only sentences that never depict the situation or any actor.
   const environmentOnlyTurn = JSON.stringify({
     narrative: [
-      'You circle the arena floor and watch the private viewing box.',
-      'The sun hammers the pale sand of the fighting pit, bleaching it bone-white beneath a merciless sky.',
-      'Basalt walls rise sheer around the arena floor, iron rails gleaming dully where they crown the tiered stone benches.',
-      'Sunlight glints along the iron rails above the tiered benches.',
-      'No sign of movement stirs across the open expanse of the pit.',
+      'You circle the sand of The Obsidian Arena and keep the private viewing box, where a high-level target watches behind caste enforcers, in sight.',
+      'The sun hammers the sand.',
+      'The iron rails are hot to the touch.',
+      'The sun continues to hammer the sand.',
+      'The murmur of spectators remains audible above.',
     ],
     dialogue: [],
     events: [],
@@ -696,10 +780,10 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // A substance-first rewrite the same model could return on the review call:
   const improvedTurn = JSON.stringify({
     narrative: [
-      'You circle the floor of The Obsidian Arena with your weight low, eyes pinned to the private viewing box above the tiered benches where the high-level target watches from behind caste enforcers.',
-      'One enforcer leans over the iron rail to speak into his ear, and the target shifts behind the rail without standing.',
-      'You mark the number of enforcers around the box and the distance from your position to the base of the rail, dust from the sand gritting under your boots.',
-      'The murmur of the crowd changes pitch around the pit, and you cannot yet tell whether it is for you or for him.',
+      'You move across the sand of The Obsidian Arena, keeping the private viewing box in sight where the high-level target watches behind the caste enforcers.',
+      'You observe the guarded box from a different angle and hear the murmur of spectators above; the iron rails are still hot to the touch.',
+      'The tense standoff remains unchanged: the caste enforcers hold their position, but their presence offers no reliable clue to the target’s intentions.',
+      'You notice no confirmed movement from the target. The better angle changes what you can see, not what you know, leaving the next move open.'
     ],
     dialogue: [],
     events: [],
@@ -726,6 +810,12 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     summary: 'Sera Vale studies the arena from the sand.',
     timestamp: 'Turn 2',
   });
+  repository.appendCanonicalCommandEvent(storyIdG, {
+    eventId: 'evt_turn_gate_target_anchor',
+    type: 'OBSERVE',
+    summary: 'From the sand, Sera Vale can see the private viewing box where a high-level target watches behind caste enforcers.',
+    timestamp: 'Turn 2',
+  });
 
   const result = await orchestrator.generateNarrativeOnly({
     storyId: storyIdG,
@@ -734,14 +824,43 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     maxRetries: 1,
   });
 
-  assert.equal(result.success, true, result.error || 'gate test failed before assertions');
+  assert.equal(
+    result.success,
+    true,
+    JSON.stringify({
+      error: result.error,
+      fallbackReason: result.fallbackReason,
+      attemptsTrail: (result.attemptsTrail || []).map((attempt: any) => ({
+        providerId: attempt.providerId,
+        modelId: attempt.modelId,
+        status: attempt.status,
+        error: attempt.error,
+        errorReason: attempt.errorReason,
+        validationError: attempt.validationError,
+        fallbackReason: attempt.fallbackReason,
+      })),
+    }, null, 2) || 'gate test failed before assertions',
+  );
   const narration = result.turnPackage?.narrative.join(' ') || '';
 
   // The gate must have caught the environment-heavy narration and attempted the rewrite.
   assert.ok(result.narrativeQualityAudit, 'Response must carry the narrative quality audit');
   assert.equal(result.narrativeQualityAudit!.rewriteAttempted, true, 'Environment-heavy narration must trigger the bounded rewrite');
   assert.equal(reviewer.callHistory.length, 1, 'Exactly one bounded narrative.review rewrite call must be made');
-  assert.equal(result.narrativeQualityAudit!.rewriteSucceeded, true, 'The substance-first rewrite must be accepted over scenery-dominated prose');
+  assert.equal(
+    result.narrativeQualityAudit!.rewriteSucceeded,
+    true,
+    JSON.stringify({
+      message: 'The substance-first rewrite must be accepted over scenery-dominated prose',
+      rewriteErrorReason: result.narrativeQualityAudit!.rewriteErrorReason,
+      rewriteSkippedReason: result.narrativeQualityAudit!.rewriteSkippedReason,
+      firstDecision: result.narrativeQualityAudit!.firstDecision,
+      firstScore: result.narrativeQualityAudit!.firstScore,
+      finalDecision: result.narrativeQualityAudit!.finalDecision,
+      finalScore: result.narrativeQualityAudit!.finalScore,
+      issues: result.narrativeQualityAudit!.issues,
+    }, null, 2),
+  );
   assert.ok(
     (result.narrativeQualityAudit!.finalScore ?? 0) > (result.narrativeQualityAudit!.firstScore ?? 0),
     'Accepted rewrite must improve the richness score',

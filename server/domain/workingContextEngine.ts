@@ -5,7 +5,7 @@ import type { DndRulesMode, NarrativeProfile } from '../../src/types';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
 import { NarrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
-import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
+import { CurrentSituationBuilder, type CurrentSituation, type NearbyEntityContext, type VisibleEventContext } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
 
@@ -93,7 +93,16 @@ export interface AssembledOpeningContext {
   rawOpeningFacts: {
     world: { id: string; title: string; genre?: string; tone?: string; rulesetId?: string; dndRulesMode?: DndRulesMode; narrativeProfile?: NarrativeProfile; summary?: string; setting?: string };
     character: { name: string; role?: string; background?: string; capabilities: string[]; conditions: string[]; startingSituation?: string; equipment: string[] };
-    location: { id: string; name: string; description: string; ambientSensory?: string; region?: string };
+    location: {
+      id: string;
+      name: string;
+      description: string;
+      ambientSensory?: string;
+      region?: string;
+      population?: CurrentSituation['sceneEvidence']['occupancy'];
+      visibleEntities?: NearbyEntityContext[];
+      visibleEvents?: VisibleEventContext[];
+    };
     time: { cycle: number; period: string; era: string; formattedHeader: string };
     knowledge: string[];
   };
@@ -491,7 +500,7 @@ export class WorkingContextEngine {
       worldTemplate?.setting ? `Setting: ${worldTemplate.setting}` : '',
       worldTemplate?.era || worldTemplate?.defaultEra ? `Era: ${worldTemplate?.era || worldTemplate?.defaultEra}` : '',
       authorizedWorldFacts.length ? `Authorized world facts: ${authorizedWorldFacts.join(' | ')}` : '',
-    ].filter(Boolean).join('\\n');
+    ].filter(Boolean).join('\n');
 
     const startingSituation = run?.startingSituation
       ? [
@@ -1303,6 +1312,38 @@ export class WorkingContextEngine {
     const locSensory = locNode?.ambientSensory || run.startingLocation?.ambientSensory || 'A quiet, watchful atmosphere fills the surroundings.';
     const locRegion = locNode?.regionId || run.startingLocation?.region || 'Frontier';
 
+    // Opening generation uses the same canonical, epistemically-filtered scene
+    // projection as live turns. The caller seeds ambient population first; this
+    // method only reads/project entities and must not mutate canonical state.
+    const openingSituation = CurrentSituationBuilder.build({
+      storyId,
+      viewerActorId: player?.actorId || `player_actor_${storyId}`,
+      worldRepo: repo,
+      locationIdOverride: startingLocId,
+      maxNearbyEntities: 24,
+    });
+    const openingVisibleEntities = openingSituation.nearbyEntities
+      .filter((entity) =>
+        entity.kind !== 'PLAYER' &&
+        entity.visibleToPlayer &&
+        entity.presence === 'present' &&
+        entity.isAlive &&
+        entity.locationId === startingLocId
+      )
+      .slice(0, 12);
+    const openingVisibleEvents = openingSituation.visibleEvents
+      .filter((event) => !event.locationId || event.locationId === startingLocId)
+      .slice(0, 8);
+    const openingPopulation = openingSituation.sceneEvidence.occupancy;
+    const visiblePopulationText = openingVisibleEntities.length
+      ? openingVisibleEntities.map((entity) =>
+          `- ${entity.name}${entity.role ? ` (role: ${entity.role})` : ''}${entity.currentActivity ? `: ${entity.currentActivity}` : ''}`
+        ).join('\n')
+      : 'No visible occupants are established by the current canonical entity projection.';
+    const visibleActivityText = openingVisibleEvents.length
+      ? openingVisibleEvents.map((event) => `- ${event.summary}`).join('\n')
+      : 'No additional visible activity event is established for the opening location.';
+
     // 2. Canonical protagonist details
     const charName = run.characterName || run.protagonist?.identity?.name || 'Protagonist';
     const charRole = run.characterRole || run.protagonist?.role?.profession || run.protagonist?.role?.archetype || 'Adventurer';
@@ -1394,6 +1435,28 @@ export class WorkingContextEngine {
         estimatedTokens: WorkingContextEngine.estimateTokens(locName + locDesc + locSensory),
         isProtected: true,
         relevanceScore: 1.0,
+      },
+      {
+        id: `chunk_${storyId}_b1_starting_population`,
+        band: 'B1_CRITICAL',
+        label: 'STARTING_LOCATION_POPULATION_AND_VISIBLE_ACTIVITY',
+        content: [
+          'Canonical starting-location occupancy:',
+          `status=${openingPopulation.status}; expectedPopulation=${openingPopulation.expectedPopulation || 'UNSPECIFIED'}; accessControlled=${openingPopulation.accessControlled}; provenance=${openingPopulation.provenance}`,
+          `occupancy explanation: ${openingPopulation.explanation || 'No additional occupancy explanation is recorded.'}`,
+          'VISIBLE CANONICAL OCCUPANTS AND ACTIVITIES (do not add unseen people as facts):',
+          visiblePopulationText,
+          'VISIBLE CANONICAL ACTIVITY EVENTS:',
+          visibleActivityText,
+          'Presence rule: UNKNOWN occupancy does not mean abandoned or empty. Use the listed visible entities and events; do not claim no one exists unless the canonical state supports that.',
+        ].join('\n'),
+        estimatedTokens: WorkingContextEngine.estimateTokens(
+          visiblePopulationText + visibleActivityText + String(openingPopulation.explanation || ''),
+        ),
+        sourceAuthority: 'LocationPopulationProfile + CurrentSituationBuilder + WorldActivityDirector',
+        epistemicVisibility: 'PUBLIC',
+        isProtected: true,
+        relevanceScore: 0.98,
       },
       {
         id: `chunk_${storyId}_b1_time`,
@@ -1495,6 +1558,9 @@ export class WorkingContextEngine {
           description: locDesc,
           ambientSensory: locSensory,
           region: locRegion,
+          population: openingPopulation,
+          visibleEntities: openingVisibleEntities,
+          visibleEvents: openingVisibleEvents,
         },
         time: {
           cycle: timestamp.year,

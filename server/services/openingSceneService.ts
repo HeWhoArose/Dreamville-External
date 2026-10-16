@@ -6,10 +6,12 @@ import { serverMockAuthority } from '../mockEngine/serverMockAuthority';
 import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from '../domain/narrativeRichnessEvaluation';
 import { NarrativePacingEngine } from '../domain/narrativePacingEngine';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
-import type { CurrentSituation } from '../domain/currentSituation';
+import { CurrentSituationBuilder, type CurrentSituation } from '../domain/currentSituation';
+import { SemanticNarrativeReview } from '../domain/semanticNarrativeReview';
 import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
 import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
+import { WorldActivityDirector } from '../domain/worldActivityDirector';
 
 function parseLooseOpeningResponse(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
 	const cleaned = String(rawText || '')
@@ -76,6 +78,8 @@ export interface OpeningQualityReview {
 	decision: 'ACCEPT' | 'REWRITE';
 	richness: NarrativeRichnessEvaluation;
 	pacingReason?: string;
+	/** Present when the shared semantic/epistemic reviewer rejects this opening candidate. */
+	semanticReviewReason?: string;
 }
 
 export interface GenerateOpeningSceneOptions {
@@ -118,6 +122,14 @@ export class OpeningSceneService {
 		const run = worldRepo.getStoryRun(storyId);
 		if (!run) throw new Error(`StoryRun with ID "${storyId}" does not exist in repository.`);
 		if (run.openingScene && !forceRegenerate) return run.openingScene;
+
+		// Seed canonical occupants before the opening projection is assembled. The
+		// same idempotent producer is used by ordinary live turns; a fresh public
+		// citadel/market must not open before its visible population exists.
+		const openingLocationId = run.startingLocationId || run.currentLocationId || worldRepo.getPlayerLifecycle(storyId)?.locationId || '';
+		if (openingLocationId) {
+			WorldActivityDirector.ensureAmbientPopulation(worldRepo, storyId, openingLocationId);
+		}
 
 		const workingContext: AssembledOpeningContext = WorkingContextEngine.assembleOpeningContext({
 			storyId,
@@ -292,11 +304,20 @@ export class OpeningSceneService {
 			issues: [],
 		};
 		if (!isDeterministicOpening && generatedText.trim().length > 0) {
-			const firstReview = OpeningSceneService.evaluateOpeningQuality(generatedText, rawOpeningFacts, storyId);
+			const firstQualityReview = OpeningSceneService.evaluateOpeningQuality(generatedText, rawOpeningFacts, storyId);
+			const firstSemanticReview = OpeningSceneService.evaluateOpeningSemanticReview(
+				generatedText, rawOpeningFacts, storyId, worldRepo,
+			);
+			const firstNeedsRewrite = firstQualityReview.decision === 'REWRITE' || !firstSemanticReview.valid;
+			const firstReview: OpeningQualityReview = {
+				...firstQualityReview,
+				decision: firstNeedsRewrite ? 'REWRITE' : 'ACCEPT',
+				semanticReviewReason: firstSemanticReview.valid ? undefined : firstSemanticReview.errorReason,
+			};
 			qualityAudit.firstDecision = firstReview.decision;
-			qualityAudit.firstScore = firstReview.richness.overallScore;
+			qualityAudit.firstScore = firstQualityReview.richness.overallScore;
 			qualityAudit.finalDecision = firstReview.decision;
-			qualityAudit.finalScore = firstReview.richness.overallScore;
+			qualityAudit.finalScore = firstQualityReview.richness.overallScore;
 			qualityAudit.issues = OpeningSceneService.summarizeQualityIssues(firstReview);
 			if (firstReview.decision === 'REWRITE') {
 				qualityAudit.rewriteAttempted = true;
@@ -322,31 +343,48 @@ export class OpeningSceneService {
 							rawOpeningFacts,
 							rewrittenText,
 						);
-						const postReview = OpeningSceneService.evaluateOpeningQuality(rewrittenText, rawOpeningFacts, storyId);
-						if (postReview.decision === 'ACCEPT' && rewrittenText.trim().length > 0) {
+						const postQualityReview = OpeningSceneService.evaluateOpeningQuality(rewrittenText, rawOpeningFacts, storyId);
+						const postSemanticReview = OpeningSceneService.evaluateOpeningSemanticReview(
+							rewrittenText, rawOpeningFacts, storyId, worldRepo,
+						);
+						const postAccepted = postQualityReview.decision === 'ACCEPT'
+							&& postSemanticReview.valid
+							&& rewrittenText.trim().length > 0;
+						const postReview: OpeningQualityReview = {
+							...postQualityReview,
+							decision: postAccepted ? 'ACCEPT' : 'REWRITE',
+							semanticReviewReason: postSemanticReview.valid ? undefined : postSemanticReview.errorReason,
+						};
+						if (postAccepted) {
 							generatedText = rewrittenText;
 							generatedEvents = rewrittenEvents;
 							qualityAudit.rewriteSucceeded = true;
-							qualityAudit.finalDecision = postReview.decision;
-							qualityAudit.finalScore = postReview.richness.overallScore;
+							qualityAudit.finalDecision = 'ACCEPT';
+							qualityAudit.finalScore = postQualityReview.richness.overallScore;
 							qualityAudit.issues = OpeningSceneService.summarizeQualityIssues(postReview);
+						} else {
+							qualityAudit.finalDecision = 'REWRITE';
+							qualityAudit.finalScore = postQualityReview.richness.overallScore;
+							qualityAudit.issues = OpeningSceneService.summarizeQualityIssues(postReview);
+						}
 					} else {
-						qualityAudit.finalDecision = postReview.decision;
-						qualityAudit.finalScore = postReview.richness.overallScore;
-						qualityAudit.issues = OpeningSceneService.summarizeQualityIssues(postReview);
+						qualityAudit.rewriteReason = 'The AI rewrite returned no usable prose.';
 					}
-				} else {
-					qualityAudit.rewriteReason = 'The AI rewrite returned no usable prose.';
+				} catch (rewriteError: any) {
+					qualityAudit.rewriteReason = rewriteError?.message || 'The opening rewrite failed.';
 				}
-			} catch (rewriteError: any) {
-				qualityAudit.rewriteReason = rewriteError?.message || 'The opening rewrite failed.';
-			}
 				if (qualityAudit.finalDecision === 'REWRITE') {
 					const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null);
 					generatedText = canonical.narrativeText;
 					generatedEvents = canonical.structuredEvents;
 					qualityAudit.finalScore = 1;
-					qualityAudit.issues = [...qualityAudit.issues, 'Opening downgraded to the canonical deterministic fallback after quality review was not satisfied.'];
+					qualityAudit.issues = [...qualityAudit.issues, 'Opening downgraded to the canonical deterministic fallback after quality or semantic/epistemic review was not satisfied.'];
+					// The stored provenance must describe the text actually delivered, not the rejected AI candidate.
+					generationMeta = {
+						...generationMeta,
+						source: 'DETERMINISTIC_FALLBACK',
+						fallbackReason: 'The AI opening failed the N18/N8 or semantic/epistemic acceptance gate; canonical deterministic opening prose was used.',
+					};
 				}
 			}
 			generationMeta = {
@@ -422,6 +460,7 @@ export class OpeningSceneService {
 		return [
 			...review.richness.issues.map((issue) => `${issue.severity}: ${issue.message}`),
 			...(review.pacingReason ? [review.pacingReason] : []),
+			...(review.semanticReviewReason ? ['Semantic/epistemic review: ' + review.semanticReviewReason] : []),
 		];
 	}
 
@@ -476,6 +515,65 @@ export class OpeningSceneService {
 			richness,
 			pacingReason: pacingValidation.reason,
 		};
+	}
+
+	/**
+	 * Opening generation has its own N18/N8 quality gate, but it must also apply
+	 * the shared deterministic semantic/epistemic review to every AI candidate.
+	 * Use a canonical, visibility-filtered CurrentSituation (not the reduced
+	 * prompt facts) so unauthorized world facts can be detected without entering
+	 * the model prompt or being promoted into player-facing prose.
+	 */
+	private static evaluateOpeningSemanticReview(
+		narrativeText: string,
+		facts: AssembledOpeningContext['rawOpeningFacts'],
+		storyId: string,
+		worldRepo: WorldRepository = worldRepository,
+	): { valid: boolean; errorReason?: string } {
+		const narration = String(narrativeText || '').trim();
+		if (!narration) return { valid: false, errorReason: 'The opening candidate is empty.' };
+
+		try {
+			const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+			const situation = CurrentSituationBuilder.build({
+				storyId,
+				viewerActorId,
+				worldRepo,
+				locationIdOverride: facts.location.id,
+			});
+			// Opening setup is not a player command to move, speak, observe, or
+			// obtain an answer. Keep the semantic contract neutral while still
+			// enforcing canon, hidden-knowledge, and agency boundaries.
+			const intentText = `Begin the story within ${facts.location.name}.`;
+			const intent = PlayerIntentInterpreter.deterministic(intentText, situation);
+			const plan = OpeningSceneService.buildOpeningReviewPlan(facts, storyId);
+			const turnPackage: StructuredTurnPackage = {
+				narrative: [narration],
+				dialogue: [],
+				events: [],
+				stateChanges: [],
+				memoryCandidates: [],
+				audioCues: [],
+				visualCues: [],
+			};
+			const review = SemanticNarrativeReview.review({ intent, situation, plan, turnPackage });
+			if (review.decision === 'ACCEPT') return { valid: true };
+
+			const details = [
+				...review.violations.map((violation) => violation.message),
+				...review.missingRequirements,
+				...review.unsupportedClaims,
+			].filter(Boolean);
+			return {
+				valid: false,
+				errorReason: `SemanticNarrativeReview returned ${review.decision}` + (details.length ? `: ${details.join(' | ')}` : '.'),
+			};
+		} catch (error: any) {
+			return {
+				valid: false,
+				errorReason: 'Canonical opening review projection could not be built: ' + String(error?.message || error || 'unknown error'),
+			};
+		}
 	}
 
 	private static buildOpeningReviewPlan(
@@ -581,13 +679,14 @@ export class OpeningSceneService {
 			sceneObjects: [],
 			sceneEvidence: {
 				objects: [],
-				entities: [],
-				events: [],
+				entities: (facts.location.visibleEntities || []).filter((entity) => entity.visibleToPlayer),
+				events: facts.location.visibleEvents || [],
 				sensory: facts.location.ambientSensory ? [facts.location.ambientSensory] : [],
 				structures: [],
-				occupancy: { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
+				occupancy: facts.location.population || { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
 			},
 			nearbyEntities: [
+				...(facts.location.visibleEntities || []).filter((entity) => entity.visibleToPlayer),
 				{
 					id: actorId,
 					name: facts.character.name,
@@ -603,7 +702,7 @@ export class OpeningSceneService {
 					visibleToPlayer: true,
 				},
 			],
-			visibleEvents: [],
+			visibleEvents: facts.location.visibleEvents || [],
 			recentTurns: [],
 			plot: {
 				currentArc: 'OPENING',
@@ -670,12 +769,14 @@ export class OpeningSceneService {
 			...options.review.richness.issues.slice(0, 8).map((issue) => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
 			NarrativeRichnessEvaluator.buildRewriteGuidance(options.review.richness),
 			options.review.pacingReason ? 'N8 PACING: ' + options.review.pacingReason : '',
+			options.review.semanticReviewReason ? 'SEMANTIC / EPISTEMIC REVIEW: ' + options.review.semanticReviewReason : '',
 		].filter(Boolean);
 
 		const systemInstruction = [
 			'You are the narrative quality editor for the Dreamville opening scene.',
 			'Perform a presentation-only literary polish of the supplied opening narration.',
-			'Correct exactly the listed quality issues: excessive environmental exposition, missing immediate situation or action, weak character behavior, weak dramatic tension, and weak beat progression.',
+			'Correct exactly the listed quality issues and any semantic/epistemic rejection; never repeat a claim rejected as hidden, unsupported, or inconsistent with the canonical player-visible situation.',
+			'Correct listed richness, pacing, and semantic/epistemic issues while preserving the same opening situation.',
 			'Preserve every canonical fact from the supplied context: character identity, location, world time, current situation, known information, and plot direction.',
 			'Never invent future events, hidden information, new canonical facts, player decisions, or outcomes. Do not speak or decide for the player.',
 			'Keep roughly 140-260 words. Return JSON only with narrativeText and 4-6 concise structuredEvents.',
@@ -728,13 +829,21 @@ export class OpeningSceneService {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
 		const sceneAnchor = location.ambientSensory || location.description;
+		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
+			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
+		).slice(0, 4);
+		const visiblePeopleText = visiblePeople.length
+			? visiblePeople.map((entity) =>
+				`${entity.name}${entity.role ? ' (' + entity.role + ')' : ''}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`
+			).join(' ')
+			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
 			character.background,
 			character.role ? 'Role: ' + character.role : '',
 			character.capabilities?.slice(0, 3).join(', '),
 		].filter(Boolean).join(' ');
-		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}Nearby people and activity matter as much as the architecture; the scene is already in motion, and your next action can affect how it unfolds.`;
+		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}${visiblePeopleText}`;
 		const authoredGoal = typeof agenda?.goal === 'string' && agenda.goal.trim() ? agenda.goal.trim() : '';
 		const p3 = narrativeMode === 'SIDE_CHARACTER'
 			? authoredGoal
@@ -750,7 +859,7 @@ export class OpeningSceneService {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,
 			structuredEvents: [
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_1`, type: 'normal', text: location.ambientSensory || `The surroundings of ${location.name} are quiet.`, timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.ambientSensory || `No visible occupants are established at ${location.name}.`), timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
 				{
 					id: `evt_open_${storyId}_3`,

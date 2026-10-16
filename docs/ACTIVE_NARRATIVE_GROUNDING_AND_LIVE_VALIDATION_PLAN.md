@@ -22,9 +22,9 @@
 
 This plan's original source audit remains anchored to `main` at `090b7d7b8c8b9c6ef47a0f643af3b15a303e1179`; statements about draft PRs later in the baseline audit are point-in-time evidence, not current branch status.
 
-The consolidated draft integration candidate on PR #76 is now based on current `main` at `18d7831cf51503920396067279b21af7b615b319`. Its integrated candidate commit `76748e083ab5b29758032afe9656fa1bd8ec5111` passed **1,502/1,502 automated tests**, lint, release-contract verification, type-check, and production build. This proves the automated integration path at that commit only; it is not a live-provider narrative-quality pass.
+The consolidated draft integration candidate on PR #76 is based on current `main` at `18d7831cf51503920396067279b21af7b615b319`. Its latest verified runtime commit is `50061df2565a7d1d37ce013cf524228aae8ba8a8`; the exact-head release gate and both verification workflows passed **1,503/1,503 automated tests**, lint, release-contract verification, TypeScript check, and production build. Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307064), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307058), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38891307061). This proves the automated integration path at that commit only; it is not a live-provider narrative-quality pass.
 
-The live-provider 125-turn play session is **deferred to the player after integrations are complete** because of provider token/quota limits. Keep the deterministic/mock HTTP marathon in CI. Do not turn the real-provider marathon into a repeated automated workflow. PR #76 remains draft/unmerged, and the final merged-main release gate is still required.
+The live-provider 125-turn play session is **deferred to the player after integrations are complete** because of provider token/quota limits. Keep the deterministic/mock HTTP marathon in CI. Do not turn the real-provider marathon into a repeated automated workflow. PR #76 remains draft/unmerged, and the final merged-main release gate is still required. Use `docs/DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md` to distinguish changes already consolidated into PR #76 from older branches requiring separate review.
 
 ## 1. Executive decision
 

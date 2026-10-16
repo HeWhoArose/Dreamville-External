@@ -107,8 +107,26 @@ function escapePointerSegment(value: string): string {
 }
 
 function hash(value: unknown): string {
-	return crypto.createHash('sha256').update(JSON.stringify(value ?? null), 'utf8').digest('hex');
+	// Canonical snapshot comparison intentionally excludes the denormalized
+	// StoryRun runtimeState bundle: its component engines are captured in
+	// dedicated snapshot partitions, and saveStoryRun may reserialize this
+	// cache between commands. Keep the same boundary for recorder hash identity.
+	const canonicalRunSnapshot = (value as any)?.adaptation?.ch16Run;
+	const serialized = JSON.stringify(value ?? null, function (this: any, key: string, nestedValue: unknown) {
+		if (key === 'runtimeState' && this === canonicalRunSnapshot) return undefined;
+		return nestedValue;
+	});
+	return crypto.createHash('sha256').update(serialized, 'utf8').digest('hex');
 }
+
+interface ReconstructedRecordingTail {
+	state: unknown;
+	interactionCount: number;
+	lastStateAfterHash: string;
+	lastPatchHash: string;
+}
+
+const reconstructedRecordingTails = new WeakMap<StorySessionRecording, ReconstructedRecordingTail>();
 
 function diff(before: unknown, after: unknown, path = ''): StorySessionJsonPatchOperation[] {
 	if (Object.is(before, after)) return [];
@@ -269,6 +287,41 @@ export class StorySessionRecorder {
 		};
 	}
 
+	private static reconstructedTail(recording: StorySessionRecording): unknown {
+		const interactions = recording.interactions;
+		const last = interactions[interactions.length - 1];
+		const lastPatchHash = last ? hash(last.statePatch) : '';
+		const cached = reconstructedRecordingTails.get(recording);
+		if (
+			cached &&
+			cached.interactionCount === interactions.length &&
+			cached.lastStateAfterHash === (last?.stateAfterHash || hash(recording.initialState)) &&
+			cached.lastPatchHash === lastPatchHash
+		) {
+			return clone(cached.state);
+		}
+
+		// A loaded recording is reconstructed once and then cached. If its tail was
+		// edited outside the recorder, validate the existing chain before extending it.
+		const validation = this.validate(recording);
+		if (!validation.valid) {
+			throw new Error('Existing story session recording integrity failure: ' + validation.errorReason);
+		}
+		const state = this.applyPatches(recording);
+		const tailHash = hash(state);
+		const expectedTailHash = last?.stateAfterHash || hash(recording.initialState);
+		if (tailHash !== expectedTailHash) {
+			throw new Error('Existing story session recording tail does not match its stored integrity hash.');
+		}
+		reconstructedRecordingTails.set(recording, {
+			state: clone(state),
+			interactionCount: interactions.length,
+			lastStateAfterHash: expectedTailHash,
+			lastPatchHash,
+		});
+		return state;
+	}
+
 	public static append(
 		recording: StorySessionRecording,
 		params: RecordStorySessionInteractionParams,
@@ -279,11 +332,17 @@ export class StorySessionRecorder {
 		if (recording.endedAt) {
 			throw new Error('Cannot append to a stopped story session recording.');
 		}
-		// Keep the session's original state immutable. Re-basing it to stateBefore
-		// would conceal a mismatch on the first recorded interaction.
+		// StateRun.runtimeState is an ignored/denormalized projection for canonical
+		// hash purposes, but its latest value still belongs in the reconstructable
+		// snapshot. Patch from the previous recorded post-state so intervening cache
+		// reserialization is captured instead of breaking the next interaction chain.
+		const previousState = this.reconstructedTail(recording);
 		const expectedBeforeHash = recording.interactions.length
 			? recording.interactions[recording.interactions.length - 1].stateAfterHash
 			: hash(recording.initialState);
+		if (hash(previousState) !== expectedBeforeHash) {
+			throw new Error('Existing story session recording tail has an invalid integrity hash.');
+		}
 		const suppliedBeforeHash = hash(params.stateBefore);
 		if (suppliedBeforeHash !== expectedBeforeHash) {
 			throw new Error(
@@ -293,7 +352,7 @@ export class StorySessionRecorder {
 		const sequence = recording.interactions.length + 1;
 		const before = clone(params.stateBefore);
 		const after = clone(params.stateAfter);
-		const statePatch = diff(before, after);
+		const statePatch = diff(previousState, after);
 		const interaction: StorySessionInteraction = {
 			sequence,
 			interactionId: crypto.randomUUID(),
@@ -317,6 +376,12 @@ export class StorySessionRecorder {
 		};
 		recording.interactions.push(interaction);
 		recording.finalStateHash = hash(after);
+		reconstructedRecordingTails.set(recording, {
+			state: clone(after),
+			interactionCount: recording.interactions.length,
+			lastStateAfterHash: interaction.stateAfterHash,
+			lastPatchHash: hash(interaction.statePatch),
+		});
 		delete recording.finalState;
 	}
 

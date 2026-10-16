@@ -8009,6 +8009,20 @@ export class MultiModelOrchestrator {
       storyBeat,
     });
 
+    // Current-scene events are authoritative player-visible evidence. Keep this
+    // compact projection inside the protected B1 anchor so a small narrative token
+    // budget cannot evict an NPC-initiated interaction into a lower-priority B3
+    // research block that may be dropped before provider handoff.
+    const canonicalSceneEventContext = currentSituation.visibleEvents
+      .filter((event) => event.locationId === currentSituation.location.id && event.type !== 'DIALOGUE')
+      .sort((left, right) =>
+        Number(right.type === 'NPC_INITIATED_INTERACTION') - Number(left.type === 'NPC_INITIATED_INTERACTION'),
+      )
+      .slice(0, 4)
+      .map((event) => `[${String(event.type || 'EVENT').slice(0, 48)}] ${String(event.summary || '').slice(0, 220)}`)
+      .filter((line) => line.trim().length > 0)
+      .join('\\n') || 'None';
+
     const canonicalSceneAnchor = [
       `Location ID: ${currentSituation.location.id}`,
       `Location name: ${currentSituation.location.name}`,
@@ -8017,6 +8031,7 @@ export class MultiModelOrchestrator {
       currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
       `Canonical world time: ${currentSituation.worldTime}`,
       `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
+      `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
       currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
       'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
       'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',

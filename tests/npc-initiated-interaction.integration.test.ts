@@ -198,7 +198,9 @@ test('HTTP action commits eligible NPC initiative before the live narration prom
   );
   assert.ok(
     matchingPromptCalls.length >= 1,
-    'the already-committed NPC interaction must reach the configured narration provider prompt',
+    'the already-committed NPC interaction must reach the configured narration provider prompt; ' +
+      'provider calls=' + adapter.callHistory.length + '; prompt previews=' +
+      JSON.stringify(adapter.callHistory.map((call: any) => String(call.prompt || '').slice(0, 2400))),
   );
 
   const afterCount = worldRepository.getCanonicalCommandEventCount(storyId);

@@ -66,6 +66,7 @@ export interface VisibleEventContext {
 	id: string;
 	type: string;
 	summary: string;
+	entityId?: string;
 	turnNumber?: number;
 	timestamp?: string;
 	locationId?: string;

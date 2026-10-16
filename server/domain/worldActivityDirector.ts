@@ -305,7 +305,7 @@ export class WorldActivityDirector {
 		if (!storyId || !locationId || !actionId) return null;
 		// An explicit dialogue or availability request owns the turn. Do not
 		// interrupt it with an unrequested side conversation.
-		if (/\\b(?:ask|tell|talk|speak|reply|answer|inquire|enquire|question|discuss|call out|shout|yell|jobs?|work|contracts?|quests?|tasks?|postings?|notices?)\\b/i.test(String(playerAction || ''))) {
+		if (/\b(?:ask|tell|talk|speak|reply|answer|inquire|enquire|question|discuss|call out|shout|yell|jobs?|work|contracts?|quests?|tasks?|postings?|notices?)\b/i.test(String(playerAction || '')) {
 			return null;
 		}
 		const eventId = deterministicId('npc_initiated_interaction', storyId, locationId, actionId);
@@ -377,7 +377,7 @@ export class WorldActivityDirector {
 		presence?: string;
 		isAlive?: boolean;
 		visibleToPlayer?: boolean;
-	}>, locationId: string, turnNumber: number = 1): WorldActivityEvent[] {
+	}>, locationId: string, _turnNumber: number = 1): WorldActivityEvent[] {
 		const events: WorldActivityEvent[] = [];
 		for (const entity of entities) {
 			if (

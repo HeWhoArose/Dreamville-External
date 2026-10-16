@@ -327,12 +327,12 @@ test('movement phrasing preserves the named destination in make-my-way actions',
 test('movement to a named destination preserves it before a second action clause', () => {
 	const { currentSituation } = situation();
 	const result = PlayerIntentInterpreter.deterministic(
-		'I want to move to the Lantern Vault and inspect the sealed gate.',
+		'I want to move to the Quiet Archive and inspect the sealed gate.',
 		currentSituation,
 	);
 
 	assert.equal(result.movementIntent, true);
-	assert.equal(result.locationTarget?.name, 'Lantern Vault');
+	assert.equal(result.locationTarget?.name, 'Quiet Archive');
 	assert.equal(result.locationTarget?.source, 'EXPLICIT');
 	assert.equal(result.locationTarget?.id, undefined, 'an unlisted destination remains name-only until canonical resolution');
 });
@@ -341,7 +341,7 @@ test('Continue retains a destination from movement phrasing with an extra action
 	const { currentSituation } = situation();
 	currentSituation.recentTurns.push({
 		turnId: 'previous-travel-with-extra-action',
-		playerAction: 'I make my way to the Lantern Vault and inspect the sealed gate.',
+		playerAction: 'I make my way to the Quiet Archive and inspect the sealed gate.',
 		narration: 'You begin moving toward the Lantern Vault while keeping the gate in view.',
 		locationId: currentSituation.location.id,
 		stateChanges: [],
@@ -351,7 +351,7 @@ test('Continue retains a destination from movement phrasing with an extra action
 
 	assert.equal(result.movementIntent, true);
 	assert.equal(result.action, 'continue_travel');
-	assert.equal(result.locationTarget?.name, 'Lantern Vault');
+	assert.equal(result.locationTarget?.name, 'Quiet Archive');
 	assert.equal(result.locationTarget?.source, 'IMPLIED');
 });
 

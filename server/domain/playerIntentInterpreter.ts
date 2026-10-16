@@ -56,7 +56,7 @@ function movementDestination(text: string): string | undefined {
 	// another action on the route. Do not mistake infinitive "to move" for a
 	// spatial target; a later spatial preposition may still supply the target.
 	const match = clean(text).match(
-		/\b(?:towards?|into|to(?!\s+(?:move|walk|step|approach|head|travel|go|enter|leave|return|follow|run|sneak|creep|make\s+(?:my|our|your)\s+way)\b))\s+(?:(?:the|a|an)\s+)?(.+?)(?=\s+(?:and then|and|while|before|after|so I can)\b|\s+to\s+(?:inspect|watch|look|listen|hear|ask|talk|speak|read|check|search|examine|scan)\b|[.!?;,]|$)/i,
+		/\b(?:towards?|into|to(?!\s+(?:move|walk|step|approach|head|travel|go|enter|leave|return|follow|run|sneak|creep|make\s+(?:my|our|your)\s+way|hear|listen|watch|look|observe|scan|see|inspect|examine|ask|talk|speak|read|check|search|find|learn)\b))\s+(?:(?:the|a|an)\s+)?(.+?)(?=\s+(?:and then|and|while|before|after|so I can)\b|\s+to\s+(?:inspect|watch|look|listen|hear|ask|talk|speak|read|check|search|examine|scan)\b|[.!?;,]|$)/i,
 	);
 	const destination = clean(match?.[1] || '').replace(/^(?:the|a|an)\s+/i, '').trim();
 	return destination.length >= 3 ? destination : undefined;

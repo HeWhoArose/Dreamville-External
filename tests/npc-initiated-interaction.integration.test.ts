@@ -216,4 +216,9 @@ test('HTTP action commits eligible NPC initiative before the live narration prom
     }),
   });
   assert.ok(retryResponse.status === 200 || retryResponse.status === 409);
+  assert.equal(
+    worldRepository.getCanonicalCommandEventCount(storyId),
+    afterCount,
+    'replaying the same canonical command must not duplicate the NPC-initiated event or any other canonical event',
+  );
 });

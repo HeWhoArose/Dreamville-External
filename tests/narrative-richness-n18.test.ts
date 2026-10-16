@@ -151,8 +151,10 @@ test('N18 does not punish a focused micro-turn for lacking unnecessary sensory c
 		turnPackage: turn('The key catches one brief glint beneath the desk.'),
 	});
 	const sensory = evaluation.dimensions.find((item) => item.dimension === 'SENSORY_VARIETY')!;
+	const substance = evaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE')!;
 	assert.ok(sensory.score >= 0.68);
 	assert.notEqual(sensory.status, 'WEAK');
+	assert.ok(substance.score >= 0.50, 'A focused, canon-grounded micro-observation must pass action substance.');
 });
 
 test('N18 catches consequential player-agency takeover as a high-severity richness issue', () => {
@@ -220,4 +222,68 @@ test('N18 does not create a provider call of its own', async () => {
 	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');
 	assert.match(source, /const needsLiteraryRewrite = literary\.decision === 'REWRITE';/);
 	assert.doesNotMatch(source, /needsLiteraryRewrite = .*narrativeRichnessEvaluation\.decision/);
+});
+
+
+test('N18 ACTION_SUBSTANCE passes when the player action is resolved with an observable result', () => {
+	const evaluation = NarrativeRichnessEvaluator.evaluate({
+		intent: makeIntent({ informationGoal: undefined, originalText: 'I ready my blade and check my armour.' }),
+		situation: makeSituation(),
+		plan: makePlan(),
+		turnPackage: turn('You draw the blade, test its edge, tighten the loose armour strap, and settle the weight across your shoulders. The equipment is secure, and your hand returns to the hilt.'),
+	});
+	const substance = evaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
+	assert.ok(substance);
+	assert.ok((substance?.score || 0) >= 0.50);
+});
+
+test('N18 ACTION_SUBSTANCE flags scenery padding that does not resolve the current player action', () => {
+	const evaluation = NarrativeRichnessEvaluator.evaluate({
+		intent: makeIntent({ informationGoal: undefined, originalText: 'I ready my blade and check my armour.' }),
+		situation: makeSituation(),
+		plan: makePlan(),
+		turnPackage: turn('The colossal stone tiers rise beneath the bruised autumn sky. Brass catches the fading light while distant voices roll through the arena. Dust hangs in the warm air and shadows stretch across the floor.'),
+	});
+	const substance = evaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
+	assert.ok(substance);
+	assert.ok((substance?.score || 0) < 0.50);
+	assert.equal(evaluation.decision, 'IMPROVE');
+});
+
+test('N18 ACTION_SUBSTANCE requires a response or bounded lack of answer for information turns', () => {
+	const evaluation = NarrativeRichnessEvaluator.evaluate({
+		intent: makeIntent({
+			action: 'ask',
+			goal: 'learn what the registrar wants me to do',
+			interactionMode: 'DIALOGUE',
+			speechIntent: true,
+			informationGoal: undefined,
+			originalText: 'I ask the registrar what I am to do.',
+		}),
+		situation: makeSituation(),
+		plan: makePlan(),
+		turnPackage: turn('The registrar looks up. The archive corridors are lined with old brass and stone, and the afternoon light falls across the floor.'),
+	});
+	const substance = evaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
+	assert.ok(substance);
+	assert.ok((substance?.score || 0) < 0.50);
+});
+
+test('N18 ACTION_SUBSTANCE accepts an explicit bounded lack of answer without rewarding scenery padding', () => {
+	const evaluation = NarrativeRichnessEvaluator.evaluate({
+		intent: makeIntent({
+			action: 'ask',
+			goal: 'learn what caused the stoppage',
+			interactionMode: 'INFORMATION_SEEKING',
+			speechIntent: true,
+			informationGoal: undefined,
+			originalText: 'I ask what caused the stoppage.',
+		}),
+		situation: makeSituation(),
+		plan: makePlan(),
+		turnPackage: turn('No reliable answer is established by the evidence available in the current scene.'),
+	});
+	const substance = evaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
+	assert.ok(substance);
+	assert.ok((substance?.score || 0) >= 0.50);
 });

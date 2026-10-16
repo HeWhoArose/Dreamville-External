@@ -7641,6 +7641,8 @@ export class MultiModelOrchestrator {
       situation: params.situation,
       repository: params.repository,
       storyId: params.storyId,
+      plan: params.plan,
+      turnPackage: validation.turnPackage,
       pacingContract: params.narrativePacingContract,
     });
     if (!presentation.valid) {
@@ -7711,6 +7713,8 @@ export class MultiModelOrchestrator {
     situation: CurrentSituation;
     repository: WorldRepository;
     storyId: string;
+    plan: EphemeralNarrativePlan;
+    turnPackage: StructuredTurnPackage;
     pacingContract: NarrativePacingContract;
   }): { valid: boolean; errorReason?: string } {
     const narration = String(params.narration || '').trim();
@@ -7759,6 +7763,21 @@ export class MultiModelOrchestrator {
 
     const informationContinuity = this.validateNarrativeInformationContinuity(narration, params.playerAction, params.intent);
     if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
+
+    const actionSubstanceEvaluation = NarrativeRichnessEvaluator.evaluate({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+      previousNarrations: params.situation.recentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
+    });
+    const actionSubstance = actionSubstanceEvaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
+    if (actionSubstance && actionSubstance.score < 0.50) {
+      return {
+        valid: false,
+        errorReason: 'Narration failed the action-substance gate: it does not sufficiently resolve the player action before environmental description.',
+      };
+    }
 
     const temporalContinuity = this.validateNarrativeTemporalContinuity(narration, params.repository, params.storyId);
     if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
@@ -7812,6 +7831,8 @@ export class MultiModelOrchestrator {
       situation: params.situation,
       repository,
       storyId: params.storyId,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
       pacingContract,
     });
     if (!presentation.valid) {
@@ -9166,6 +9187,8 @@ export class MultiModelOrchestrator {
                 situation: currentSituation,
                 repository: repo,
                 storyId,
+                plan: narrativePlan!,
+                turnPackage: validation.turnPackage,
                 pacingContract: narrativePacingContract,
               });
               if (!presentation.valid) {
@@ -9266,6 +9289,8 @@ export class MultiModelOrchestrator {
                   situation: currentSituation,
                   repository: repo,
                   storyId,
+                  plan: narrativePlan!,
+                  turnPackage: literaryValidation.turnPackage,
                   pacingContract: narrativePacingContract,
                 });
                 if (!literaryPresentation.valid) throw new Error(literaryPresentation.errorReason || 'Literary rewrite failed final presentation validation.');
@@ -9539,6 +9564,8 @@ export class MultiModelOrchestrator {
                   situation: currentSituation,
                   repository: repo,
                   storyId,
+                  plan: narrativePlan!,
+                  turnPackage: validation.turnPackage,
                   pacingContract: narrativePacingContract,
                 })
               : { valid: true };

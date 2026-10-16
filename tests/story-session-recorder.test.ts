@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { StorySessionRecorder } from '../server/domain/storySessionRecorder';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { StorySessionRecordingStore } from '../server/services/storySessionRecordingStore';
 
 test('story session recorder reconstructs lossless state through JSON patches', () => {
 	const initial = {
@@ -161,4 +165,122 @@ test('recording-integrity errors do not fail canonical repository interaction re
 		stateAfter: { value: 1000 },
 	}));
 	assert.equal(repository.getStorySessionRecording('story_recorder_boundary')?.interactions.length, 1);
+});
+
+
+test('a first-interaction state-before mismatch cannot rewrite the recording initial state', () => {
+	const recording = StorySessionRecorder.start({
+		storyId: 'story_initial_state_immutable',
+		runSessionId: 'run_initial_state_immutable',
+		initialState: { value: 1 },
+	});
+
+	assert.throws(
+		() => StorySessionRecorder.append(recording, {
+			storyId: 'story_initial_state_immutable',
+			kind: 'DIRECT_TURN',
+			source: 'AI',
+			startedAt: '2026-10-16T10:00:00.000Z',
+			completedAt: '2026-10-16T10:00:00.100Z',
+			success: true,
+			rolledBack: false,
+			stateBefore: { value: 999 },
+			stateAfter: { value: 1000 },
+		}),
+		/Story session state-before mismatch/,
+	);
+	assert.deepEqual(recording.initialState, { value: 1 });
+	assert.equal(recording.interactions.length, 0);
+});
+
+test('session recording store isolates recordings and sequence cursors by runSessionId', () => {
+	const root = mkdtempSync(join(tmpdir(), 'dreamville-recordings-'));
+	try {
+		const store = new StorySessionRecordingStore(root, { enabled: true });
+		const first = StorySessionRecorder.start({
+			storyId: 'reused_story_id',
+			runSessionId: 'run_a',
+			initialState: { run: 'a' },
+		});
+		StorySessionRecorder.append(first, {
+			storyId: 'reused_story_id',
+			kind: 'DIRECT_TURN',
+			source: 'AI',
+			startedAt: '2026-10-16T10:00:00.000Z',
+			completedAt: '2026-10-16T10:00:00.100Z',
+			success: true,
+			rolledBack: false,
+			stateBefore: { run: 'a' },
+			stateAfter: { run: 'a', turn: 1 },
+		});
+		store.save(first);
+
+		const second = StorySessionRecorder.start({
+			storyId: 'reused_story_id',
+			runSessionId: 'run_b',
+			initialState: { run: 'b' },
+		});
+		store.save(second);
+
+		const loadedFirst = store.load('reused_story_id', 'run_a');
+		const loadedSecond = store.load('reused_story_id', 'run_b');
+		assert.ok(loadedFirst);
+		assert.ok(loadedSecond);
+		assert.equal(loadedFirst.recordingId, first.recordingId);
+		assert.equal(loadedSecond.recordingId, second.recordingId);
+		assert.equal(loadedFirst.runSessionId, 'run_a');
+		assert.equal(loadedSecond.runSessionId, 'run_b');
+		assert.equal(loadedFirst.interactions.length, 1);
+		assert.equal(loadedSecond.interactions.length, 0);
+		assert.deepEqual(loadedFirst.initialState, { run: 'a' });
+		assert.deepEqual(loadedSecond.initialState, { run: 'b' });
+		assert.equal(store.load('reused_story_id', 'run_missing'), null);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test('repository starts a distinct recording when a storyId is reused for a new StoryRun', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'story_recording_run_reuse';
+	repository.seedStory(storyId);
+
+	const firstRun = repository.getStoryRun(storyId)!;
+	firstRun.createdAt = '2026-10-16T10:00:00.000Z';
+	firstRun.activeCharacterId = 'character_first_run';
+	firstRun.worldId = 'world_first_run';
+	firstRun.worldVersion = 1;
+	repository.saveStoryRun(firstRun);
+
+	const firstInitialState = { turn: 0, player: 'first' };
+	const first = repository.ensureStorySessionRecording(storyId, 'First Run', firstInitialState);
+	repository.recordStorySessionInteraction({
+		storyId,
+		kind: 'DIRECT_TURN',
+		source: 'AI',
+		startedAt: '2026-10-16T10:00:01.000Z',
+		completedAt: '2026-10-16T10:00:01.100Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: firstInitialState,
+		stateAfter: { turn: 1, player: 'first' },
+	});
+
+	const secondRun = {
+		...repository.getStoryRun(storyId)!,
+		createdAt: '2026-10-16T11:00:00.000Z',
+		activeCharacterId: 'character_second_run',
+		worldId: 'world_second_run',
+		worldVersion: 2,
+	};
+	repository.saveStoryRun(secondRun);
+
+	assert.equal(repository.getStorySessionRecording(storyId), null);
+	const secondInitialState = { turn: 0, player: 'second' };
+	const second = repository.ensureStorySessionRecording(storyId, 'Second Run', secondInitialState);
+	assert.notEqual(second.recordingId, first.recordingId);
+	assert.notEqual(second.runSessionId, first.runSessionId);
+	assert.equal(second.interactions.length, 0);
+	assert.deepEqual(second.initialState, secondInitialState);
+	assert.equal(first.interactions.length, 1, 'The prior run recording remains intact in its own object.');
 });

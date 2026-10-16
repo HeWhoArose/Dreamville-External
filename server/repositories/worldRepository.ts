@@ -3157,12 +3157,25 @@ export class InMemoryWorldRepository implements WorldRepository {
     });
   }
 
+  private getStorySessionRunId(run: any | null): string {
+    if (!run) return 'unknown-run';
+    return deterministicId(
+      'recording-session',
+      String(run.storyId || run.id || 'unknown'),
+      String(run.createdAt || ''),
+      String(run.activeCharacterId || run.characterName || 'unknown-character'),
+      String(run.worldVersion || run.worldId || 'unknown-world'),
+    );
+  }
+
   public getStorySessionRecording(storyId: string): StorySessionRecording | null {
     const key = String(storyId || '');
     if (!key) return null;
+    const runSessionId = this.getStorySessionRunId(this.getStoryRun(key));
     const existing = this.storySessionRecordings.get(key);
-    if (existing) return existing;
-    const persisted = storySessionRecordingStore.load(key);
+    if (existing && existing.runSessionId === runSessionId) return existing;
+    if (existing) this.storySessionRecordings.delete(key);
+    const persisted = storySessionRecordingStore.load(key, runSessionId);
     if (persisted) {
       this.storySessionRecordings.set(key, persisted);
       return persisted;
@@ -3175,10 +3188,13 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (!key) throw new Error('storyId is required for session recording.');
     const existing = this.getStorySessionRecording(key);
     if (existing) return existing;
+    const run = this.getStoryRun(key);
+    const runSessionId = this.getStorySessionRunId(run);
     const snapshot = initialState !== undefined ? initialState : captureCanonicalStateSnapshot(key, this);
     const recording = StorySessionRecorder.start({
       storyId: key,
-      title: title || this.getStoryRun(key)?.title || 'Dreamville Story Session',
+      runSessionId,
+      title: title || run?.title || 'Dreamville Story Session',
       initialState: snapshot,
       engineVersion: CampaignArchiveService.CURRENT_ENGINE_VERSION,
     });

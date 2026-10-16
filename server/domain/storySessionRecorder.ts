@@ -61,9 +61,11 @@ export interface StorySessionInteraction {
 
 export interface StorySessionRecording {
 	format: 'DREAMVILLE_STORY_SESSION_RECORDING';
-	schemaVersion: '1.0.0';
-	recorderVersion: '1.0.0';
+	schemaVersion: '1.1.0';
+	recorderVersion: '1.1.0';
 	recordingId: string;
+	/** Identifies the concrete StoryRun incarnation; storyId alone can be reused. */
+	runSessionId: string;
 	storyId: string;
 	title: string;
 	startedAt: string;
@@ -200,6 +202,7 @@ function applyPatch(root: any, operations: StorySessionJsonPatchOperation[]): an
 
 export interface StartStorySessionRecordingParams {
 	storyId: string;
+	runSessionId?: string;
 	title?: string;
 	initialState: unknown;
 	engineVersion?: string;
@@ -226,8 +229,8 @@ export interface RecordStorySessionInteractionParams {
 
 export class StorySessionRecorder {
 	public static readonly FORMAT = 'DREAMVILLE_STORY_SESSION_RECORDING' as const;
-	public static readonly SCHEMA_VERSION = '1.0.0';
-	public static readonly RECORDER_VERSION = '1.0.0';
+	public static readonly SCHEMA_VERSION = '1.1.0';
+	public static readonly RECORDER_VERSION = '1.1.0';
 
 	public static start(params: StartStorySessionRecordingParams): StorySessionRecording {
 		const now = new Date().toISOString();
@@ -236,6 +239,7 @@ export class StorySessionRecorder {
 			schemaVersion: this.SCHEMA_VERSION,
 			recorderVersion: this.RECORDER_VERSION,
 			recordingId: crypto.randomUUID(),
+			runSessionId: params.runSessionId || `legacy:${params.storyId}`,
 			storyId: params.storyId,
 			title: params.title?.trim() || 'Dreamville Story Session',
 			startedAt: now,
@@ -275,9 +279,8 @@ export class StorySessionRecorder {
 		if (recording.endedAt) {
 			throw new Error('Cannot append to a stopped story session recording.');
 		}
-		if (recording.interactions.length === 0 && params.stateBefore !== undefined) {
-			recording.initialState = clone(params.stateBefore);
-		}
+		// Keep the session's original state immutable. Re-basing it to stateBefore
+		// would conceal a mismatch on the first recorded interaction.
 		const expectedBeforeHash = recording.interactions.length
 			? recording.interactions[recording.interactions.length - 1].stateAfterHash
 			: hash(recording.initialState);
@@ -327,14 +330,23 @@ export class StorySessionRecorder {
 		if (!recording || typeof recording !== 'object') return { valid: false, errorReason: 'Recording root must be an object.' };
 		const value = recording as Partial<StorySessionRecording>;
 		if (value.format !== this.FORMAT) return { valid: false, errorReason: 'Unsupported story session recording format.' };
-		if (value.schemaVersion !== this.SCHEMA_VERSION) return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
+		if (value.schemaVersion !== this.SCHEMA_VERSION && value.schemaVersion !== '1.0.0') {
+			return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
+		}
+		if (value.schemaVersion === this.SCHEMA_VERSION && (typeof value.runSessionId !== 'string' || !value.runSessionId.trim())) {
+			return { valid: false, errorReason: 'Recording is missing runSessionId.' };
+		}
 		if (!value.storyId || !value.recordingId) return { valid: false, errorReason: 'Recording metadata is incomplete.' };
 		if (!value.initialState) return { valid: false, errorReason: 'Recording is missing initialState.' };
 		if (!Array.isArray(value.interactions)) return { valid: false, errorReason: 'Recording interactions must be an array.' };
 
 		let reconstructed = clone(value.initialState);
-		for (const interaction of value.interactions) {
+		for (let index = 0; index < value.interactions.length; index += 1) {
+			const interaction = value.interactions[index];
 			if (!interaction || typeof interaction !== 'object') return { valid: false, errorReason: 'Recording contains an invalid interaction.' };
+			if (interaction.sequence !== index + 1) {
+				return { valid: false, errorReason: `Recording sequence is not contiguous at interaction ${index + 1}.` };
+			}
 			const beforeHash = hash(reconstructed);
 			if (interaction.stateBeforeHash !== beforeHash) {
 				if (interaction.sequence === 1 && interaction.stateAfterHash === beforeHash) {
@@ -372,6 +384,7 @@ export class StorySessionRecorder {
 
 	public static summarize(recording: StorySessionRecording): {
 		recordingId: string;
+		runSessionId: string;
 		storyId: string;
 		title: string;
 		startedAt: string;
@@ -402,6 +415,7 @@ export class StorySessionRecorder {
 		}
 		return {
 			recordingId: recording.recordingId,
+			runSessionId: recording.runSessionId,
 			storyId: recording.storyId,
 			title: recording.title,
 			startedAt: recording.startedAt,

@@ -64,6 +64,7 @@ const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|un
 const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|call out|shout|yell)\b/i;
 const PASSIVE_OBSERVATION_PATTERN = /\b(?:listen|hear|overhear|eavesdrop|observe|watch|look|look around|look for|notice|study|scan|inspect)\b/i;
 const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?rs?|gossip|what happened|what(?:'s| is| are)\s+(?:available|offered|posted|listed)|check further|look further|find more|learn more|who|why|where|when|how|hear|listen|hear about|listen for|overhear)\b/i;
+const FOLLOW_UP_INFORMATION_PATTERN = /\b(?:check further|look further|find more|learn more|tell me more|go deeper|dig deeper|investigate further|keep looking|look into it further|see what else)\b/i;
 const OPPORTUNITY_TOPIC_PATTERN = /\b(?:jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|job requests?)\b/i;
 const AVAILABILITY_LOOKUP_PATTERN =
 	/\b(?:check|look|see|find|search|browse|read|review|inspect)\b[\s\S]{0,55}\b(?:what(?:'s| is| are)\s+)?(?:currently\s+)?(?:available|open|posted|listed|offered|jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?)\b|\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing))\b[\s\S]{0,45}\b(?:jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|requests?)\b/i;
@@ -151,6 +152,30 @@ function extractedTarget(text: string): string | undefined {
 	return undefined;
 }
 
+function inheritedInformationGoal(situation?: CurrentSituation): string | undefined {
+	const recent = (situation?.recentTurns || []).slice(-8).reverse();
+	for (const turn of recent) {
+		const action = clean(turn.playerAction);
+		if (!action) continue;
+		// Continue a short chain of follow-up prompts, but do not revive an old goal
+		// after the player has moved on to another action or topic.
+		if (FOLLOW_UP_INFORMATION_PATTERN.test(action)) continue;
+		const opportunityQuestion = OPPORTUNITY_TOPIC_PATTERN.test(action) &&
+			/\\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing)|look(?:ing)?|search(?:ing)?|check(?:ing)?|find|finding|read|review|inspect|available|offered|request(?:s|ed|ing)?)\\b/i.test(action);
+		if (opportunityQuestion) {
+			return 'find available work, jobs, contracts, tasks, or notices';
+		}
+		if (AVAILABILITY_LOOKUP_PATTERN.test(action)) {
+			return 'check what is currently available in the current scene';
+		}
+		if (INFORMATION_PATTERN.test(action)) {
+			return extractedTarget(action) || 'learn what can be discovered from the current scene';
+		}
+		return undefined;
+	}
+	return undefined;
+}
+
 function actionLabel(text: string, mode: PlayerIntentInteractionMode): string {
 	if (/(listen|hear|overhear|eavesdrop)/i.test(text) && /(move|approach|closer|step|walk)/i.test(text)) return 'approach_and_listen';
 	if (/(listen|hear|overhear|eavesdrop)/i.test(text)) return 'listen_and_observe';
@@ -192,6 +217,7 @@ export class PlayerIntentInterpreter {
 		const opportunityInquiry = OPPORTUNITY_TOPIC_PATTERN.test(originalText) &&
 			/\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing)|look(?:ing)?|search(?:ing)?|check(?:ing)?|find|finding|read|review|inspect|available|offered|request(?:s|ed|ing)?)\b/i.test(originalText);
 		const information = INFORMATION_PATTERN.test(originalText) || availabilityLookup || opportunityInquiry;
+		const inheritedGoal = FOLLOW_UP_INFORMATION_PATTERN.test(originalText) ? inheritedInformationGoal(situation) : undefined;
 		const manipulation = ITEM_USE_PATTERN.test(originalText);
 		const ooc = OOC_PATTERN.test(originalText);
 		const dice = DICE_PATTERN.test(originalText);
@@ -224,7 +250,7 @@ export class PlayerIntentInterpreter {
 					? 'find available work, jobs, contracts, tasks, or notices'
 					: 'check what is currently available in the current scene';
 			} else {
-				informationGoal = targetText || 'learn what can be discovered from the current scene';
+				informationGoal = targetText || inheritedGoal || 'learn what can be discovered from the current scene';
 			}
 		} else if (combat) goal = 'resolve_threat';
 		else if (movement) goal = 'change_position_or_approach_target';

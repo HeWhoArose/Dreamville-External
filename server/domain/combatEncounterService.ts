@@ -242,7 +242,7 @@ export class CombatEncounterService {
             params.repository.getCombatPerceptionOptions(params.storyId, params.actorId),
           ),
           returnToStory: true,
-          continuationNarrative: narration,
+          continuationNarrative: narrationResult.text,
         },
       };
     }

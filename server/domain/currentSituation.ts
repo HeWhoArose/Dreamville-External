@@ -315,17 +315,7 @@ const LOCATION_SCOPED_OPPORTUNITY_CATEGORIES = new Set([
 	'WORK_ORDER',
 ]);
 
-const CLOSED_OPPORTUNITY_STATUSES = new Set([
-	'REJECTED',
-	'RESOLVED',
-	'ABANDONED',
-	'CLOSED',
-	'COMPLETED',
-	'CANCELLED',
-	'CANCELED',
-	'EXPIRED',
-	'WITHDRAWN',
-]);
+const OPEN_OPPORTUNITY_STATUSES = new Set(['OPEN']);
 
 /**
  * A work/contract opportunity is actionable only when it is a canonical
@@ -339,7 +329,7 @@ export function isAvailableLocationScopedOpportunityThread(raw: unknown, current
 	const category = normalizeText(candidate.category).toUpperCase().replace(/[\s-]+/g, '_');
 	if (!LOCATION_SCOPED_OPPORTUNITY_CATEGORIES.has(category)) return true;
 	const status = normalizeText(candidate.status || candidate.state).toUpperCase().replace(/[\s-]+/g, '_');
-	if (CLOSED_OPPORTUNITY_STATUSES.has(status)) return false;
+	if (!OPEN_OPPORTUNITY_STATUSES.has(status)) return false;
 	const postingLocationId = normalizeText(candidate.locationId);
 	return Boolean(currentLocationId && postingLocationId && postingLocationId === currentLocationId);
 }

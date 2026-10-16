@@ -417,7 +417,7 @@ export class NarrativeResearchPipeline {
 					label: title,
 					kind: 'THREAD',
 					sourceId: id,
-					reason: 'Work/contract opportunity is closed or is not an explicitly posted opportunity at the player’s current location.',
+					reason: 'Work/contract opportunity is not explicitly OPEN or is not an explicitly posted opportunity at the player’s current location.',
 				});
 				continue;
 			}

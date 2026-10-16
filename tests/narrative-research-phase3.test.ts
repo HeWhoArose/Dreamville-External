@@ -300,6 +300,25 @@ test('Phase 3 exposes only open local work postings and rejects remote or closed
 	});
 	repository.saveStoryThread({
 		storyId,
+		threadId: 'phase3_unknown_status_job',
+		title: 'Available work: guard the west bridge',
+		summary: 'The record has unknown status and must not be actionable.',
+		category: 'JOB_POSTING',
+		status: 'UNKNOWN',
+		locationId: currentLocationId,
+		createdAt: 'fixture-unknown-status',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'phase3_missing_status_contract',
+		title: 'Available work: repair the old lift',
+		summary: 'The record has no status and must not be actionable.',
+		category: 'CONTRACT',
+		locationId: currentLocationId,
+		createdAt: 'fixture-missing-status',
+	});
+	repository.saveStoryThread({
+		storyId,
 		threadId: 'phase3_unlocated_job',
 		title: 'Available work: recover a map',
 		summary: 'The source of this work notice has no known location.',
@@ -327,7 +346,15 @@ test('Phase 3 exposes only open local work postings and rejects remote or closed
 	assert.equal(result.blocks.some((block) => /eastern caravan|phase3_remote_job/i.test(block.content)), false);
 	assert.equal(result.blocks.some((block) => /archive job|phase3_closed_job/i.test(block.content)), false);
 	assert.equal(result.blocks.some((block) => /recover a map|phase3_unlocated_job/i.test(block.content)), false);
-	for (const id of ['phase3_remote_job', 'phase3_closed_job', 'phase3_unlocated_job']) {
+	assert.equal(result.blocks.some((block) => /guard the west bridge|phase3_unknown_status_job/i.test(block.content)), false);
+	assert.equal(result.blocks.some((block) => /repair the old lift|phase3_missing_status_contract/i.test(block.content)), false);
+	for (const id of [
+		'phase3_remote_job',
+		'phase3_closed_job',
+		'phase3_unlocated_job',
+		'phase3_unknown_status_job',
+		'phase3_missing_status_contract',
+	]) {
 		assert.ok(result.excluded.some((item) => item.sourceId === id || item.label.includes(id)), 'excluded work posting should retain a diagnostic for ' + id);
 	}
 });

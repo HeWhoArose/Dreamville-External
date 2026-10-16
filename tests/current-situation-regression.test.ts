@@ -567,6 +567,25 @@ test('current situation scopes actionable work and contract threads to open post
 	});
 	repository.saveStoryThread({
 		storyId,
+		threadId: 'unknown_status_job',
+		title: 'Available work: guard the west bridge',
+		description: 'A purported posting with unknown status.',
+		category: 'JOB_POSTING',
+		status: 'UNKNOWN',
+		locationId: currentLocationId,
+		createdAt: 'fixture-unknown-status',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'missing_status_contract',
+		title: 'Available work: repair the old lift',
+		description: 'A purported contract that has no status field.',
+		category: 'CONTRACT',
+		locationId: currentLocationId,
+		createdAt: 'fixture-missing-status',
+	});
+	repository.saveStoryThread({
+		storyId,
 		threadId: 'world_story_thread',
 		title: 'Investigate the starlight fissures',
 		description: 'The origin of the fissures remains unknown.',
@@ -586,4 +605,6 @@ test('current situation scopes actionable work and contract threads to open post
 	assert.equal(situation.openThreads.some((thread) => thread.id === 'remote_caravan_job'), false);
 	assert.equal(situation.openThreads.some((thread) => thread.id === 'resolved_archive_job'), false);
 	assert.equal(situation.openThreads.some((thread) => thread.id === 'unlocated_work_opportunity'), false);
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'unknown_status_job'), false);
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'missing_status_contract'), false);
 });

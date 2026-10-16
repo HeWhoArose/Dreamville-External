@@ -1378,9 +1378,9 @@ test('Phase 12 regression: environment-heavy narration fails closed when the N18
 	assert.equal(result.success, false, 'Environment-heavy original narration must not be shown when its rewrite gate is skipped.');
 	assert.equal(result.turnPackage, undefined);
 	assert.match(result.error || result.fallbackReason || '', /environment-only|environment-heavy|substance/i);
-	assert.ok(
-		(result.narrativeQualityAudit?.environmentExcessEmissions || 0) > 3 ||
-		/rewrit|environment-only|environment-heavy|substance/i.test(result.error || result.fallbackReason || ''),
-		'The failure must carry an actionable N18 environment/substance diagnostic.',
+	assert.match(
+		result.error || result.fallbackReason || '',
+		/N18 environment\/substance gate rejected final narration/i,
+		'The rejection must come from the final N18 guard, not an unrelated validation failure.',
 	);
 });

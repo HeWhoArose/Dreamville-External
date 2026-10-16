@@ -272,8 +272,20 @@ export class StorySessionRecorder {
 		if (recording.storyId !== params.storyId) {
 			throw new Error('Story session recording storyId mismatch.');
 		}
+		if (recording.endedAt) {
+			throw new Error('Cannot append to a stopped story session recording.');
+		}
 		if (recording.interactions.length === 0 && params.stateBefore !== undefined) {
 			recording.initialState = clone(params.stateBefore);
+		}
+		const expectedBeforeHash = recording.interactions.length
+			? recording.interactions[recording.interactions.length - 1].stateAfterHash
+			: hash(recording.initialState);
+		const suppliedBeforeHash = hash(params.stateBefore);
+		if (suppliedBeforeHash !== expectedBeforeHash) {
+			throw new Error(
+				`Story session state-before mismatch at interaction ${recording.interactions.length + 1}: expected ${expectedBeforeHash}, got ${suppliedBeforeHash}.`,
+			);
 		}
 		const sequence = recording.interactions.length + 1;
 		const before = clone(params.stateBefore);

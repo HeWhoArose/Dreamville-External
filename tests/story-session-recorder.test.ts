@@ -72,3 +72,63 @@ test('story session recorder detects tampered state patches', () => {
 	const validation = StorySessionRecorder.validate(recording);
 	assert.equal(validation.valid, false);
 });
+
+
+test('story session recorder rejects a state-before mismatch before appending', () => {
+	const recording = StorySessionRecorder.start({
+		storyId: 'story_state_mismatch',
+		initialState: { value: 1 },
+	});
+	StorySessionRecorder.append(recording, {
+		storyId: 'story_state_mismatch',
+		kind: 'DIRECT_TURN',
+		source: 'AI',
+		startedAt: '2026-10-16T10:00:00.000Z',
+		completedAt: '2026-10-16T10:00:00.100Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: { value: 1 },
+		stateAfter: { value: 2 },
+	});
+
+	assert.throws(
+		() => StorySessionRecorder.append(recording, {
+			storyId: 'story_state_mismatch',
+			kind: 'DIRECT_TURN',
+			source: 'AI',
+			startedAt: '2026-10-16T10:00:01.000Z',
+			completedAt: '2026-10-16T10:00:01.100Z',
+			success: true,
+			rolledBack: false,
+			stateBefore: { value: 999 },
+			stateAfter: { value: 1000 },
+		}),
+		/Story session state-before mismatch/,
+	);
+	assert.equal(recording.interactions.length, 1);
+	assert.equal(StorySessionRecorder.validate(recording).valid, true);
+});
+
+test('story session recorder refuses to append after it has been stopped', () => {
+	const recording = StorySessionRecorder.start({
+		storyId: 'story_stopped',
+		initialState: { value: 1 },
+	});
+	StorySessionRecorder.stop(recording);
+
+	assert.throws(
+		() => StorySessionRecorder.append(recording, {
+			storyId: 'story_stopped',
+			kind: 'DIRECT_TURN',
+			source: 'AI',
+			startedAt: '2026-10-16T10:00:00.000Z',
+			completedAt: '2026-10-16T10:00:00.100Z',
+			success: true,
+			rolledBack: false,
+			stateBefore: { value: 1 },
+			stateAfter: { value: 2 },
+		}),
+		/Cannot append to a stopped story session recording/,
+	);
+	assert.equal(StorySessionRecorder.validate(recording).valid, true);
+});

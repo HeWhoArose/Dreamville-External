@@ -8123,6 +8123,19 @@ export class MultiModelOrchestrator {
           isProtected: true,
           relevanceScore: 1,
         },
+        {
+          // Keep authoritative event history available to the prompt without
+          // re-injecting the entire scene anchor (which the narration projection
+          // intentionally filters to avoid duplicating current-situation context).
+          id: 'canonical_scene_event_anchor',
+          band: 'B1_CRITICAL' as const,
+          label: 'Visible Current-Scene Events (Canonical or Projected)',
+          content: `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
+          estimatedTokens: WorkingContextEngine.estimateTokens(canonicalSceneEventContext) + 16,
+          sourceAuthority: 'WorldRepository canonical command event history and CurrentSituation projection',
+          isProtected: true,
+          relevanceScore: 1,
+        },
         ...(isInformationSeekingAction && currentSceneFactualContext ? [{
           id: 'current_scene_factual_context',
           band: 'B2_IMMEDIATE' as const,

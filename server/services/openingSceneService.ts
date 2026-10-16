@@ -81,6 +81,8 @@ export interface OpeningQualityReview {
 	pacingReason?: string;
 	/** Present when the shared semantic/epistemic reviewer rejects this opening candidate. */
 	semanticReviewReason?: string;
+	/** Present when shared context-neutral presentation checks reject this opening candidate. */
+	presentationReviewReason?: string;
 }
 
 export interface GenerateOpeningSceneOptions {
@@ -309,11 +311,17 @@ export class OpeningSceneService {
 			const firstSemanticReview = OpeningSceneService.evaluateOpeningSemanticReview(
 				generatedText, rawOpeningFacts, storyId, worldRepo,
 			);
-			const firstNeedsRewrite = firstQualityReview.decision === 'REWRITE' || !firstSemanticReview.valid;
+			const firstPresentationReview = OpeningSceneService.evaluateOpeningPresentationReview(
+				generatedText, storyId, worldRepo,
+			);
+			const firstNeedsRewrite = firstQualityReview.decision === 'REWRITE'
+				|| !firstSemanticReview.valid
+				|| !firstPresentationReview.valid;
 			const firstReview: OpeningQualityReview = {
 				...firstQualityReview,
 				decision: firstNeedsRewrite ? 'REWRITE' : 'ACCEPT',
 				semanticReviewReason: firstSemanticReview.valid ? undefined : firstSemanticReview.errorReason,
+				presentationReviewReason: firstPresentationReview.valid ? undefined : firstPresentationReview.errorReason,
 			};
 			qualityAudit.firstDecision = firstReview.decision;
 			qualityAudit.firstScore = firstQualityReview.richness.overallScore;
@@ -348,13 +356,18 @@ export class OpeningSceneService {
 						const postSemanticReview = OpeningSceneService.evaluateOpeningSemanticReview(
 							rewrittenText, rawOpeningFacts, storyId, worldRepo,
 						);
+						const postPresentationReview = OpeningSceneService.evaluateOpeningPresentationReview(
+							rewrittenText, storyId, worldRepo,
+						);
 						const postAccepted = postQualityReview.decision === 'ACCEPT'
 							&& postSemanticReview.valid
+							&& postPresentationReview.valid
 							&& rewrittenText.trim().length > 0;
 						const postReview: OpeningQualityReview = {
 							...postQualityReview,
 							decision: postAccepted ? 'ACCEPT' : 'REWRITE',
 							semanticReviewReason: postSemanticReview.valid ? undefined : postSemanticReview.errorReason,
+							presentationReviewReason: postPresentationReview.valid ? undefined : postPresentationReview.errorReason,
 						};
 						if (postAccepted) {
 							generatedText = rewrittenText;
@@ -464,6 +477,7 @@ export class OpeningSceneService {
 			...review.richness.issues.map((issue) => `${issue.severity}: ${issue.message}`),
 			...(review.pacingReason ? [review.pacingReason] : []),
 			...(review.semanticReviewReason ? ['Semantic/epistemic review: ' + review.semanticReviewReason] : []),
+			...(review.presentationReviewReason ? ['Presentation continuity review: ' + review.presentationReviewReason] : []),
 		];
 	}
 
@@ -527,6 +541,25 @@ export class OpeningSceneService {
 	 * prompt facts) so unauthorized world facts can be detected without entering
 	 * the model prompt or being promoted into player-facing prose.
 	 */
+	private static evaluateOpeningPresentationReview(
+		narrativeText: string,
+		storyId: string,
+		worldRepo: WorldRepository,
+	): { valid: boolean; errorReason?: string } {
+		try {
+			return worldRepo.getAiOrchestrator().validateOpeningNarrativeCandidate({
+				storyId,
+				narration: narrativeText,
+				repository: worldRepo,
+			});
+		} catch (error: any) {
+			return {
+				valid: false,
+				errorReason: 'Opening presentation validation could not complete: ' + String(error?.message || error || 'unknown error'),
+			};
+		}
+	}
+
 	private static evaluateOpeningSemanticReview(
 		narrativeText: string,
 		facts: AssembledOpeningContext['rawOpeningFacts'],

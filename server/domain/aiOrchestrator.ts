@@ -7813,6 +7813,33 @@ export class MultiModelOrchestrator {
    * that may be shown to the player must pass the same final presentation and semantic
    * boundary checks as a primary narrative.generate candidate.
    */
+  /**
+   * Opening scenes are authored setup rather than a response to a player command.
+   * Apply only the shared presentation checks that are context-neutral here; opening
+   * pacing/richness and semantic/epistemic acceptance remain owned by OpeningSceneService.
+   */
+  public validateOpeningNarrativeCandidate(params: {
+    storyId: string;
+    narration: string;
+    repository?: WorldRepository;
+  }): { valid: boolean; errorReason?: string } {
+    const narration = String(params.narration || '').trim();
+    if (!narration) return { valid: false, errorReason: 'Opening narrative candidate is empty.' };
+
+    const repository = params.repository || this.getWorldRepository();
+    const metaLeakage = this.validateNarrativeMetaLeakage(narration);
+    if (!metaLeakage.valid) {
+      return { valid: false, errorReason: metaLeakage.errorReason || 'Opening narrative failed presentation meta-leakage validation.' };
+    }
+
+    const temporalContinuity = this.validateNarrativeTemporalContinuity(narration, repository, params.storyId);
+    if (!temporalContinuity.valid) {
+      return { valid: false, errorReason: temporalContinuity.errorReason || 'Opening narrative failed canonical temporal-continuity validation.' };
+    }
+
+    return { valid: true };
+  }
+
   public validateNarrativeCandidate(params: {
     storyId: string;
     playerAction: string;

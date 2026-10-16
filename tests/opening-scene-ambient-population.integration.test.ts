@@ -287,6 +287,34 @@ test('opening semantic review rejects hidden canonical facts from both primary a
   }
 });
 
+test('opening presentation review rejects time-of-day claims that contradict the canonical world clock', () => {
+  const storyId = 'opening_temporal_review_' + Date.now();
+  const rig = buildOpeningRig(
+    storyId,
+    'Elysium Solar Citadel',
+    { status: 'UNKNOWN', expectedPopulation: 'VARIABLE', provenance: 'UNKNOWN' },
+  );
+  const phase = rig.repository.getWorldClock(storyId).getState().currentDayPhase;
+  const forbiddenByPhase: Record<string, string> = {
+    Predawn: 'sunset',
+    Dawn: 'midnight',
+    Morning: 'dusk',
+    Afternoon: 'sunrise',
+    Dusk: 'midday',
+    Night: 'sunrise',
+  };
+  const contradiction = forbiddenByPhase[phase];
+  assert.ok(contradiction, 'fixture should use a canonical phase covered by the temporal validator');
+
+  const result = rig.orchestrator.validateOpeningNarrativeCandidate({
+    storyId,
+    repository: rig.repository,
+    narration: `Hero Vael surveys the pale stone arcade as footsteps echo along the corridor. The ${contradiction} light falls across the floor while the traveler considers the immediate scene.`,
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.errorReason || '', /temporal|canonical world time/i);
+});
+
 test('opening population and opening scene survive repository reload without duplicate residents on regeneration', async () => {
   await withDurablePersistence(async () => {
     const storyId = 'opening_population_reload_' + Date.now();

@@ -202,3 +202,71 @@ test('opening population preserves authored RESTRICTED occupancy and never seeds
   assert.match(generation!.prompt, /Closed to public access/);
   assert.equal(opening.startingLocationName, 'Elysium Solar Citadel Archive');
 });
+
+
+test('opening semantic review rejects hidden canonical facts from both primary and repair candidates', async () => {
+  const storyId = 'opening_semantic_hidden_fact_' + Date.now();
+  const rig = buildOpeningRig(
+    storyId,
+    'Elysium Solar Citadel',
+    { status: 'UNKNOWN', expectedPopulation: 'VARIABLE', provenance: 'UNKNOWN' },
+  );
+  const secretPhrase = 'a sealed alien engine beneath the citadel';
+  rig.repository.saveWorldFact(storyId, {
+    id: 'fact_hidden_engine_' + storyId,
+    subjectEntityId: 'Elysium Council',
+    predicate: 'conceals',
+    objectValue: secretPhrase,
+    secretLevel: 'secret',
+    provenance: 'AUTHORED_HIDDEN_CANON',
+  });
+
+  const originalExecute = rig.orchestrator.executeTaskGeneration;
+  const hiddenFactNarrative = [
+    'At Cycle 42, Hero Vael stands within Elysium Solar Citadel. Footsteps cross the pale stone arcade while people carry out their recorded routines.',
+    'Unknown to Vael, a sealed alien engine beneath the citadel remains active. The council has kept the sealed alien engine beneath the citadel hidden from ordinary visitors.',
+    'The traveler remains focused on the immediate situation, with the wider mystery unresolved and the next decision left to the player.',
+  ].join('\\n\\n');
+
+  (rig.orchestrator as any).executeTaskGeneration = async (task: string, prompt: string, _system: string, options: any) => {
+    const text = JSON.stringify({
+      narrativeText: hiddenFactNarrative,
+      structuredEvents: [
+        { type: 'location', text: 'Elysium Solar Citadel' },
+        { type: 'normal', text: 'People carry out their recorded routines.' },
+        { type: 'action', text: 'Hero Vael surveys the public arcade.' },
+        { type: 'normal', text: 'The wider mystery remains unresolved.' },
+      ],
+    });
+    const validation = typeof options?.validateResponse === 'function' ? options.validateResponse(text) : { valid: true };
+    if (!validation?.valid) throw new Error(validation.errorReason || 'Hidden-fact fixture failed shape validation.');
+    return {
+      text,
+      source: 'AI_PRIMARY',
+      providerId: 'test-fixture',
+      modelId: task === 'narrative.review' ? 'opening-review-hidden-fact-fixture' : 'opening-primary-hidden-fact-fixture',
+      attempts: 1,
+      attemptsTrail: [],
+    };
+  };
+
+  try {
+    const opening = await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const run = rig.repository.getStoryRun(storyId);
+    const generation = run.runtimeState?.openingNarrativeContext?.generation;
+
+    assert.doesNotMatch(opening.narrativeText.toLowerCase(), /sealed alien engine beneath the citadel/);
+    assert.doesNotMatch(JSON.stringify(opening.structuredEvents).toLowerCase(), /sealed alien engine beneath the citadel/);
+    assert.equal(generation?.source, 'DETERMINISTIC_FALLBACK', 'metadata must identify the deterministic text actually delivered');
+    assert.equal(generation?.qualityAudit?.firstDecision, 'REWRITE');
+    assert.equal(generation?.qualityAudit?.rewriteAttempted, true);
+    assert.equal(generation?.qualityAudit?.rewriteSucceeded, false);
+    assert.ok(generation?.qualityAudit?.issues.some((issue: string) => /semantic|epistemic|unsupported|hidden/i.test(issue)));
+  } finally {
+    (rig.orchestrator as any).executeTaskGeneration = originalExecute;
+  }
+});

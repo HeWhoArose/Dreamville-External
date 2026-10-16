@@ -1,11 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 
-function buildOpeningRig(storyId: string, locationName: string, population: any) {
-  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+async function withDurablePersistence<T>(callback: () => Promise<T>): Promise<T> {
+  const root = mkdtempSync(join(tmpdir(), 'dreamville-opening-population-'));
+  const previous = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  process.env.DREAMBOOK_PERSISTENCE_PATH = join(root, 'data.json');
+  try {
+    return await callback();
+  } finally {
+    if (previous === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function buildOpeningRig(storyId: string, locationName: string, population: any, disablePersistence = true) {
+  const repository = new InMemoryWorldRepository({ disablePersistence });
   const locationId = 'loc_opening_population_' + storyId;
   const worldId = 'world_opening_population_' + storyId;
   const now = new Date().toISOString();
@@ -270,3 +286,106 @@ test('opening semantic review rejects hidden canonical facts from both primary a
     (rig.orchestrator as any).executeTaskGeneration = originalExecute;
   }
 });
+
+test('opening population and opening scene survive repository reload without duplicate residents on regeneration', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'opening_population_reload_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Elysium Solar Citadel',
+      { status: 'UNKNOWN', expectedPopulation: 'VARIABLE', provenance: 'UNKNOWN' },
+      false,
+    );
+
+    const firstOpening = await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const firstPeople = rig.repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
+      card.metadata?.ambientPopulation === true &&
+      card.worldState?.locationId === rig.locationId
+    );
+    assert.equal(firstPeople.length, 2, 'the initial opening should create the existing population policy count');
+
+    // Construct a new repository against the same isolated persistence file, matching
+    // the process-restart/load path rather than checking only an in-memory runtime snapshot.
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedRun = reloadedRepository.getStoryRun(storyId);
+    assert.ok(reloadedRun, 'StoryRun should exist after repository reconstruction');
+    assert.equal(reloadedRun!.openingScene?.narrativeText, firstOpening.narrativeText, 'opening scene text should survive reload');
+
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId) as any;
+    assert.equal(reloadedLocation?.population?.status, 'UNKNOWN', 'authored occupancy should survive reload');
+    assert.equal(reloadedLocation?.population?.expectedPopulation, 'VARIABLE');
+
+    const reloadedPeople = reloadedRepository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
+      card.metadata?.ambientPopulation === true &&
+      card.worldState?.locationId === rig.locationId
+    );
+    assert.deepEqual(
+      reloadedPeople.map((card: any) => card.id).sort(),
+      firstPeople.map((card: any) => card.id).sort(),
+      'canonical ambient entity IDs and count should survive repository reconstruction',
+    );
+    assert.ok(
+      reloadedRun!.runtimeState?.entities?.cards?.some((card: any) =>
+        card.metadata?.ambientPopulation === true && card.worldState?.locationId === rig.locationId
+      ),
+      'the durable StoryRun snapshot should retain canonical ambient entities',
+    );
+
+    const orchestrator = reloadedRepository.getAiOrchestrator();
+    const originalExecute = orchestrator.executeTaskGeneration;
+    (orchestrator as any).executeTaskGeneration = async (task: string, prompt: string, _system: string, options: any) => {
+      const people = reloadedRepository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
+        card.metadata?.ambientPopulation === true &&
+        card.worldState?.locationId === rig.locationId &&
+        card.worldState?.isAlive !== false &&
+        card.worldState?.presence === 'present'
+      );
+      const peopleDescription = people.map((person: any) =>
+        `${person.name} is ${person.worldState.currentActivity || person.behavior?.defaultBehavior || 'going about their work'}.`
+      ).join(' ');
+      const prose = [
+        `At Cycle 42, Hero Vael stands within Elysium Solar Citadel, where footsteps and conversation carry through the pale stone arcade.`,
+        `${peopleDescription} The recorded activity gives the traveler concrete details to observe without deciding whom Vael approaches.`,
+        'Vael keeps the question of available work open, leaving the next consequential choice to the player.',
+      ].join('\\n\\n');
+      const text = JSON.stringify({
+        narrativeText: prose,
+        structuredEvents: [
+          { type: 'location', text: 'Elysium Solar Citadel' },
+          { type: 'normal', text: peopleDescription },
+          { type: 'action', text: 'Hero Vael pauses to observe the activity already present.' },
+          { type: 'normal', text: 'The question of available work remains unresolved.' },
+        ],
+      });
+      const validation = typeof options?.validateResponse === 'function' ? options.validateResponse(text) : { valid: true };
+      if (!validation?.valid) throw new Error(validation?.errorReason || 'Reload fixture output failed validation.');
+      return { text, source: 'AI_PRIMARY', providerId: 'test-fixture', modelId: 'opening-reload-fixture', attempts: 1, attemptsTrail: [] };
+    };
+
+    try {
+      const regenerated = await OpeningSceneService.generateOpeningScene({
+        storyId,
+        worldRepo: reloadedRepository,
+        forceRegenerate: true,
+        allowDeterministicFallback: true,
+      });
+      const peopleAfterRegeneration = reloadedRepository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
+        card.metadata?.ambientPopulation === true &&
+        card.worldState?.locationId === rig.locationId
+      );
+      assert.deepEqual(
+        peopleAfterRegeneration.map((card: any) => card.id).sort(),
+        firstPeople.map((card: any) => card.id).sort(),
+        'forcing an opening regeneration must not create duplicate ambient residents',
+      );
+      assert.ok(firstPeople.every((person: any) => regenerated.narrativeText.includes(person.name)), 'regenerated prose should use the reloaded canonical residents');
+    } finally {
+      (orchestrator as any).executeTaskGeneration = originalExecute;
+    }
+  });
+});
+

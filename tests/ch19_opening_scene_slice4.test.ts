@@ -680,7 +680,7 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // environment-only sentences that never depict the situation or any actor.
   const environmentOnlyTurn = JSON.stringify({
     narrative: [
-      'You circle the arena floor and watch the private viewing box.',
+      'The arena floor stretches out beneath the punishing sun while the private viewing box looms above.',
       'The sun hammers the pale sand of the fighting pit, bleaching it bone-white beneath a merciless sky.',
       'Basalt walls rise sheer around the arena floor, iron rails gleaming dully where they crown the tiered stone benches.',
       'Sunlight glints along the iron rails above the tiered benches.',
@@ -696,8 +696,8 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // A substance-first rewrite the same model could return on the review call:
   const improvedTurn = JSON.stringify({
     narrative: [
-      'You circle the floor of The Obsidian Arena with your weight low, eyes pinned to the private viewing box above the tiered benches where the high-level target watches from behind caste enforcers.',
-      'One enforcer leans over the iron rail to speak into his ear, and the target shifts behind the rail without standing.',
+      'You walk along the floor of The Obsidian Arena with your weight low, eyes pinned to the private viewing box above the tiered benches where the high-level target watches from behind caste enforcers.',
+      'One enforcer leans over the iron rail to lean in close, and the target shifts behind the rail without standing.',
       'You mark the number of enforcers around the box and the distance from your position to the base of the rail, dust from the sand gritting under your boots.',
       'The murmur of the crowd changes pitch around the pit, and you cannot yet tell whether it is for you or for him.',
     ],
@@ -729,7 +729,7 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
 
   const result = await orchestrator.generateNarrativeOnly({
     storyId: storyIdG,
-    playerAction: 'Circle the arena floor and watch the private viewing box.',
+    playerAction: 'Walk along the arena floor and watch the private viewing box.',
     hardTokenBudget: 1100,
     maxRetries: 1,
   });

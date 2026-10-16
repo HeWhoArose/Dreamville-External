@@ -9074,7 +9074,7 @@ export class MultiModelOrchestrator {
               'Location: ' + currentSituation.location.name + ' (' + currentSituation.location.id + ')',
               'Visible current-scene events (canonical or projected): ' + fallbackVisibleSceneEventContext,
               'Fallback grounding rule: preserve committed current-location events; do not infer events from other locations.',
-            ].join('\\n\\n'),
+            ].join('\n\n'),
             styleInstruction: '',
             totalTokens: assembledContext.totalTokens,
             narrativeProviderHandoff: undefined,

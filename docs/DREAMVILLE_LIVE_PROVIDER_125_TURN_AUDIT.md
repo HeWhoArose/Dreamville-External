@@ -1,19 +1,25 @@
 # Player-Run 125-Turn Acceptance Test — Evidence and Checklist
 
-**Audit date:** 2026-10-16  
-**Latest verified code-bearing integration commit:** `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` (PR #76; open, not merged)
+**Audit date:** 2026-10-17  
+**Latest verified code-bearing integration commit:** `84dcec5fe1fd5eec71ac7acf9824fb2401a82885` (PR #76; open, not merged)
 
 ## Current verdict
 
-The code-bearing integration commit `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` has green exact-head automated checks, but a fresh 125-turn run with real provider calls has **not** been verified on this candidate. Do not describe the release as fully live-validated.
+The latest code-bearing integration commit `84dcec5fe1fd5eec71ac7acf9824fb2401a82885` has green exact-head automated checks, but a fresh 125-turn run with real provider calls has **not** been verified on this candidate. Do not describe the release as fully live-validated.
 
-At the recorded integration head, GitHub Actions completed:
-- `npm test`: 1,523 tests passed, 0 failed.
+At this verified integration head, GitHub Actions completed:
+- `npm test`: **1,524 tests passed, 0 failed** across 117 suites.
 - Release-contract verification: passed.
 - Type-check: passed.
+- Lint: passed.
 - Production build: passed.
 
-The release gate and both verification workflows succeeded on the exact code-bearing commit `13f9b8ce3f7463da1e8d23f69e824aa9b052a374`. These results establish automated repository correctness at that commit; they do not establish provider availability, live-model quality, or hands-on UI behavior.
+Exact-head CI evidence:
+- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818963)
+- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818965)
+- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818981)
+
+These results establish automated repository correctness at this commit; they do not establish real-provider availability, live-model quality, or hands-on UI behavior. The real-provider 125-turn run is intentionally deferred until code integrations have finished, then must be performed as a player-run acceptance check.
 
 ## Two different 125-turn checks — do not conflate them
 

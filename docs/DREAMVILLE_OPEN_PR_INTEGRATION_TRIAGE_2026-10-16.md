@@ -2,15 +2,21 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Last verified code-bearing integration commit:** `13f9b8ce3f7463da1e8d23f69e824aa9b052a374`  
-**Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2` (check the live PR head and exact-head CI before release).  
+**Latest verified code-bearing integration commit (2026-10-17):** `84dcec5fe1fd5eec71ac7acf9824fb2401a82885`  
+**Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2`.  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. Both verification workflows and the release gate passed on this exact commit: **1,523/1,523 tests**, zero failures, release-contract verification, lint/type-check, and production build.
+**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on `84dcec5f`: **1,524/1,524 tests**, 117 suites, zero failures; release-contract verification, lint, type-check, and production build passed.
 
-Evidence:
-- [Release gate — 91fe154](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229176)
-- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229050)
-- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229076)
+Exact-head evidence:
+- [Release gate — 39010818963](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818963)
+- [Verification workflow 1 — 39010818965](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818965)
+- [Verification workflow 2 — 39010818981](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818981)
+
+**Regression that was fixed:** commit `603bdc69` added opening-scene presentation validation but the Slice 4 test stub replaced the real orchestrator with an object exposing only `executeTaskGeneration`. The new validator therefore could not run in the mocked opening path, causing two valid-opening acceptance assertions to fail. Commit `84dcec5f` preserves the real orchestrator methods and mocks only provider generation. The full suite now passes.
+
+**Live-provider boundary:** these green CI results do not certify the separate 125-turn real-Gemini acceptance run. That run remains deferred to player execution after integrations are complete. Do not merge PR #76 without the expected review/merge decision.
+
+**Previous checkpoint:** `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` passed the then-current 1,523-test suite on 2026-10-16; it has been superseded by the exact-head verification above.
 
 ## 1. Consolidated into the current integration candidate
 

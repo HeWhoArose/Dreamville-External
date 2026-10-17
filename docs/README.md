@@ -1,10 +1,10 @@
 # Dreamville Documentation Index — Read This Before Planning or Coding
 
 **Index status:** CURRENT  
-**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and current integration documentation head `bc94244af08d4634b7a4e86422479e91773ad528` (2026-10-17); latest verified code-bearing candidate is `84dcec5fe1fd5eec71ac7acf9824fb2401a82885`. Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
+**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and current integration documentation head `bc94244af08d4634b7a4e86422479e91773ad528` (2026-10-17); latest verified code-bearing candidate is `adf3059a583f0aedb51aa61a81dbbbfde51533ae`. Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
 **Purpose:** tell future developers/AI agents which documents are authoritative, what is complete, what is still planned, and which files must not be used as implementation instructions.
 
-## Current integration status — 2026-10-16
+## Current integration status — 2026-10-17
 
 The latest verified code-bearing runtime integration candidate is commit `adf3059a583f0aedb51aa61a81dbbbfde51533ae` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. Its exact-head release gate and both verification workflows passed: **1,527/1,527 tests** across 117 suites, zero failures, release-contract verification, lint/TypeScript check, and production build.
 

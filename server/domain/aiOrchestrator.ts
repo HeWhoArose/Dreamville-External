@@ -7848,9 +7848,28 @@ export class MultiModelOrchestrator {
       return { valid: false, errorReason: metaLeakage.errorReason || 'Opening narrative failed presentation meta-leakage validation.' };
     }
 
-    const temporalContinuity = this.validateNarrativeTemporalContinuity(narration, repository, params.storyId);
-    if (!temporalContinuity.valid) {
-      return { valid: false, errorReason: temporalContinuity.errorReason || 'Opening narrative failed canonical temporal-continuity validation.' };
+    // Opening prose is setup, not a turn advancing the world clock. The shared
+    // turn-level temporal guard uses broad word matching (e.g. "night" or "dawn")
+    // that can reject otherwise valid character backstory or figurative language.
+    // Keep opening validation strict for explicit environmental time-of-day claims,
+    // without treating every occurrence of a time word as a contradiction.
+    const clock = repository.getWorldClock(params.storyId).getState();
+    const phase = clock.currentDayPhase;
+    const output = narration.toLowerCase();
+    const explicitClaims: Record<string, string[]> = {
+      Predawn: ['sunset light', 'dusk light', 'afternoon light', 'midday light', 'noon light', 'night light', 'midnight light'],
+      Dawn: ['sunset light', 'dusk light', 'afternoon light', 'midday light', 'noon light', 'midnight light'],
+      Morning: ['first light', 'predawn light', 'sunset light', 'dusk light', 'midnight light', 'late evening light'],
+      Afternoon: ['first light', 'daybreak light', 'dawn light', 'predawn light', 'sunrise light', 'midnight light', 'early morning light'],
+      Dusk: ['first light', 'daybreak light', 'dawn light', 'predawn light', 'sunrise light', 'midday light', 'noon light', 'early morning light'],
+      Night: ['first light', 'daybreak light', 'dawn light', 'sunrise light', 'morning light', 'afternoon light', 'midday light', 'noon light', 'sunset light'],
+    };
+    const contradiction = (explicitClaims[phase] || []).find((claim) => output.includes(claim));
+    if (contradiction) {
+      return {
+        valid: false,
+        errorReason: `Opening narration temporal-continuity guard rejected output: canonical world time is ${phase} at ${String(clock.timestamp.hour).padStart(2, '0')}:${String(clock.timestamp.minute).padStart(2, '0')}, so the opening cannot assert "${contradiction}" without a canonical time change.`,
+      };
     }
 
     return { valid: true };

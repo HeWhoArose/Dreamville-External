@@ -1,23 +1,22 @@
 # Player-Run 125-Turn Acceptance Test — Evidence and Checklist
 
 **Audit date:** 2026-10-17  
-**Latest verified code-bearing integration commit:** `adf3059a583f0aedb51aa61a81dbbbfde51533ae` (PR #76; open, not merged)
+**Latest code-bearing integration commit:** `c793b043dfe1f042721a85cb1b1309ea7198c236` (PR #76; open, not merged)
 
 ## Current verdict
 
-The latest code-bearing integration commit `adf3059a583f0aedb51aa61a81dbbbfde51533ae` has green exact-head automated checks, but a fresh 125-turn run with real provider calls has **not** been verified on this candidate. Do not describe the release as fully live-validated.
+The latest code-bearing integration commit `c793b043dfe1f042721a85cb1b1309ea7198c236` passed the exact-head release gate and one verification workflow. A second verification workflow for the same SHA was still in progress at the last check. A fresh 125-turn run with real provider calls has **not** been verified on this candidate. Do not describe the release as fully live-validated.
 
-At this verified integration head, GitHub Actions completed:
+Completed exact-head checks:
 - `npm test`: **1,527 tests passed, 0 failed** across 117 suites.
 - Release-contract verification: passed.
 - Type-check: passed.
 - Lint: passed.
 - Production build: passed.
 
-Exact-head CI evidence:
-- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240902)
-- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240903)
-- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240888)
+Evidence:
+- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078633)
+- [Verification workflow](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078554)
 
 These results establish automated repository correctness at this commit; they do not establish real-provider availability, live-model quality, or hands-on UI behavior. The real-provider 125-turn run is intentionally deferred until code integrations have finished, then must be performed as a player-run acceptance check.
 

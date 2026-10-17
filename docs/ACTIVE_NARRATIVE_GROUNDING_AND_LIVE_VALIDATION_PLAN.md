@@ -20,19 +20,20 @@
 
 ## Integration status update — 2026-10-17
 
-The latest exact-head automated verification is `adf3059a583f0aedb51aa61a81dbbbfde51533ae` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open and unmerged). This supersedes the earlier 2026-10-16 code-bearing checkpoint and its 1,523-test count.
+The latest code-bearing integration candidate is `c793b043dfe1f042721a85cb1b1309ea7198c236` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open and unmerged). This commit fixes the remaining work-availability episode-projection regression: the episode projection now preserves the canonical title from the already-validated research block rather than preferring a potentially stale current-situation title.
 
+Exact-head automated verification completed successfully in the release gate and one verification workflow:
 - Full suite: **1,527/1,527 tests passed**, zero failures, 117 suites.
 - Release-contract verification: passed.
 - Type-check: passed.
 - Lint: passed.
 - Production build: passed.
-- Opening-scene acceptance regression: fixed by preserving the real orchestrator validation methods in the test double while mocking only `executeTaskGeneration`.
 
-Evidence for the exact verified commit:
-- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240902)
-- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240903)
-- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240888)
+Evidence:
+- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078633)
+- [Verification workflow](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078554)
+
+A second verification workflow for the same commit was still in progress at the last check. Re-check the current PR head and CI before release.
 
 **Still not passed:** Phase 1 live-model/player validation. Automated tests, including the controlled mock-provider HTTP marathon, are not proof of actual provider-backed narration quality. The real-provider 125-turn run remains intentionally deferred to the player after code integration is complete.
 

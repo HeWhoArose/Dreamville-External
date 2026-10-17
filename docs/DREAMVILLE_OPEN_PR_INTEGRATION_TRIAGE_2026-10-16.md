@@ -2,15 +2,14 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Latest verified code-bearing integration commit (2026-10-17):** `adf3059a583f0aedb51aa61a81dbbbfde51533ae`  
+**Latest verified code-bearing integration commit (2026-10-17):** `c793b043dfe1f042721a85cb1b1309ea7198c236`  
 **Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2`.  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on `adf3059a`: **1,527/1,527 tests**, zero failures; release-contract verification, lint, type-check, and production build passed.
+**Status:** PR #76 remains open and unmerged. The exact-head release gate and one verification workflow passed on `c793b043`: **1,527/1,527 tests**, zero failures; release-contract verification, type-check, lint, and production build passed. A second duplicate verification workflow was still in progress at the last check; do not interpret that pending run as a failure or a pass.
 
 Exact-head evidence:
-- [Release gate — 39012240902](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240902)
-- [Verification workflow 1 — 39012240903](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240903)
-- [Verification workflow 2 — 39012240888](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240888)
+- [Release gate — 39013078633](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078633)
+- [Verification workflow — 39013078554](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078554)
 
 **Latest runtime grounding regression coverage:** the candidate now verifies work-availability questions against canonical opportunity postings only. A result is treated as an available local opportunity only when it is an explicitly categorized posting, has canonical status `OPEN`, and is attached to the player's exact current location. Remote postings and closed contracts cannot be presented as locally available work; when no eligible posting exists, the plan preserves uncertainty. StoryBeat focus and unresolved-thread selection use the same eligible evidence for these questions. Two focused Phase 4 integration tests cover both the no-eligible-posting and valid-local-posting cases.
 

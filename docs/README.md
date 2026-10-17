@@ -1,29 +1,19 @@
 # Dreamville Documentation Index — Read This Before Planning or Coding
 
 **Index status:** CURRENT  
-**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and current integration documentation head `bc94244af08d4634b7a4e86422479e91773ad528` (2026-10-17); latest verified code-bearing candidate is `adf3059a583f0aedb51aa61a81dbbbfde51533ae`. Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
+**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and current integration candidate `c793b043dfe1f042721a85cb1b1309ea7198c236` (2026-10-17). Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
 **Purpose:** tell future developers/AI agents which documents are authoritative, what is complete, what is still planned, and which files must not be used as implementation instructions.
 
 ## Current integration status — 2026-10-17
 
-The latest verified code-bearing runtime integration candidate is commit `adf3059a583f0aedb51aa61a81dbbbfde51533ae` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. Its exact-head release gate and both verification workflows passed: **1,527/1,527 tests** across 117 suites, zero failures, release-contract verification, lint/TypeScript check, and production build.
+The latest code-bearing runtime integration candidate is commit `c793b043dfe1f042721a85cb1b1309ea7198c236` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. The exact-head release gate and one verification workflow passed: **1,527/1,527 tests** across 117 suites, zero failures; release-contract verification, lint/type-check, and production build passed. A second verification workflow for this SHA was still in progress at the last check.
 
 Exact-head evidence:
-- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240902)
-- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240903)
-- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240888)
+- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078633)
+- [Verification workflow](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078554)
 
-The later documentation checkpoint does not alter the verified code. Always check CI for the actual current PR #76 head before release.
+The real-provider 125-turn player acceptance test remains deferred and is not covered by these mocked/automated checks. Always check CI for the actual current PR #76 head before release.
 
-Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727238), [verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727068), [second verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727299).
-
-PR #76 remains open and unmerged. The deterministic/mock 125-turn HTTP integration remains in CI. The separate 125-turn real-provider play session is deliberately deferred to the player after integrations are complete, to avoid repetitive Gemini/provider token and quota usage in CI. It is a manual acceptance step, not an automated gate.
-
-The forensic session recorder now captures unexpected snapshot changes between recorder boundaries as explicit `AUXILIARY` patches; hashes still cover the complete lossless snapshot and the new integrity regression rejects runtime-state patch tampering. The current recorder tests and long-session CI no longer emit state-before mismatches for `default_story` or the marathon. See the latest open-PR triage for source-level evidence and remaining gaps.
-
-Use [the open-PR integration triage](DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md) before adopting any older open branch: PRs #69–#75 are consolidated in PR #76, while older recording and long-session branches need scoped review rather than blind merges.
-
-The current root Phase 20 and Phase 21 documents remain active integration/status summaries; their counterparts under `docs/outdated/phase-17-to-24/` are historical records and must not override the current summary.
 
 ## 1. Source-of-truth order
 

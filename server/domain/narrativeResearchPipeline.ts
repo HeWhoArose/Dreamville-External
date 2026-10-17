@@ -1,7 +1,7 @@
 import type { WorldRepository } from '../repositories/worldRepository';
 import { WorkingContextEngine } from './workingContextEngine';
 import { formatCanonicalTimestamp } from './deterministicRng';
-import { CurrentSituationBuilder, isAvailableLocationScopedOpportunityThread, type CurrentSituation } from './currentSituation';
+import { CurrentSituationBuilder, isAvailableLocationScopedOpportunityThread, isLocationScopedOpportunityThread, type CurrentSituation } from './currentSituation';
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
@@ -31,6 +31,8 @@ export interface NarrativeResearchBlock {
 	expiration: NarrativeResearchExpiration;
 	estimatedTokens: number;
 	content: string;
+	/** Set only after category, OPEN status, and exact current-location checks pass. */
+	availableLocalOpportunity?: boolean;
 }
 
 export interface NarrativeResearchBudgets {
@@ -454,6 +456,8 @@ export class NarrativeResearchPipeline {
 				expiration: 'UNTIL_CHANGED',
 				relevanceScore: 0.82 + Math.min(0.12, overlap * 0.12),
 				content: threadText,
+				// Candidate already passed canonical category/status/location checks above.
+				availableLocalOpportunity: isLocationScopedOpportunityThread(thread),
 			}, queryTokens);
 		}
 

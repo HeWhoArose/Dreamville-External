@@ -136,6 +136,16 @@ export class StoryBeatDirector {
 			...(intent.impliedTargets || []).map((target) => target.id || ''),
 		]);
 		const groundedTargetNames = unique(targetIds.map((id) => visibleEntityNameById(situation, id) || '').concat(targets));
+		const infoRequestText = [intent.originalText, intent.informationGoal].filter(Boolean).join(' ');
+		const workAvailabilityGoal =
+			/\b(?:jobs?|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|work orders?)\b/i.test(infoRequestText) &&
+			/\b(?:available|availability|currently open|open postings?|posted|listed|offered|what work|what jobs?|find work|find jobs?|look for work|ask around for|check what(?:'s| is) available|see what(?:'s| is) available)\b/i.test(infoRequestText);
+		const groundedWorkPostingFocus = workAvailabilityGoal
+			? (research?.blocks || []).filter((block) => block.kind === 'THREAD' && block.availableLocalOpportunity === true).map((block) => block.content)
+			: [];
+		const sceneThreadFocus = workAvailabilityGoal
+			? groundedWorkPostingFocus
+			: (situation.openThreads || []).slice(0, 1).map((thread) => 'Active thread: ' + thread.title);
 		const researchChanges = research?.blocks
 			.filter((block) => block.kind === 'CONSEQUENCE' || block.kind === 'SCENE' || block.kind === 'ENTITY')
 			.slice(0, 4)
@@ -175,7 +185,7 @@ export class StoryBeatDirector {
 		const narrativeFocus = unique([
 			meaningfulChange,
 			...groundedTargetNames,
-			...(situation.openThreads || []).slice(0, 1).map((thread) => 'Active thread: ' + thread.title),
+			...sceneThreadFocus,
 			...(newInformation.length ? ['newly available information'] : []),
 			...(intent.observationIntent ? ['what the player can currently perceive'] : []),
 			...(intent.movementIntent ? ['the resolved change in position'] : []),
@@ -184,7 +194,9 @@ export class StoryBeatDirector {
 			situation.location.name,
 			situation.worldTime,
 			...groundedTargetNames,
-			...(situation.openThreads || []).slice(0, 2).map((thread) => thread.title),
+			...(workAvailabilityGoal
+				? groundedWorkPostingFocus
+				: (situation.openThreads || []).slice(0, 2).map((thread) => thread.title)),
 		]).slice(0, 8);
 		const mustMention = unique([
 			...(groundedTargetNames.length ? groundedTargetNames : []),

@@ -323,11 +323,17 @@ const OPEN_OPPORTUNITY_STATUSES = new Set(['OPEN']);
  * location. This predicate intentionally leaves ordinary plot/quest threads
  * alone; it does not invent, promote, or move postings.
  */
-export function isAvailableLocationScopedOpportunityThread(raw: unknown, currentLocationId: string): boolean {
-	if (!raw || typeof raw !== 'object') return true;
+export function isLocationScopedOpportunityThread(raw: unknown): boolean {
+	if (!raw || typeof raw !== 'object') return false;
 	const candidate = raw as Record<string, unknown>;
 	const category = normalizeText(candidate.category).toUpperCase().replace(/[\s-]+/g, '_');
-	if (!LOCATION_SCOPED_OPPORTUNITY_CATEGORIES.has(category)) return true;
+	return LOCATION_SCOPED_OPPORTUNITY_CATEGORIES.has(category);
+}
+
+export function isAvailableLocationScopedOpportunityThread(raw: unknown, currentLocationId: string): boolean {
+	if (!raw || typeof raw !== 'object') return true;
+	if (!isLocationScopedOpportunityThread(raw)) return true;
+	const candidate = raw as Record<string, unknown>;
 	const status = normalizeText(candidate.status || candidate.state).toUpperCase().replace(/[\s-]+/g, '_');
 	if (!OPEN_OPPORTUNITY_STATUSES.has(status)) return false;
 	const postingLocationId = normalizeText(candidate.locationId);

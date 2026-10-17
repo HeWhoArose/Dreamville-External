@@ -129,11 +129,27 @@ function entityTargets(situation: CurrentSituation, intent: PlayerIntent): Inten
 	return [];
 }
 
+function isWorkAvailabilityGoal(intent: PlayerIntent): boolean {
+	const text = [intent.originalText, intent.informationGoal].filter(Boolean).join(' ');
+	const workTopic = /\b(?:jobs?|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|work orders?)\b/i.test(text);
+	const availabilityRequest = /\b(?:available|availability|currently open|open postings?|posted|listed|offered|what work|what jobs?|find work|find jobs?|look for work|ask around for|check what(?:'s| is) available|see what(?:'s| is) available)\b/i.test(text);
+	return workTopic && availabilityRequest;
+}
+
 function informationReveals(intent: PlayerIntent, research: NarrativeResearchResult): InformationReveal[] {
 	if (!intent.informationGoal && intent.interactionMode !== 'PASSIVE_OBSERVATION') return [];
-	const goalTokens = clean(intent.informationGoal || intent.originalText).toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4);
-	const selected = research.blocks
-		.filter((block) => block.kind === 'SCENE' || block.kind === 'KNOWLEDGE' || block.kind === 'MEMORY' || block.kind === 'THREAD')
+	const goalText = clean(intent.informationGoal || intent.originalText);
+	const workAvailabilityGoal = isWorkAvailabilityGoal(intent);
+	const goalTokens = goalText.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4);
+	const candidates = research.blocks.filter((block) =>
+		block.kind === 'SCENE' || block.kind === 'KNOWLEDGE' || block.kind === 'MEMORY' || block.kind === 'THREAD'
+	);
+	// Scene details, rumors and unrelated threads cannot answer a work-availability query.
+	// The research pipeline only marks a block after checking canonical category/status/location.
+	const answerCandidates = workAvailabilityGoal
+		? candidates.filter((block) => block.kind === 'THREAD' && block.availableLocalOpportunity === true)
+		: candidates;
+	const selected = answerCandidates
 		.map((block) => {
 			const haystack = (block.content + ' ' + block.reason).toLowerCase();
 			const overlap = goalTokens.filter((token) => haystack.includes(token)).length;
@@ -152,13 +168,19 @@ function informationReveals(intent: PlayerIntent, research: NarrativeResearchRes
 	return selected.map(({ block }) => ({
 		topic: intent.informationGoal || 'the current information goal',
 		sourceBlockIds: [block.id],
-		presentation: block.kind === 'MEMORY' || /rumou?r|hearsay|whisper|gossip/i.test(block.content) ? 'RUMOR' : block.kind === 'KNOWLEDGE' ? 'FACT' : 'UNCERTAIN',
-		requirement: block.kind === 'KNOWLEDGE' ? 'REVEAL' : 'PRESERVE_UNCERTAINTY',
+		presentation: block.availableLocalOpportunity === true
+			? 'FACT'
+			: block.kind === 'MEMORY' || /rumou?r|hearsay|whisper|gossip/i.test(block.content) ? 'RUMOR' : block.kind === 'KNOWLEDGE' ? 'FACT' : 'UNCERTAIN',
+		requirement: block.availableLocalOpportunity === true || block.kind === 'KNOWLEDGE' ? 'REVEAL' : 'PRESERVE_UNCERTAINTY',
 	}));
 }
 
-function topThread(research: NarrativeResearchResult): string | undefined {
-	return research.blocks.filter((block) => block.kind === 'THREAD').sort((a, b) => b.relevanceScore - a.relevanceScore)[0]?.content;
+function topThread(intent: PlayerIntent, research: NarrativeResearchResult): string | undefined {
+	const threads = research.blocks.filter((block) => block.kind === 'THREAD');
+	if (isWorkAvailabilityGoal(intent)) {
+		return threads.filter((block) => block.availableLocalOpportunity === true).sort((a, b) => b.relevanceScore - a.relevanceScore)[0]?.content;
+	}
+	return threads.sort((a, b) => b.relevanceScore - a.relevanceScore)[0]?.content;
 }
 
 export class NarrativeDirector {
@@ -219,7 +241,7 @@ export class NarrativeDirector {
 			informationToReveal: informationReveals(intent, research).slice(0, 4),
 			entitiesToReact: entityTargets(situation, intent),
 			npcCognition: npcCognition,
-			unresolvedThread: topThread(research),
+			unresolvedThread: topThread(intent, research),
 			continuityRequirements: continuityRequirements.slice(0, 10),
 			forbiddenAssumptions: forbiddenAssumptions.slice(0, 8),
 			stateEffectsExpected: stateEffectsExpected.slice(0, 4),

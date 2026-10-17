@@ -9,9 +9,9 @@
 The latest verified code/test head is `15f1477599c0e09695e752789e31cc9819f3101a` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head workflows passed: **1,530/1,530 tests across 117 suites**, zero failures; release contracts, lint, type-check, and production build passed. This checkpoint also verifies that opening prose must contain a canonical scene anchor while distinct, canonically grounded opening prose remains eligible.
 
 Exact-head evidence:
-- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070577)
-- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070659)
-- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070612)
+- [Release gate — 39018070577](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070577)
+- [Verification workflow 1 — 39018070659](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070659)
+- [Verification workflow 2 — 39018070612](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070612)
 
 The availability-query regression now verifies the final prompt, not only intermediate research and planning: eligible canonical OPEN postings at the current location can reach the model prompt; unsupported or unrelated rumours cannot. The model-routing regression also asserts Gemini 3.8 Flash before Gemini 2.5 Flash with the deterministic emergency floor last.
 The real-provider 125-turn player acceptance test remains deferred and is not covered by these mocked/automated checks. Always check CI for the actual current PR #76 head before release.

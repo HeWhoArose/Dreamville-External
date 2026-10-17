@@ -31,9 +31,9 @@ The latest code-bearing verification head is `15f1477599c0e09695e752789e31cc9819
 - Model-route regression: Gemini 3.8 Flash precedes Gemini 2.5 Flash; deterministic emergency fallback remains the final floor.
 
 Exact-head CI evidence:
-- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840025)
-- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013839997)
-- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840033)
+- [Release gate — 39018070577](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070577)
+- [Verification workflow 1 — 39018070659](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070659)
+- [Verification workflow 2 — 39018070612](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070612)
 
 **Still not passed:** Phase 1 live-model/player validation. Automated tests do not prove real provider-backed narration quality. The real-provider 125-turn run remains intentionally deferred to the player after code integration is complete.
 ---

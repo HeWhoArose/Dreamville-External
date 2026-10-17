@@ -15,9 +15,9 @@ Completed exact-head checks:
 - Production build: passed.
 
 Exact-head CI evidence:
-- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070577)
-- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070659)
-- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070612)
+- [Release gate — 39018070577](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070577)
+- [Verification workflow 1 — 39018070659](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070659)
+- [Verification workflow 2 — 39018070612](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070612)
 
 These results establish automated repository correctness at this commit; they do not establish real-provider availability, live-model quality, or hands-on UI behavior. The real-provider 125-turn run is intentionally deferred until code integrations have finished, then must be performed as a player-run acceptance check.
 

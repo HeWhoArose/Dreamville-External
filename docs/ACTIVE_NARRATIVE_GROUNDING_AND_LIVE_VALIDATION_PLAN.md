@@ -20,9 +20,9 @@
 
 ## Integration status update — 2026-10-17
 
-The latest exact-head automated verification is `84dcec5fe1fd5eec71ac7acf9824fb2401a82885` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open and unmerged). This supersedes the earlier 2026-10-16 code-bearing checkpoint and its 1,523-test count.
+The latest exact-head automated verification is `adf3059a583f0aedb51aa61a81dbbbfde51533ae` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open and unmerged). This supersedes the earlier 2026-10-16 code-bearing checkpoint and its 1,523-test count.
 
-- Full suite: **1,524/1,524 tests passed**, zero failures, 117 suites.
+- Full suite: **1,527/1,527 tests passed**, zero failures, 117 suites.
 - Release-contract verification: passed.
 - Type-check: passed.
 - Lint: passed.
@@ -30,9 +30,9 @@ The latest exact-head automated verification is `84dcec5fe1fd5eec71ac7acf9824fb2
 - Opening-scene acceptance regression: fixed by preserving the real orchestrator validation methods in the test double while mocking only `executeTaskGeneration`.
 
 Evidence for the exact verified commit:
-- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818963)
-- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818965)
-- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818981)
+- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240902)
+- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240903)
+- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240888)
 
 **Still not passed:** Phase 1 live-model/player validation. Automated tests, including the controlled mock-provider HTTP marathon, are not proof of actual provider-backed narration quality. The real-provider 125-turn run remains intentionally deferred to the player after code integration is complete.
 

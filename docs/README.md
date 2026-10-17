@@ -1,12 +1,19 @@
 # Dreamville Documentation Index — Read This Before Planning or Coding
 
 **Index status:** CURRENT  
-**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and current integration candidate `50061df2565a7d1d37ce013cf524228aae8ba8a8` (2026-10-16). Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
+**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and current integration documentation head `bc94244af08d4634b7a4e86422479e91773ad528` (2026-10-17); latest verified code-bearing candidate is `84dcec5fe1fd5eec71ac7acf9824fb2401a82885`. Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
 **Purpose:** tell future developers/AI agents which documents are authoritative, what is complete, what is still planned, and which files must not be used as implementation instructions.
 
 ## Current integration status — 2026-10-16
 
-The latest verified runtime integration candidate is commit `91fe1545b27d9d19d1b900f5050a3135f6342802` on draft PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. Its exact-head release gate and both verification workflows passed: **1,517/1,517 tests**, zero failures, release-contract verification, lint/TypeScript check, and production build.
+The latest verified code-bearing runtime integration candidate is commit `84dcec5fe1fd5eec71ac7acf9824fb2401a82885` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. Its exact-head release gate and both verification workflows passed: **1,524/1,524 tests** across 117 suites, zero failures, release-contract verification, lint/TypeScript check, and production build.
+
+Exact-head evidence:
+- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818963)
+- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818965)
+- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818981)
+
+The later documentation checkpoint does not alter the verified code. Always check CI for the actual current PR #76 head before release.
 
 Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727238), [verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727068), [second verification](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38941727299).
 
@@ -14,7 +21,7 @@ PR #76 remains open and unmerged. The deterministic/mock 125-turn HTTP integrati
 
 The forensic session recorder now captures unexpected snapshot changes between recorder boundaries as explicit `AUXILIARY` patches; hashes still cover the complete lossless snapshot and the new integrity regression rejects runtime-state patch tampering. The current recorder tests and long-session CI no longer emit state-before mismatches for `default_story` or the marathon. See the latest open-PR triage for source-level evidence and remaining gaps.
 
-Use [the open-PR integration triage](DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md) before adopting any older open branch: PRs #70–#75 are consolidated in PR #76, while older recording and long-session branches need scoped review rather than blind merges.
+Use [the open-PR integration triage](DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md) before adopting any older open branch: PRs #69–#75 are consolidated in PR #76, while older recording and long-session branches need scoped review rather than blind merges.
 
 The current root Phase 20 and Phase 21 documents remain active integration/status summaries; their counterparts under `docs/outdated/phase-17-to-24/` are historical records and must not override the current summary.
 

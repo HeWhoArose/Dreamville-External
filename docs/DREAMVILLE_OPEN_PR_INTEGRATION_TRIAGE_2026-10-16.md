@@ -2,14 +2,14 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Latest verified code-bearing integration commit (2026-10-17):** `c793b043dfe1f042721a85cb1b1309ea7198c236`  
+**Latest verified code-bearing integration commit (2026-10-17):** `8a121e433bc461bef281e3dadffff841333cf6b7`  
 **Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2`.  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. The exact-head release gate and one verification workflow passed on `c793b043`: **1,527/1,527 tests**, zero failures; release-contract verification, type-check, lint, and production build passed. A second duplicate verification workflow was still in progress at the last check; do not interpret that pending run as a failure or a pass.
+**Status:** PR #76 remains open and unmerged. The exact-head release gate and one verification workflow passed on `8a121e43`: **1,528/1,528 tests**, zero failures; release-contract verification, type-check, lint, and production build passed. A second verification workflow for the same SHA was still in progress at the last check.
 
 Exact-head evidence:
-- [Release gate — 39013078633](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078633)
-- [Verification workflow — 39013078554](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013078554)
+- [Release gate — 39013470597](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013470597)
+- [Verification workflow — 39013470624](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013470624)
 
 **Latest runtime grounding regression coverage:** the candidate now verifies work-availability questions against canonical opportunity postings only. A result is treated as an available local opportunity only when it is an explicitly categorized posting, has canonical status `OPEN`, and is attached to the player's exact current location. Remote postings and closed contracts cannot be presented as locally available work; when no eligible posting exists, the plan preserves uncertainty. StoryBeat focus and unresolved-thread selection use the same eligible evidence for these questions. Two focused Phase 4 integration tests cover both the no-eligible-posting and valid-local-posting cases.
 
@@ -32,6 +32,14 @@ PRs #69–#75 were separate branches based on the same earlier main commit. Thei
 | #73 | Gemini narration route order | The configured route in the integrated candidate retains the emergency floor and places Gemini 3.8 before Gemini 2.5. |
 | #74 | Preserve explicit destination and Continue travel intent | Movement helper and continuation regressions are present in the integrated candidate. |
 | #75 | Phase 12 fixture/assertion alignment | Relevant test adjustments are included in the integrated candidate. |
+
+### File-level reconciliation notes
+
+- PR #70's `tests/turn-integration-harness.phase18.test.ts` is already present unchanged on `main`; it remains in the integrated candidate's full test run even though PR #76 does not list it as a changed file.
+- PR #70's single-purpose `tests/opening-scene-population.integration.test.ts` is superseded by the six-test `tests/opening-scene-ambient-population.integration.test.ts`, which also covers restricted occupancy, hidden facts, freshness, canonical time, and repository reload/idempotency.
+- PR #71/#74's `tests/live-narration-final-validation.test.ts` has the same Git blob as `tests/live-narrative-final-validation.test.ts` in the integration candidate; its fail-closed assertion is retained, not dropped.
+- PR #70's shorter `docs/NARRATIVE_GROUNDING_RUNTIME_TRACE_2026-10-15.md` is superseded for current guidance by the broader `docs/NARRATIVE_GROUNDING_PHASE0_RUNTIME_TRACE_2026-10-15.md` already included in PR #76.
+
 
 PR #63 is an older fail-closed narration branch with an outdated base. Source inspection at `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` confirms that its important protections are already present: exhausted AI candidates fail visibly without deterministic emergency narration, attempts remain available for diagnostics, question-only wording is not accepted as an answer, and late-afternoon prose may naturally mention approaching dusk. The current configured narration routes also retain the emergency floor and the current Gemini/OpenRouter ordering. Do not merge PR #63 wholesale; only revisit a concrete missing regression if one is demonstrated.
 

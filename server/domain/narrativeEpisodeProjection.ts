@@ -77,7 +77,7 @@ function unresolvedThreads(
 			.filter((block) => block.kind === 'THREAD' && block.availableLocalOpportunity === true)
 			.map((block) => {
 				const sourceId = String(block.sourceId || block.id || '');
-				const current = currentThreads.find((thread) => String(thread.id || thread.threadId || '') === sourceId);
+				const current = currentThreads.find((thread) => String(thread.id || '') === sourceId);
 				return {
 					id: sourceId,
 					title: normalize(current?.title || block.content.split(' | ')[0]),

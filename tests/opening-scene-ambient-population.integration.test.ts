@@ -287,6 +287,45 @@ test('opening semantic review rejects hidden canonical facts from both primary a
   }
 });
 
+test('opening presentation review rejects duplicate opening prose during regeneration', () => {
+  const storyId = 'opening_freshness_review_' + Date.now();
+  const rig = buildOpeningRig(
+    storyId,
+    'Elysium Solar Citadel',
+    { status: 'UNKNOWN', expectedPopulation: 'VARIABLE', provenance: 'UNKNOWN' },
+  );
+  const priorOpening = [
+    'The vaulted arcade of Elysium Solar Citadel carries soft footsteps across pale marble.',
+    'Hero Vael pauses beside a bronze fountain, watching couriers sort sealed letters beneath carved pillars.',
+    'A narrow stair disappears behind a tapestry while distant clerks resume their careful work.',
+  ].join('\\n\\n');
+
+  const run = rig.repository.getStoryRun(storyId);
+  assert.ok(run, 'fixture StoryRun must exist before testing regeneration freshness');
+  (run as any).openingScene = { narrativeText: priorOpening };
+  rig.repository.saveStoryRun(run as any);
+
+  const repeated = rig.orchestrator.validateOpeningNarrativeCandidate({
+    storyId,
+    repository: rig.repository,
+    narration: priorOpening,
+  });
+  assert.equal(repeated.valid, false, 'an exact repeat of the persisted opening must be rejected');
+  assert.match(repeated.errorReason || '', /freshness/i);
+
+  const distinctOpening = [
+    "Hero Vael stands in the citadel's western gallery, where ink-stained attendants arrange glass instruments on a long oak bench.",
+    'A draft moves loose parchment beside a locked cabinet, and rain beads across the high windows.',
+    'The traveler studies the objects within reach, leaving any investigation or conversation for the player to choose.',
+  ].join('\\n\\n');
+  const distinct = rig.orchestrator.validateOpeningNarrativeCandidate({
+    storyId,
+    repository: rig.repository,
+    narration: distinctOpening,
+  });
+  assert.equal(distinct.valid, true, distinct.errorReason || 'a substantively different opening should remain eligible');
+});
+
 test('opening presentation review rejects time-of-day claims that contradict the canonical world clock', () => {
   const storyId = 'opening_temporal_review_' + Date.now();
   const rig = buildOpeningRig(

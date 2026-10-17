@@ -7827,6 +7827,22 @@ export class MultiModelOrchestrator {
     if (!narration) return { valid: false, errorReason: 'Opening narrative candidate is empty.' };
 
     const repository = params.repository || this.getWorldRepository();
+
+    // A forced opening regeneration is still a new player-facing presentation.
+    // Reuse the ordinary candidate freshness guard against the previously persisted
+    // opening, if any; do not compare against ordinary turns because opening setup
+    // belongs to the story's starting scene, not the player's latest action.
+    const previousOpeningNarration = repository.getStoryRun(params.storyId)?.openingScene?.narrativeText;
+    const freshness = this.validateNarrativeFreshnessContinuity(
+      narration,
+      typeof previousOpeningNarration === 'string' && previousOpeningNarration.trim()
+        ? [previousOpeningNarration]
+        : [],
+    );
+    if (!freshness.valid) {
+      return { valid: false, errorReason: freshness.errorReason || 'Opening narrative failed freshness validation.' };
+    }
+
     const metaLeakage = this.validateNarrativeMetaLeakage(narration);
     if (!metaLeakage.valid) {
       return { valid: false, errorReason: metaLeakage.errorReason || 'Opening narrative failed presentation meta-leakage validation.' };

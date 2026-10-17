@@ -2,16 +2,18 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Latest verified code-bearing integration commit (2026-10-17):** `8a121e433bc461bef281e3dadffff841333cf6b7`  
+**Latest verified runtime integration commit (2026-10-17):** `c793b043dfe1f042721a85cb1b1309ea7198c236`  
+**Latest verified code/test commit:** `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` (adds final-prompt regression assertions)  
 **Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2`.  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. The exact-head release gate and one verification workflow passed on `8a121e43`: **1,528/1,528 tests**, zero failures; release-contract verification, type-check, lint, and production build passed. A second verification workflow for the same SHA was still in progress at the last check.
+**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on `994cd2d4`: **1,528/1,528 tests across 117 suites**, zero failures; release-contract verification, type-check, lint, and production build passed.
 
 Exact-head evidence:
-- [Release gate — 39013470597](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013470597)
-- [Verification workflow — 39013470624](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013470624)
+- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840025)
+- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013839997)
+- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840033)
 
-**Latest runtime grounding regression coverage:** the candidate now verifies work-availability questions against canonical opportunity postings only. A result is treated as an available local opportunity only when it is an explicitly categorized posting, has canonical status `OPEN`, and is attached to the player's exact current location. Remote postings and closed contracts cannot be presented as locally available work; when no eligible posting exists, the plan preserves uncertainty. StoryBeat focus and unresolved-thread selection use the same eligible evidence for these questions. Two focused Phase 4 integration tests cover both the no-eligible-posting and valid-local-posting cases.
+**Latest runtime grounding regression coverage:** the candidate now verifies work-availability questions against canonical opportunity postings only. A result is treated as an available local opportunity only when it is an explicitly categorized posting, has canonical status `OPEN`, and is attached to the player's exact current location. Remote postings and closed contracts cannot be presented as locally available work; when no eligible posting exists, the plan preserves uncertainty. StoryBeat focus and unresolved-thread selection use the same eligible evidence for these questions. Two focused Phase 4 integration tests cover both the no-eligible-posting and valid-local-posting cases. They also build the final narration prompt: unrelated fissure rumours must be absent, while the eligible local posting must be present. The model-routing regression test confirms Gemini 3.8 Flash precedes Gemini 2.5 Flash while the deterministic emergency floor remains last.
 
 **Regression that was fixed:** commit `603bdc69` added opening-scene presentation validation but the Slice 4 test stub replaced the real orchestrator with an object exposing only `executeTaskGeneration`. The new validator therefore could not run in the mocked opening path, causing two valid-opening acceptance assertions to fail. Commit `84dcec5f` preserved the real orchestrator methods and mocked only provider generation. A subsequent regression-test import failure was fixed in `adf3059a`; the full suite and all three exact-head workflows now pass.
 

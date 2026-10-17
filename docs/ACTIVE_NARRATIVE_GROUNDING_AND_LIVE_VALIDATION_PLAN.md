@@ -20,23 +20,22 @@
 
 ## Integration status update — 2026-10-17
 
-The latest code-bearing integration candidate is `8a121e433bc461bef281e3dadffff841333cf6b7` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open and unmerged). It fixes the work-availability episode-projection regression and adds a focused production-config regression assertion that Gemini 3.8 Flash precedes Gemini 2.5 Flash while the deterministic emergency floor remains last.
+The latest verified runtime integration commit is `c793b043dfe1f042721a85cb1b1309ea7198c236`; the latest verified code/test head is `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open and unmerged). The final-prompt regression now exercises the actual prompt builder with the Phase 4 work-availability fixture.
 
-Exact-head automated verification completed successfully in the release gate and one verification workflow:
 - Full suite: **1,528/1,528 tests passed**, zero failures, 117 suites.
 - Release-contract verification: passed.
 - Type-check: passed.
 - Lint: passed.
 - Production build: passed.
+- Work-availability research, plan, StoryBeat focus, episode continuity, and final prompt are aligned to the same rule: only an explicitly categorized canonical posting with status `OPEN` at the exact current location can answer availability. With no eligible posting, the plan preserves uncertainty; unrelated rumours do not enter the final prompt.
+- Model-route regression: Gemini 3.8 Flash precedes Gemini 2.5 Flash; deterministic emergency fallback remains the final floor.
 
-Evidence:
-- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013470597)
-- [Verification workflow](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013470624)
+Exact-head CI evidence:
+- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840025)
+- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013839997)
+- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840033)
 
-A second verification workflow for the same SHA was still in progress at the last check. Re-check the current PR head and CI before release.
-
-**Still not passed:** Phase 1 live-model/player validation. Automated tests, including the controlled mock-provider HTTP marathon, are not proof of actual provider-backed narration quality. The real-provider 125-turn run remains intentionally deferred to the player after code integration is complete.
-
+**Still not passed:** Phase 1 live-model/player validation. Automated tests do not prove real provider-backed narration quality. The real-provider 125-turn run remains intentionally deferred to the player after code integration is complete.
 ---
 
 ## Integration status update — 2026-10-16

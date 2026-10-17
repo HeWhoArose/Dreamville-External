@@ -1,17 +1,19 @@
 # Dreamville Documentation Index — Read This Before Planning or Coding
 
 **Index status:** CURRENT  
-**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and current integration candidate `8a121e433bc461bef281e3dadffff841333cf6b7` (2026-10-17). Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
+**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319`, latest verified runtime integration `c793b043dfe1f042721a85cb1b1309ea7198c236`, and latest verified code/test head `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` (2026-10-17). Earlier 090b7d7… source traces remain explicitly baseline snapshots.  
 **Purpose:** tell future developers/AI agents which documents are authoritative, what is complete, what is still planned, and which files must not be used as implementation instructions.
 
 ## Current integration status — 2026-10-17
 
-The latest code-bearing runtime integration candidate is commit `8a121e433bc461bef281e3dadffff841333cf6b7` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. The exact-head release gate and one verification workflow passed: **1,528/1,528 tests** across 117 suites, zero failures; release-contract verification, lint/type-check, and production build passed. A second verification workflow for this SHA was still in progress at the last check.
+The latest verified runtime integration commit is `c793b043dfe1f042721a85cb1b1309ea7198c236`; the latest verified code/test head is `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head workflows passed: **1,528/1,528 tests across 117 suites**, zero failures; release contracts, lint/type-check, and production build passed.
 
 Exact-head evidence:
-- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013470597)
-- [Verification workflow](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013470624)
+- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840025)
+- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013839997)
+- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840033)
 
+The availability-query regression now verifies the final prompt, not only intermediate research and planning: eligible canonical OPEN postings at the current location can reach the model prompt; unsupported or unrelated rumours cannot. The model-routing regression also asserts Gemini 3.8 Flash before Gemini 2.5 Flash with the deterministic emergency floor last.
 The real-provider 125-turn player acceptance test remains deferred and is not covered by these mocked/automated checks. Always check CI for the actual current PR #76 head before release.
 
 

@@ -326,6 +326,40 @@ test('opening presentation review rejects duplicate opening prose during regener
   assert.equal(distinct.valid, true, distinct.errorReason || 'a substantively different opening should remain eligible');
 });
 
+test('opening presentation review rejects prose with no canonical scene anchor', () => {
+  const storyId = 'opening_scene_anchor_review_' + Date.now();
+  const rig = buildOpeningRig(
+    storyId,
+    'Elysium Solar Citadel',
+    { status: 'UNKNOWN', expectedPopulation: 'VARIABLE', provenance: 'UNKNOWN' },
+  );
+
+  const unrelatedScene = [
+    'Three copper birds hover above a violet tower in a remote marsh.',
+    'A silver bell rings while a traveler studies an unfamiliar map.',
+    'The wind turns the page and carries a loose ribbon into the reeds.',
+  ].join('\\n\\n');
+
+  const rejected = rig.orchestrator.validateOpeningNarrativeCandidate({
+    storyId,
+    repository: rig.repository,
+    narration: unrelatedScene,
+  });
+  assert.equal(rejected.valid, false, 'opening prose must stay anchored to the canonical location or visible scene entities');
+  assert.match(rejected.errorReason || '', /canonical location|scene-continuity/i);
+
+  const groundedScene = [
+    "Hero Vael stands in Elysium Solar Citadel's western gallery as footsteps cross the pale stone corridors.",
+    'The traveler pauses beside the broad public forecourt and listens to conversation moving through the arcade.',
+  ].join('\\n\\n');
+  const accepted = rig.orchestrator.validateOpeningNarrativeCandidate({
+    storyId,
+    repository: rig.repository,
+    narration: groundedScene,
+  });
+  assert.equal(accepted.valid, true, accepted.errorReason || 'a distinct but canonically grounded opening should remain eligible');
+});
+
 test('opening presentation review rejects time-of-day claims that contradict the canonical world clock', () => {
   const storyId = 'opening_temporal_review_' + Date.now();
   const rig = buildOpeningRig(

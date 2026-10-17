@@ -2,17 +2,19 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Latest verified code-bearing integration commit (2026-10-17):** `84dcec5fe1fd5eec71ac7acf9824fb2401a82885`  
+**Latest verified code-bearing integration commit (2026-10-17):** `adf3059a583f0aedb51aa61a81dbbbfde51533ae`  
 **Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2`.  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on `84dcec5f`: **1,524/1,524 tests**, 117 suites, zero failures; release-contract verification, lint, type-check, and production build passed.
+**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on `adf3059a`: **1,527/1,527 tests**, zero failures; release-contract verification, lint, type-check, and production build passed.
 
 Exact-head evidence:
-- [Release gate — 39010818963](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818963)
-- [Verification workflow 1 — 39010818965](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818965)
-- [Verification workflow 2 — 39010818981](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818981)
+- [Release gate — 39012240902](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240902)
+- [Verification workflow 1 — 39012240903](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240903)
+- [Verification workflow 2 — 39012240888](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240888)
 
-**Regression that was fixed:** commit `603bdc69` added opening-scene presentation validation but the Slice 4 test stub replaced the real orchestrator with an object exposing only `executeTaskGeneration`. The new validator therefore could not run in the mocked opening path, causing two valid-opening acceptance assertions to fail. Commit `84dcec5f` preserves the real orchestrator methods and mocks only provider generation. The full suite now passes.
+**Latest runtime grounding regression coverage:** the candidate now verifies work-availability questions against canonical opportunity postings only. A result is treated as an available local opportunity only when it is an explicitly categorized posting, has canonical status `OPEN`, and is attached to the player's exact current location. Remote postings and closed contracts cannot be presented as locally available work; when no eligible posting exists, the plan preserves uncertainty. StoryBeat focus and unresolved-thread selection use the same eligible evidence for these questions. Two focused Phase 4 integration tests cover both the no-eligible-posting and valid-local-posting cases.
+
+**Regression that was fixed:** commit `603bdc69` added opening-scene presentation validation but the Slice 4 test stub replaced the real orchestrator with an object exposing only `executeTaskGeneration`. The new validator therefore could not run in the mocked opening path, causing two valid-opening acceptance assertions to fail. Commit `84dcec5f` preserved the real orchestrator methods and mocked only provider generation. A subsequent regression-test import failure was fixed in `adf3059a`; the full suite and all three exact-head workflows now pass.
 
 **Live-provider boundary:** these green CI results do not certify the separate 125-turn real-Gemini acceptance run. That run remains deferred to player execution after integrations are complete. Do not merge PR #76 without the expected review/merge decision.
 

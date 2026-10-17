@@ -1,24 +1,23 @@
 # Player-Run 125-Turn Acceptance Test — Evidence and Checklist
 
 **Audit date:** 2026-10-17  
-**Latest verified runtime integration commit:** `c793b043dfe1f042721a85cb1b1309ea7198c236`  
-**Latest verified code/test head:** `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` (PR #76; open, not merged)
+**Latest verified code/test head:** `15f1477599c0e09695e752789e31cc9819f3101a` (PR #76; open, draft, and not merged)
 
 ## Current verdict
 
-The latest verified code/test head `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` passed all three exact-head workflows: **1,528/1,528 tests across 117 suites**, zero failures, release contracts, lint/type-check, and production build. A fresh 125-turn run with real provider calls has **not** been verified on this candidate. Do not describe the release as fully live-validated.
+The latest verified code/test head `15f1477599c0e09695e752789e31cc9819f3101a` passed all three exact-head workflows: **1,530/1,530 tests across 117 suites**, zero failures, release contracts, lint/type-check, and production build. The canonical opening-scene anchor regression also passed. A fresh 125-turn run with real provider calls has **not** been verified on this candidate. Do not describe the release as fully live-validated.
 
 Completed exact-head checks:
-- `npm test`: **1,528 tests passed, 0 failed** across 117 suites.
+- `npm test`: **1,530 tests passed, 0 failed** across 117 suites.
 - Release-contract verification: passed.
 - Type-check: passed.
 - Lint: passed.
 - Production build: passed.
 
 Exact-head CI evidence:
-- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840025)
-- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013839997)
-- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840033)
+- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070577)
+- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070659)
+- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070612)
 
 These results establish automated repository correctness at this commit; they do not establish real-provider availability, live-model quality, or hands-on UI behavior. The real-provider 125-turn run is intentionally deferred until code integrations have finished, then must be performed as a player-run acceptance check.
 

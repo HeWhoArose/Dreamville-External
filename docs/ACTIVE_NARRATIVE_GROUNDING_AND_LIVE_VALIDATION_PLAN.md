@@ -20,9 +20,9 @@
 
 ## Integration status update — 2026-10-17
 
-The latest verified runtime integration commit is `c793b043dfe1f042721a85cb1b1309ea7198c236`; the latest code-bearing verification head is `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open and unmerged). The prior docs-only branch checkpoint `f65a0aeed0ce374492daa02ff3af3b5bedeb75ab`, on top of that code/test head, passed all three exact-head workflows: [release gate — 39014138070](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39014138070), [verification 1 — 39014138045](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39014138045), [verification 2 — 39014138040](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39014138040). Later documentation reconciliation advances the branch beyond that checkpoint; verify CI on the exact current PR head before any release decision. The final-prompt regression exercises the actual prompt builder with the Phase 4 work-availability fixture.
+The latest code-bearing verification head is `15f1477599c0e09695e752789e31cc9819f3101a` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open, draft, and unmerged), based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head workflows passed on this candidate: [release gate — 39018070577](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070577), [verification 1 — 39018070659](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070659), [verification 2 — 39018070612](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070612). This checkpoint adds an opening-scene grounding invariant: unanchored prose is rejected while a distinct opening grounded in canonical location facts can pass. The final-prompt regression continues to exercise the actual prompt builder with the Phase 4 work-availability fixture.
 
-- Full suite: **1,528/1,528 tests passed**, zero failures, 117 suites.
+- Full suite: **1,530/1,530 tests passed**, zero failures, 117 suites.
 - Release-contract verification: passed.
 - Type-check: passed.
 - Lint: passed.

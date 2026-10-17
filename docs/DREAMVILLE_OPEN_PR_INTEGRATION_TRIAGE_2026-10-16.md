@@ -2,16 +2,15 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Latest verified runtime integration baseline (2026-10-17):** `c793b043dfe1f042721a85cb1b1309ea7198c236`  
-**Latest verified code/test commit:** `ef083ea5e811f05368755448c5fcd7702308cf10` (adds word-boundary temporal-continuity regression coverage)  
+**Latest verified code/test commit:** `15f1477599c0e09695e752789e31cc9819f3101a` (2026-10-17; includes the opening-scene canonical-anchor guard and regression).  
 **Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2`.  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on code/test head `ef083ea5e811f05368755448c5fcd7702308cf10`: **1,529/1,529 tests across 118 suites**, zero failures; release-contract verification, type-check, lint, and production build passed. The immediately preceding checkpoint `994cd2d4` also passed its three workflows. Confirm exact-head CI again before any release decision.
+**Status:** PR #76 remains open, draft, and unmerged. All three exact-head workflows passed on code/test head `15f1477599c0e09695e752789e31cc9819f3101a`: **1,530/1,530 tests across 117 suites**, zero failures; release-contract verification, type-check, lint, and production build passed. The real-provider/player acceptance gate remains deferred and must not be marked passed from CI.
 
-Code/test-head evidence (`994cd2d4`):
-- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39016891776)
-- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39016891835)
-- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39016891875)
+Exact-head CI evidence for `15f1477599c0e09695e752789e31cc9819f3101a`:
+- [Release gate — 39018070577](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070577)
+- [Verification workflow 1 — 39018070659](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070659)
+- [Verification workflow 2 — 39018070612](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39018070612)
 
 Docs-only checkpoint evidence (`f65a0ae`):
 - [Release gate — 39014138070](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39014138070)
@@ -65,7 +64,7 @@ The current integration candidate already contains the unique runtime capabiliti
 
 Source evidence is present in `server/domain/storySessionRecorder.ts`, `server/services/storySessionRecordingStore.ts`, `server/repositories/worldRepository.ts`, `server/domain/narrativeRichnessEvaluation.ts`, and their tests.
 
-**Recorder mismatch follow-up at the prior `13f9b8ce` checkpoint:** its CI no longer reported state-before mismatch warnings for `default_story`, `run_legacy`, or the 125-turn marathon; the only remaining mismatch log was the deliberately invalid `story_recorder_boundary` negative test. The fix records observed state changes between recorder boundaries as explicit `AUXILIARY` transitions rather than silently attributing them to the next command. Full snapshot hashes still include `runtimeState`, and a regression confirms a tampered runtime-state patch fails integrity validation. Treat this as historical checkpoint evidence; the later 1,528-test candidate is the current code/test baseline.
+**Recorder mismatch follow-up at the prior `13f9b8ce` checkpoint:** its CI no longer reported state-before mismatch warnings for `default_story`, `run_legacy`, or the 125-turn marathon; the only remaining mismatch log was the deliberately invalid `story_recorder_boundary` negative test. The fix records observed state changes between recorder boundaries as explicit `AUXILIARY` transitions rather than silently attributing them to the next command. Full snapshot hashes still include `runtimeState`, and a regression confirms a tampered runtime-state patch fails integrity validation. Treat this as historical checkpoint evidence; the current code/test baseline has 1,530 passing tests and includes the subsequent temporal and opening-scene grounding regressions.
 
 PR #60 should not be merged wholesale: its older branch has conflicting version/type assumptions and overlapping edits. PRs #58 and #59 are older recording branches; their distinct behaviour is already substantially represented in the current candidate. Port only a specifically reproduced gap, with a focused test, rather than stacking those branches.
 
@@ -103,4 +102,4 @@ Automated gates remain:
 
 The player-run 125-turn test and manual UI/model scenarios are performed after code integration. Historical real-provider telemetry is a warning to review, not a current result and not grounds for repeated token-consuming CI runs.
 
-The latest code-bearing candidate is PR #76 at `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd`: all three exact-head workflows passed 1,528/1,528 tests plus release contracts, lint/type-check and production build. Its later docs-only checkpoint `f65a0aeed0ce374492daa02ff3af3b5bedeb75ab` also passed all three exact-head workflows. The current branch may advance again for documentation reconciliation, so always check workflow status for the exact head before release. The NPC initiative HTTP prompt regression now passes, and the opening-population, opening freshness/time, Gemini route-order, movement destination/Continue, fail-closed narration and persistence/reload test cases are green in the current automated candidate. PR #76 is still not merged into `main`. Once the scoped outstanding items are either implemented and verified or explicitly accepted as deferred, review PR #76 and run the final merged-main gate. Do not mark the live-provider/player acceptance step passed before the player actually performs it.
+The latest code-bearing candidate is PR #76 at `15f1477599c0e09695e752789e31cc9819f3101a`: all three exact-head workflows passed 1,530/1,530 tests across 117 suites, plus release contracts, lint/type-check, and production build. Opening candidate validation now includes freshness, canonical scene anchoring, meta-leakage, and explicit time-of-day checks; the opening service also validates semantic/epistemic boundaries and N8/N18 quality for primary and repaired candidates. Combat narration provenance is implemented and covered by focused tests. PR #76 remains unmerged and `main` unchanged. Keep the PR draft until the player-run live-provider/UI acceptance gate is completed or deliberately accepted as deferred; the real-provider 125-turn test remains intentionally outside CI. Do not claim live validation from mocked tests.

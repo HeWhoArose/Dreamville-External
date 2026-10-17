@@ -5,6 +5,7 @@ import { DomainAdjudicationBridge } from '../server/domain/aiOrchestrator';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeDirector } from '../server/domain/narrativeDirector';
 import { NarrativeResearchPipeline } from '../server/domain/narrativeResearchPipeline';
+import { StoryBeatDirector } from '../server/domain/storyBeatDirector';
 import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 

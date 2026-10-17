@@ -2,16 +2,16 @@
 
 **Purpose:** prevent duplicate/obsolete pull requests from being merged blindly while the narrative-grounding integration is being completed.
 
-**Latest verified runtime integration commit (2026-10-17):** `c793b043dfe1f042721a85cb1b1309ea7198c236`  
-**Latest verified code/test commit:** `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` (adds final-prompt regression assertions)  
+**Latest verified runtime integration baseline (2026-10-17):** `c793b043dfe1f042721a85cb1b1309ea7198c236`  
+**Latest verified code/test commit:** `ef083ea5e811f05368755448c5fcd7702308cf10` (adds word-boundary temporal-continuity regression coverage)  
 **Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2`.  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on code/test head `994cd2d4`: **1,528/1,528 tests across 117 suites**, zero failures; release-contract verification, type-check, lint, and production build passed. The subsequent docs-only branch checkpoint `f65a0aeed0ce374492daa02ff3af3b5bedeb75ab` also passed all three workflows (39014138070, 39014138045, 39014138040). Confirm exact-head CI again before any release decision.
+**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on code/test head `ef083ea5e811f05368755448c5fcd7702308cf10`: **1,529/1,529 tests across 118 suites**, zero failures; release-contract verification, type-check, lint, and production build passed. The immediately preceding checkpoint `994cd2d4` also passed its three workflows. Confirm exact-head CI again before any release decision.
 
 Code/test-head evidence (`994cd2d4`):
-- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840025)
-- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013839997)
-- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840033)
+- [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39016891776)
+- [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39016891835)
+- [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39016891875)
 
 Docs-only checkpoint evidence (`f65a0ae`):
 - [Release gate — 39014138070](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39014138070)

@@ -18,6 +18,26 @@
 **Human-testing rule:** a deterministic or mocked CI pass is not a real-model pass. All scenarios tagged **[HUMAN LIVE-SESSION REQUIRED]** must be exercised through the configured provider and real player-facing turn flow; absent credentials means **BLOCKED**, not PASS.
 ---
 
+## Integration status update — 2026-10-17
+
+The latest exact-head automated verification is `84dcec5fe1fd5eec71ac7acf9824fb2401a82885` on PR #76 (`integration/narrative-grounding-runtime-2026-10-16-v2`; still open and unmerged). This supersedes the earlier 2026-10-16 code-bearing checkpoint and its 1,523-test count.
+
+- Full suite: **1,524/1,524 tests passed**, zero failures, 117 suites.
+- Release-contract verification: passed.
+- Type-check: passed.
+- Lint: passed.
+- Production build: passed.
+- Opening-scene acceptance regression: fixed by preserving the real orchestrator validation methods in the test double while mocking only `executeTaskGeneration`.
+
+Evidence for the exact verified commit:
+- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818963)
+- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818965)
+- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818981)
+
+**Still not passed:** Phase 1 live-model/player validation. Automated tests, including the controlled mock-provider HTTP marathon, are not proof of actual provider-backed narration quality. The real-provider 125-turn run remains intentionally deferred to the player after code integration is complete.
+
+---
+
 ## Integration status update — 2026-10-16
 
 The latest code-bearing integration commit verified by all three exact-head workflows is `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. A documentation-only reconciliation may advance the branch head; always check CI for the actual latest head before release:

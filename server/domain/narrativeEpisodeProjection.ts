@@ -81,7 +81,7 @@ function unresolvedThreads(
 				return {
 					id: sourceId,
 					title: normalize(current?.title || block.content.split(' | ')[0]),
-					summary: normalize(current?.summary || block.content),
+					summary: normalize(current ? [current.title, current.summary].filter(Boolean).join(' — ') : block.content),
 					priority: Number(current?.priority || block.priority || 0),
 				};
 			})

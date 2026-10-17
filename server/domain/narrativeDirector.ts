@@ -1,5 +1,5 @@
 import type { CurrentSituation } from './currentSituation';
-import type { PlayerIntent, IntentEntityReference } from './playerIntentInterpreter';
+import { isWorkAvailabilityGoal, type PlayerIntent, type IntentEntityReference } from './playerIntentInterpreter';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
@@ -129,13 +129,6 @@ function entityTargets(situation: CurrentSituation, intent: PlayerIntent): Inten
 	return [];
 }
 
-function isWorkAvailabilityGoal(intent: PlayerIntent): boolean {
-	const text = [intent.originalText, intent.informationGoal].filter(Boolean).join(' ');
-	const workTopic = /\b(?:jobs?|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|work orders?)\b/i.test(text);
-	const availabilityRequest = /\b(?:available|availability|currently open|open postings?|posted|listed|offered|what work|what jobs?|find work|find jobs?|look for work|ask around for|check what(?:'s| is) available|see what(?:'s| is) available)\b/i.test(text);
-	return workTopic && availabilityRequest;
-}
-
 function informationReveals(intent: PlayerIntent, research: NarrativeResearchResult): InformationReveal[] {
 	if (!intent.informationGoal && intent.interactionMode !== 'PASSIVE_OBSERVATION') return [];
 	const goalText = clean(intent.informationGoal || intent.originalText);
@@ -219,6 +212,7 @@ export class NarrativeDirector {
 		if (intent.movementIntent) continuityRequirements.push('Preserve movement as movement; do not replace the positional action with a conversation.');
 		if (intent.observationIntent) continuityRequirements.push('Preserve observation/listening as observation; do not invent a spoken inquiry.');
 		if (intent.informationGoal) continuityRequirements.push('Answer the information goal from selected research or explicitly preserve uncertainty/no-answer.');
+		if (isWorkAvailabilityGoal(intent)) continuityRequirements.push('For work availability, only an explicitly categorized OPEN posting attached to this exact location counts as evidence. If no such posting appears in the selected research, do not invent work; preserve uncertainty/no-answer.');
 
 		const forbiddenAssumptions = [
 			'Do not invent hidden facts, secret locations, unavailable entities, or unsupported causal explanations.',

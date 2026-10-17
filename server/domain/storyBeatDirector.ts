@@ -1,5 +1,5 @@
 import type { CurrentSituation } from './currentSituation';
-import type { PlayerIntent } from './playerIntentInterpreter';
+import { isWorkAvailabilityGoal, type PlayerIntent } from './playerIntentInterpreter';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import type { ActionResolution } from './actionResolution';
 
@@ -136,10 +136,7 @@ export class StoryBeatDirector {
 			...(intent.impliedTargets || []).map((target) => target.id || ''),
 		]);
 		const groundedTargetNames = unique(targetIds.map((id) => visibleEntityNameById(situation, id) || '').concat(targets));
-		const infoRequestText = [intent.originalText, intent.informationGoal].filter(Boolean).join(' ');
-		const workAvailabilityGoal =
-			/\b(?:jobs?|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|work orders?)\b/i.test(infoRequestText) &&
-			/\b(?:available|availability|currently open|open postings?|posted|listed|offered|what work|what jobs?|find work|find jobs?|look for work|ask around for|check what(?:'s| is) available|see what(?:'s| is) available)\b/i.test(infoRequestText);
+		const workAvailabilityGoal = isWorkAvailabilityGoal(intent);
 		const groundedWorkPostingFocus = workAvailabilityGoal
 			? (research?.blocks || []).filter((block) => block.kind === 'THREAD' && block.availableLocalOpportunity === true).map((block) => block.content)
 			: [];

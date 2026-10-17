@@ -81,6 +81,8 @@ test('Phase 4: availability questions preserve uncertainty without an OPEN local
 	const { intent, research, plan, storyBeat } = workAvailabilityFixture('remote-and-closed');
 	assert.match(intent.informationGoal || '', /work|jobs|contracts/i);
 	assert.equal(research.blocks.some((block) => block.availableLocalOpportunity === true), false);
+	assert.equal(research.blocks.some((block) => /Starlight fissure rumors/i.test(block.content)), false, 'unrelated open threads should be excluded from this retrieval query');
+	assert.equal(plan.episodeProjection.activeThreadSummaries.some((summary) => /Starlight fissure rumors/i.test(summary)), false);
 	assert.equal(plan.informationToReveal.length, 1);
 	assert.equal(plan.informationToReveal[0].presentation, 'NO_RELIABLE_ANSWER');
 	assert.equal(plan.informationToReveal[0].requirement, 'PRESERVE_UNCERTAINTY');
@@ -95,6 +97,7 @@ test('Phase 4: availability questions reveal only a canonical OPEN posting at th
 	const posting = research.blocks.find((block) => block.sourceId === 'phase4_local_contract');
 	assert.ok(posting, 'the canonical local posting should survive relevance filtering');
 	assert.equal(posting?.availableLocalOpportunity, true);
+	assert.ok(plan.episodeProjection.activeThreadSummaries.some((summary) => /Available work: repair the cistern pump/i.test(summary)));
 	assert.ok(plan.informationToReveal.some((item) =>
 		item.presentation === 'FACT' && item.requirement === 'REVEAL' && item.sourceBlockIds.includes(posting!.id)
 	));

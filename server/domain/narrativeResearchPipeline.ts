@@ -3,7 +3,7 @@ import { WorkingContextEngine } from './workingContextEngine';
 import { formatCanonicalTimestamp } from './deterministicRng';
 import { CurrentSituationBuilder, isAvailableLocationScopedOpportunityThread, isLocationScopedOpportunityThread, type CurrentSituation } from './currentSituation';
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
-import type { PlayerIntent } from './playerIntentInterpreter';
+import { isWorkAvailabilityGoal, type PlayerIntent } from './playerIntentInterpreter';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 import { SemanticNarrativeResearchEngine, type SemanticNarrativeResearchProfile } from './semanticNarrativeResearch';
 import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
@@ -402,6 +402,7 @@ export class NarrativeResearchPipeline {
 		}
 
 		// Only use threads surfaced through Current Situation. The continuity packet can contain broader server-side threads.
+		const workAvailabilityGoal = Boolean(playerIntent && isWorkAvailabilityGoal(playerIntent));
 		const threadCandidates = [
 			...situation.openThreads,
 			...(typeof params.repository.getStoryThreads === 'function' ? params.repository.getStoryThreads(params.storyId) : []),
@@ -414,6 +415,15 @@ export class NarrativeResearchPipeline {
 			const id = normalize((thread as any)?.id || (thread as any)?.threadId || title);
 			if (seenThreads.has(id)) continue;
 			seenThreads.add(id);
+			if (workAvailabilityGoal && !isLocationScopedOpportunityThread(thread)) {
+				excluded.push({
+					label: title,
+					kind: 'THREAD',
+					sourceId: id,
+					reason: 'This is not a canonical work-opportunity posting and cannot answer the current work-availability request.',
+				});
+				continue;
+			}
 			if (!isAvailableLocationScopedOpportunityThread(thread, situation.location.id)) {
 				excluded.push({
 					label: title,

@@ -48,6 +48,13 @@ export interface PlayerIntentInterpretation {
 	fallbackReason?: string;
 }
 
+export function isWorkAvailabilityGoal(intent: Pick<PlayerIntent, 'originalText' | 'informationGoal'>): boolean {
+	const text = [intent.originalText, intent.informationGoal].filter(Boolean).join(' ');
+	const workTopic = /\b(?:jobs?|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|work orders?)\b/i.test(text);
+	const availabilityRequest = /\b(?:available|availability|currently open|open postings?|posted|listed|offered|what work|what jobs?|find work|find jobs?|look for work|ask around for|check what(?:'s| is) available|see what(?:'s| is) available)\b/i.test(text);
+	return workTopic && availabilityRequest;
+}
+
 const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|draw nearer|move closer|move nearer|make (?:my|our|your) way|proceed|continue toward|continue towards)\b/i;
 const CONTINUE_ACTION_PATTERN = /^(?:continue|continue on|keep going|go on|proceed|carry on|keep moving)[.!\s]*$/i;
 

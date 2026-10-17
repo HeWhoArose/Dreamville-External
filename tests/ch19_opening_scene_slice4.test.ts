@@ -880,9 +880,20 @@ function aiResponse(text: string) {
 
 function mockOrchestrator(handler: (task: string, prompt: string) => any) {
   const originalGetAiOrchestrator = worldRepository.getAiOrchestrator;
-  worldRepository.getAiOrchestrator = (() => ({
-    executeTaskGeneration: async (task: string, prompt: string, systemInstruction?: string, options?: any) => handler(task, prompt),
-  })) as any;
+  const originalOrchestrator = originalGetAiOrchestrator.call(worldRepository);
+  // Preserve the real orchestrator's validation methods while mocking only provider
+  // generation. OpeningSceneService now runs presentation validation through this
+  // same object, so a generation-only stub would accidentally reject every candidate.
+  const mockedOrchestrator = new Proxy(originalOrchestrator, {
+    get(target, property, receiver) {
+      if (property === 'executeTaskGeneration') {
+        return async (task: string, prompt: string, systemInstruction?: string, options?: any) => handler(task, prompt);
+      }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  worldRepository.getAiOrchestrator = (() => mockedOrchestrator) as any;
   return () => {
     worldRepository.getAiOrchestrator = originalGetAiOrchestrator;
   };

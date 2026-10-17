@@ -7848,6 +7848,14 @@ export class MultiModelOrchestrator {
       return { valid: false, errorReason: freshness.errorReason || 'Opening narrative failed freshness validation.' };
     }
 
+    // Opening prose also needs a canonical scene anchor. This is the context-neutral
+    // portion of final presentation validation: it checks the active canonical
+    // location and visible entities without requiring a player action or StoryBeat.
+    const sceneContinuity = this.validateNarrativeSceneContinuity(narration, repository, params.storyId);
+    if (!sceneContinuity.valid) {
+      return { valid: false, errorReason: sceneContinuity.errorReason || 'Opening narrative failed canonical scene-continuity validation.' };
+    }
+
     const metaLeakage = this.validateNarrativeMetaLeakage(narration);
     if (!metaLeakage.valid) {
       return { valid: false, errorReason: metaLeakage.errorReason || 'Opening narrative failed presentation meta-leakage validation.' };

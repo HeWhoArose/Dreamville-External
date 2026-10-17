@@ -6,12 +6,17 @@
 **Latest verified code/test commit:** `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd` (adds final-prompt regression assertions)  
 **Current working candidate:** PR #76 on `integration/narrative-grounding-runtime-2026-10-16-v2`.  
 **Current main base:** `18d7831cf51503920396067279b21af7b615b319`  
-**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on `994cd2d4`: **1,528/1,528 tests across 117 suites**, zero failures; release-contract verification, type-check, lint, and production build passed.
+**Status:** PR #76 remains open and unmerged. All three exact-head workflows passed on code/test head `994cd2d4`: **1,528/1,528 tests across 117 suites**, zero failures; release-contract verification, type-check, lint, and production build passed. The subsequent docs-only branch checkpoint `f65a0aeed0ce374492daa02ff3af3b5bedeb75ab` also passed all three workflows (39014138070, 39014138045, 39014138040). Confirm exact-head CI again before any release decision.
 
-Exact-head evidence:
+Code/test-head evidence (`994cd2d4`):
 - [Release gate — 39013840025](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840025)
 - [Verification workflow 1 — 39013839997](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013839997)
 - [Verification workflow 2 — 39013840033](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39013840033)
+
+Docs-only checkpoint evidence (`f65a0ae`):
+- [Release gate — 39014138070](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39014138070)
+- [Verification workflow 1 — 39014138045](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39014138045)
+- [Verification workflow 2 — 39014138040](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39014138040)
 
 **Latest runtime grounding regression coverage:** the candidate now verifies work-availability questions against canonical opportunity postings only. A result is treated as an available local opportunity only when it is an explicitly categorized posting, has canonical status `OPEN`, and is attached to the player's exact current location. Remote postings and closed contracts cannot be presented as locally available work; when no eligible posting exists, the plan preserves uncertainty. StoryBeat focus and unresolved-thread selection use the same eligible evidence for these questions. Two focused Phase 4 integration tests cover both the no-eligible-posting and valid-local-posting cases. They also build the final narration prompt: unrelated fissure rumours must be absent, while the eligible local posting must be present. The model-routing regression test confirms Gemini 3.8 Flash precedes Gemini 2.5 Flash while the deterministic emergency floor remains last.
 
@@ -60,7 +65,7 @@ The current integration candidate already contains the unique runtime capabiliti
 
 Source evidence is present in `server/domain/storySessionRecorder.ts`, `server/services/storySessionRecordingStore.ts`, `server/repositories/worldRepository.ts`, `server/domain/narrativeRichnessEvaluation.ts`, and their tests.
 
-**Recorder mismatch follow-up resolved at the current candidate:** CI for `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` no longer reports state-before mismatch warnings for `default_story`, `run_legacy`, or the 125-turn marathon. The sole remaining mismatch log is the deliberately invalid `story_recorder_boundary` negative test. The fix records observed state changes between recorder boundaries as explicit `AUXILIARY` transitions, rather than silently attributing them to the next command. Full snapshot hashes still include `runtimeState`, and a new regression confirms a tampered runtime-state patch fails integrity validation.
+**Recorder mismatch follow-up at the prior `13f9b8ce` checkpoint:** its CI no longer reported state-before mismatch warnings for `default_story`, `run_legacy`, or the 125-turn marathon; the only remaining mismatch log was the deliberately invalid `story_recorder_boundary` negative test. The fix records observed state changes between recorder boundaries as explicit `AUXILIARY` transitions rather than silently attributing them to the next command. Full snapshot hashes still include `runtimeState`, and a regression confirms a tampered runtime-state patch fails integrity validation. Treat this as historical checkpoint evidence; the later 1,528-test candidate is the current code/test baseline.
 
 PR #60 should not be merged wholesale: its older branch has conflicting version/type assumptions and overlapping edits. PRs #58 and #59 are older recording branches; their distinct behaviour is already substantially represented in the current candidate. Port only a specifically reproduced gap, with a focused test, rather than stacking those branches.
 
@@ -98,4 +103,4 @@ Automated gates remain:
 
 The player-run 125-turn test and manual UI/model scenarios are performed after code integration. Historical real-provider telemetry is a warning to review, not a current result and not grounds for repeated token-consuming CI runs.
 
-The latest code-bearing candidate is PR #76 at `13f9b8ce3f7463da1e8d23f69e824aa9b052a374`: all three exact-head workflows passed 1,523/1,523 tests plus release contracts, lint/type-check and production build. A docs-only reconciliation can advance the branch head; confirm the actual head and its new workflow runs before release. The NPC initiative HTTP prompt regression now passes, and the opening-population, Gemini route-order, movement destination/Continue, fail-closed narration and persistence/reload test cases are green in that same run. PR #76 is still not merged into `main`. Once the scoped outstanding items are either implemented and verified or explicitly accepted as deferred, review PR #76 and run the final merged-main gate. Do not mark the live-provider/player acceptance step passed before the player actually performs it.
+The latest code-bearing candidate is PR #76 at `994cd2d4ce0abcf5c37abf2c755f0f892a4715cd`: all three exact-head workflows passed 1,528/1,528 tests plus release contracts, lint/type-check and production build. Its later docs-only checkpoint `f65a0aeed0ce374492daa02ff3af3b5bedeb75ab` also passed all three exact-head workflows. The current branch may advance again for documentation reconciliation, so always check workflow status for the exact head before release. The NPC initiative HTTP prompt regression now passes, and the opening-population, opening freshness/time, Gemini route-order, movement destination/Continue, fail-closed narration and persistence/reload test cases are green in the current automated candidate. PR #76 is still not merged into `main`. Once the scoped outstanding items are either implemented and verified or explicitly accepted as deferred, review PR #76 and run the final merged-main gate. Do not mark the live-provider/player acceptance step passed before the player actually performs it.

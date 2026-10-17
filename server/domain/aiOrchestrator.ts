@@ -7558,7 +7558,12 @@ export class MultiModelOrchestrator {
       Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
       Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
     };
-    const contradiction = (forbiddenByPhase[state.currentDayPhase] || []).find((token) => output.includes(token));
+    // Match temporal markers as words/phrases, not arbitrary substrings. For example,
+    // "knight" contains "night" but does not assert that the scene occurs at night.
+    const contradiction = (forbiddenByPhase[state.currentDayPhase] || []).find((token) => {
+      const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\    const contradiction = (forbiddenByPhase[state.currentDayPhase] || []).find((token) => output.includes(token));');
+      return new RegExp(`\\\\b${escaped}\\\\b`, 'i').test(output);
+    });
     if (contradiction) {
       return {
         valid: false,

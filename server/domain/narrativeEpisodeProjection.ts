@@ -78,10 +78,14 @@ function unresolvedThreads(
 			.map((block) => {
 				const sourceId = String(block.sourceId || block.id || '');
 				const current = currentThreads.find((thread) => String(thread.id || '') === sourceId);
+				const groundedTitle = normalize(block.content.split(' | ')[0] || current?.title);
 				return {
 					id: sourceId,
-					title: normalize(current?.title || block.content.split(' | ')[0]),
-					summary: normalize(current ? [current.title, current.summary].filter(Boolean).join(' — ') : block.content),
+					// The research block was built from the canonical posting after category,
+					// status, and location validation. Prefer its title over a stale or
+					// differently-normalized CurrentSituation projection.
+					title: groundedTitle,
+					summary: normalize([block.content, current?.summary].filter(Boolean).join(' — ')),
 					priority: Number(current?.priority || block.priority || 0),
 				};
 			})

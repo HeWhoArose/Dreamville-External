@@ -6,12 +6,12 @@
 
 ## Current integration status — 2026-10-16
 
-The latest verified code-bearing runtime integration candidate is commit `84dcec5fe1fd5eec71ac7acf9824fb2401a82885` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. Its exact-head release gate and both verification workflows passed: **1,524/1,524 tests** across 117 suites, zero failures, release-contract verification, lint/TypeScript check, and production build.
+The latest verified code-bearing runtime integration candidate is commit `adf3059a583f0aedb51aa61a81dbbbfde51533ae` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. Its exact-head release gate and both verification workflows passed: **1,527/1,527 tests** across 117 suites, zero failures, release-contract verification, lint/TypeScript check, and production build.
 
 Exact-head evidence:
-- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818963)
-- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818965)
-- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39010818981)
+- [Release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240902)
+- [Verification workflow 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240903)
+- [Verification workflow 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39012240888)
 
 The later documentation checkpoint does not alter the verified code. Always check CI for the actual current PR #76 head before release.
 

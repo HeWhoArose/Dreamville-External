@@ -21,9 +21,11 @@ describe('Phase 20 — orphan and connection audit', () => {
 		assert.match(routes, /sourceActionId/);
 	});
 
-	it('keeps the release audit honest about the remaining runtime gate', async () => {
+	it('keeps the release audit honest about the green automated gate and deferred player acceptance', async () => {
 		const audit = await fs.readFile(new URL('../docs/DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20.md', import.meta.url), 'utf8');
-		assert.match(audit, /npm run lint.*npm test.*npm run build/s);
-		assert.match(audit, /GitHub CI has now executed.*full test gate remains red/s);
+		assert.match(audit, /GitHub Actions passed on this exact commit/i);
+		assert.match(audit, /Current integration update \(2026-10-16\)/i);
+		assert.match(audit, /npm test.*passed/i);
+		assert.match(audit, /125-turn (?:live-provider )?play session is deliberately deferred to the player/i);
 	});
 });

@@ -32,6 +32,7 @@ import { narrativeStateBroker, type ItemUseResolution } from '../domain/narrativ
 import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
+import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { PlayerStateQueryResolver } from '../domain/playerStateQueryResolver';
 import { ResolutionGate } from '../domain/resolutionGate';
@@ -565,7 +566,9 @@ export class ServerMockAuthority {
     }
 
     // Reflect any dialogue from the opening scene into dialogue history
-    const dialogueEvents = opening.structuredEvents.filter((e: StructuredNarrativeEvent) => e.type === 'dialogue');
+    const dialogueEvents = opening.structuredEvents.filter((e: StructuredNarrativeEvent) =>
+      e.type === 'dialogue' && isOpeningDialogueSupportedByNarrative(opening.narrativeText, e)
+    );
     for (const d of dialogueEvents) {
       if (!dState.dialogueHistory.some((dh) => dh.text === d.text)) {
         dState.dialogueHistory.push({
@@ -1249,6 +1252,40 @@ export class ServerMockAuthority {
       }));
     }
 
+    // NPC-initiated contact is a real turn event, not a read-only narration cue.
+    // Commit it before the narrator rebuilds CurrentSituation so that retry and
+    // later turns read the same canonical event. Never interrupt explicit speech
+    // or a request for currently available work.
+    const initiativePlayer = worldRepository.getPlayerLifecycle(targetStoryId);
+    const initiativeLocationId = initiativePlayer?.locationId || location?.id;
+    const initiativeActionId = String(baseResult?.actionId || actionResolution?.resolutionId || '').trim();
+    if (initiativeLocationId && initiativeActionId && !initiativePlayer?.isDead && !initiativePlayer?.isTraveling) {
+      const initiativeEntities = worldRepository.getEntityCards(targetStoryId, { status: 'ACTIVE' })
+        .map((card: any) => ({
+          id: String(card.id || ''),
+          name: String(card.name || card.id || 'Unknown person'),
+          kind: String(card.kind || ''),
+          role: String(card.classification?.role || card.social?.role || card.classification?.profession || card.kind || ''),
+          locationId: String(card.worldState?.locationId || ''),
+          currentActivity: String(card.worldState?.currentActivity || card.metadata?.ambientActivity || ''),
+          presence: String(card.worldState?.presence || 'unknown'),
+          isAlive: card.worldState?.isAlive !== false,
+          visibleToPlayer: !(
+            card.metadata?.hidden === true ||
+            card.metadata?.isHidden === true ||
+            String(card.metadata?.visibility || '').toUpperCase() === 'HIDDEN'
+          ),
+        }));
+      WorldActivityDirector.commitEligibleNpcInitiatedInteraction(
+        worldRepository,
+        targetStoryId,
+        initiativeLocationId,
+        initiativeActionId,
+        String(freeformText || ''),
+        initiativeEntities,
+      );
+    }
+
     let narrativeResponse = '';
     let narrativeTurnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage | undefined;
     let narrativeError: import('../../src/types').ActionLog['narrativeError'];
@@ -1256,6 +1293,9 @@ export class ServerMockAuthority {
     let narrativeResearchPacket: any;
     let narrativeContextAudit: any;
     let narrativeVisualCues: string[] | undefined;
+    let narrativePlanForFinalReview: import('../domain/narrativeDirector').EphemeralNarrativePlan | undefined;
+    let narrativeStoryBeatForFinalReview: import('../domain/storyBeatDirector').StoryBeatContract | undefined;
+    let narrativePacingContractForFinalReview: import('../domain/narrativePacingEngine').NarrativePacingContract | undefined;
     try {
       const narrator = worldRepository.getAiOrchestrator();
       const generated = await narrator.generateNarrativeOnly({
@@ -1289,6 +1329,9 @@ export class ServerMockAuthority {
           : undefined,
       } as any);
 
+      narrativePlanForFinalReview = generated.narrativePlan;
+      narrativeStoryBeatForFinalReview = generated.storyBeat;
+      narrativePacingContractForFinalReview = generated.narrativePacingContract;
       narrativeResearchPacket = generated.researchPacket;
       narrativeContextAudit = generated.contextAudit;
       narrativeGeneration = {
@@ -1392,6 +1435,23 @@ export class ServerMockAuthority {
         previousNarrations,
       });
       if (!firstReview.accepted) {
+        const originalGeneration = narrativeGeneration;
+        const rejectFinalCandidate = (reason: string, providerId?: string, modelId?: string) => {
+          // The canonical action has already committed. Never roll it back, but also
+          // never display the original narration after this additional gate rejected it.
+          narrativeResponse = '';
+          narrativeTurnPackage = undefined;
+          narrativeGeneration = undefined;
+          narrativeVisualCues = undefined;
+          narrativeError = {
+            code: 'NARRATION_FINAL_REVIEW_REJECTED',
+            message: 'The action was committed, but its narration did not pass the final review. Use Retry to regenerate the narration.',
+            providerId: providerId || originalGeneration?.providerId,
+            modelId: modelId || originalGeneration?.modelId,
+            fallbackReason: reason,
+          };
+        };
+        let rewriteFailureReason = 'The narration repair did not return an acceptable candidate.';
         try {
           const rewritePrompt = [
             'CANONICAL LIVE-TURN CONTEXT — preserve exactly; never invent beyond it:',
@@ -1426,37 +1486,73 @@ export class ServerMockAuthority {
               ? { valid: true }
               : { valid: false, errorReason: 'Live narrative review must return usable JSON prose.' },
           });
-          if (reviewResponse.source !== 'DETERMINISTIC_FALLBACK') {
-            const parsed = parseLiveNarrativeReview(reviewResponse.text);
-            if (parsed) {
-              const postReview = this.evaluateLiveNarrativeQuality({
-                narrativeText: parsed.narrativeText,
-                playerAction: String(freeformText),
-                actionResolution,
-                situation: resolutionSituation,
-                intent: resolutionIntent,
-                previousNarrations,
-              });
-              if (postReview.accepted) {
-                narrativeResponse = parsed.narrativeText;
-                narrativeTurnPackage = {
-                  ...narrativeTurnPackage,
-                  narrative: [narrativeResponse],
-                  events: [...(narrativeTurnPackage.events || []), 'LIVE_NARRATION_REWRITE_ACCEPTED'],
-                };
-              } else {
-                narrativeTurnPackage = {
-                  ...narrativeTurnPackage,
-                  events: [...(narrativeTurnPackage.events || []), 'LIVE_NARRATION_REVIEW_REJECTED'],
-                };
-              }
+          const parsed = reviewResponse.source !== 'DETERMINISTIC_FALLBACK'
+            ? parseLiveNarrativeReview(reviewResponse.text)
+            : null;
+
+          if (!parsed) {
+            rewriteFailureReason = reviewResponse.fallbackReason
+              || 'The narration repair was empty, malformed, or returned deterministic fallback text.';
+            rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
+          } else if (!narrativeTurnPackage) {
+            rewriteFailureReason = 'The original structured narrative package was unavailable for final validation.';
+            rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
+          } else if (!narrativePlanForFinalReview) {
+            rewriteFailureReason = 'The original narrative plan was unavailable; the repaired candidate cannot be fully validated.';
+            rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
+          } else {
+            const rewrittenTurnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage = {
+              ...narrativeTurnPackage,
+              narrative: [parsed.narrativeText],
+              stateChanges: [],
+            };
+            const finalCandidateValidation = worldRepository.getAiOrchestrator().validateNarrativeCandidate({
+              storyId: targetStoryId,
+              playerAction: String(freeformText),
+              intent: resolutionIntent,
+              situation: resolutionSituation,
+              plan: narrativePlanForFinalReview,
+              storyBeat: narrativeStoryBeatForFinalReview,
+              turnPackage: rewrittenTurnPackage,
+              repository: worldRepository,
+              pacingContract: narrativePacingContractForFinalReview,
+            });
+            const postReview = this.evaluateLiveNarrativeQuality({
+              narrativeText: parsed.narrativeText,
+              playerAction: String(freeformText),
+              actionResolution,
+              situation: resolutionSituation,
+              intent: resolutionIntent,
+              previousNarrations,
+            });
+
+            if (postReview.accepted && finalCandidateValidation.valid) {
+              narrativeResponse = parsed.narrativeText;
+              narrativeError = undefined;
+              // The rewrite has no matching generated image cues; prevent stale cues
+              // from the rejected primary prose being associated with the new text.
+              narrativeVisualCues = undefined;
+              narrativeTurnPackage = {
+                ...rewrittenTurnPackage,
+                events: [...(rewrittenTurnPackage.events || []), 'LIVE_NARRATION_REWRITE_ACCEPTED'],
+              };
+            } else {
+              rewriteFailureReason = [
+                !finalCandidateValidation.valid ? finalCandidateValidation.errorReason : '',
+                !postReview.accepted
+                  ? (postReview.actionFidelity.reason || postReview.pacingReason || 'The repaired candidate failed the live action/consequence quality gate.')
+                  : '',
+              ].filter(Boolean).join(' | ') || 'The repaired candidate failed final validation.';
+              rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
             }
           }
         } catch (reviewError: any) {
-          console.warn('[NarrationQualityGate] Live narration rewrite failed; retaining original provider result.', {
+          rewriteFailureReason = String(reviewError?.message || reviewError || 'The narration repair failed.');
+          rejectFinalCandidate(rewriteFailureReason);
+          console.warn('[NarrationQualityGate] Live rewrite failed final validation; rejected player-facing prose instead of retaining the rejected original.', {
             storyId: targetStoryId,
             actionId: baseResult?.actionId,
-            error: reviewError?.message || String(reviewError),
+            error: rewriteFailureReason,
           });
         }
       }

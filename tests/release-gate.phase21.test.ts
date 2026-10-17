@@ -26,7 +26,7 @@ describe('Phase 21 — release gate', () => {
 			'malformed model JSON',
 			'stale opening text after a committed turn',
 			'UI retry of only a failed CUSTOM_ACTION',
-			'Environment status for this implementation session',
+			'Verified status at the 2026-10-16 integration candidate',
 		]) {
 			assert.ok(doc.includes(phrase), phrase);
 		}

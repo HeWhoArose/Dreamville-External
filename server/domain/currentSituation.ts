@@ -66,6 +66,7 @@ export interface VisibleEventContext {
 	id: string;
 	type: string;
 	summary: string;
+	entityId?: string;
 	turnNumber?: number;
 	timestamp?: string;
 	locationId?: string;
@@ -110,6 +111,8 @@ export interface OpenThread {
 	relatedEntityIds?: string[];
 	summary?: string;
 	status?: string;
+	category?: string;
+	locationId?: string;
 	priority?: string | number;
 	lastUpdatedAt?: string;
 }
@@ -239,6 +242,12 @@ export interface BuildCurrentSituationParams {
 	worldRepo?: WorldRepository;
 	maxRecentTurns?: number;
 	maxNearbyEntities?: number;
+	/**
+	 * Optional canonical scene projection override. Used by opening-scene context to
+	 * project the starting location even if the player has since moved elsewhere.
+	 * This changes only the read-only projection; it never moves the canonical player.
+	 */
+	locationIdOverride?: string;
 }
 
 function clone<T>(value: T): T {
@@ -284,6 +293,53 @@ function eventTurnNumber(event: any, index: number): number | undefined {
 	return Number.isFinite(parsed) ? parsed : index + 1;
 }
 
+const LOCATION_SCOPED_OPPORTUNITY_CATEGORIES = new Set([
+	'JOB',
+	'JOB_POSTING',
+	'JOB_REQUEST',
+	'EMPLOYMENT',
+	'EMPLOYMENT_POSTING',
+	'WORK_OPPORTUNITY',
+	'WORK_REQUEST',
+	'AVAILABLE_WORK',
+	'CONTRACT',
+	'CONTRACT_POSTING',
+	'GUILD_CONTRACT',
+	'NOTICE',
+	'NOTICE_BOARD',
+	'COMMISSION',
+	'COMMISSION_POSTING',
+	'BOUNTY',
+	'BOUNTY_POSTING',
+	'TASK_POSTING',
+	'WORK_ORDER',
+]);
+
+const OPEN_OPPORTUNITY_STATUSES = new Set(['OPEN']);
+
+/**
+ * A work/contract opportunity is actionable only when it is a canonical
+ * location-scoped posting, still open, and attached to the player's current
+ * location. This predicate intentionally leaves ordinary plot/quest threads
+ * alone; it does not invent, promote, or move postings.
+ */
+export function isLocationScopedOpportunityThread(raw: unknown): boolean {
+	if (!raw || typeof raw !== 'object') return false;
+	const candidate = raw as Record<string, unknown>;
+	const category = normalizeText(candidate.category).toUpperCase().replace(/[\s-]+/g, '_');
+	return LOCATION_SCOPED_OPPORTUNITY_CATEGORIES.has(category);
+}
+
+export function isAvailableLocationScopedOpportunityThread(raw: unknown, currentLocationId: string): boolean {
+	if (!raw || typeof raw !== 'object') return true;
+	if (!isLocationScopedOpportunityThread(raw)) return true;
+	const candidate = raw as Record<string, unknown>;
+	const status = normalizeText(candidate.status || candidate.state).toUpperCase().replace(/[\s-]+/g, '_');
+	if (!OPEN_OPPORTUNITY_STATUSES.has(status)) return false;
+	const postingLocationId = normalizeText(candidate.locationId);
+	return Boolean(currentLocationId && postingLocationId && postingLocationId === currentLocationId);
+}
+
 function normalizeThread(raw: any, index: number): OpenThread | null {
 	if (!raw || typeof raw !== 'object') return null;
 	const id = normalizeText(raw.threadId || raw.id || raw.key || `thread_${index + 1}`);
@@ -295,6 +351,8 @@ function normalizeThread(raw: any, index: number): OpenThread | null {
 		relatedEntityIds: Array.isArray(raw.relatedEntityIds) ? raw.relatedEntityIds.map(normalizeText).filter(Boolean).slice(0, 8) : undefined,
 		summary: normalizeText(raw.summary || raw.description || raw.details || '') || undefined,
 		status: normalizeText(raw.status || raw.state || '') || undefined,
+		category: normalizeText(raw.category) || undefined,
+		locationId: normalizeText(raw.locationId) || undefined,
 		priority: raw.priority ?? raw.importance ?? undefined,
 		lastUpdatedAt: normalizeText(raw.updatedAt || raw.lastUpdatedAt || raw.timestamp || '') || undefined,
 	};
@@ -529,7 +587,7 @@ export class CurrentSituationBuilder {
 		const run = repository.getStoryRun(params.storyId);
 		const player = repository.getPlayerLifecycle(params.storyId);
 		const viewerActorId = params.viewerActorId || player?.actorId || run?.protagonist?.characterId || `player_actor_${params.storyId}`;
-		const locationId = player?.locationId || run?.currentLocationId || run?.startingLocationId;
+		const locationId = params.locationIdOverride || player?.locationId || run?.currentLocationId || run?.startingLocationId;
 		const timestamp = repository.getWorldClock(params.storyId).getTimestamp();
 		const worldId = String(run?.worldId || '');
 		const geography = repository.getGeographyGraph(params.storyId);
@@ -737,13 +795,14 @@ export class CurrentSituationBuilder {
 		const lastEvents = canonicalEvents
 			.slice(-6)
 			.map((event: any, index: number) => ({
-				id: normalizeText(event?.id) || deterministicId('situation_event', String(index), eventText(event)),
+				id: normalizeText(event?.eventId || event?.id) || deterministicId('situation_event', String(index), eventText(event)),
 				type: normalizeText(event?.type || event?.commandType || 'EVENT'),
 				summary: eventText(event),
 				turnNumber: eventTurnNumber(event, canonicalEvents.length - 6 + index),
 				timestamp: normalizeText(event?.timestamp || event?.worldTime || '') || undefined,
-				locationId: normalizeText(event?.locationId || locationId) || undefined,
-				source: 'CANONICAL_COMMAND_EVENT',
+				locationId: normalizeText(event?.locationId) || undefined,
+				entityId: normalizeText(event?.entityId || event?.actorId) || undefined,
+				source: normalizeText(event?.source) || 'CANONICAL_COMMAND_EVENT',
 			}))
 			.filter((event) => event.summary);
 
@@ -762,19 +821,23 @@ export class CurrentSituationBuilder {
 			locationId,
 			repository.getCanonicalCommandEventCount(params.storyId) + 1,
 		);
+		// A scene projection can show activity only when it belongs to the player's
+		// current location. Off-location canonical events remain in recent history,
+		// but must not masquerade as current-scene evidence.
+		const lastSceneEvents = lastEvents.filter((event) => event.locationId === safeLocation.id);
 		const visibleEvents = activeDialogue
 			? [
 				{
 					id: activeDialogue.nodeId || deterministicId('dialogue_event', params.storyId, activeDialogue.speakerId, activeDialogue.text),
 					type: 'DIALOGUE',
 					summary: `${activeDialogue.speakerName}: ${activeDialogue.text}`,
-					locationId,
+					locationId: safeLocation.id,
 					source: 'CANONICAL_ACTIVE_DIALOGUE',
 				},
 				...ambientActivityEvents,
-				...lastEvents,
+				...lastSceneEvents,
 			]
-			: [...ambientActivityEvents, ...lastEvents];
+			: [...ambientActivityEvents, ...lastSceneEvents];
 
 		const runtime = (run?.runtimeState || {}) as Record<string, any>;
 		const plotRaw = runtime.plot || {};
@@ -804,6 +867,7 @@ export class CurrentSituationBuilder {
 		const openThreads = Array.from(
 			new Map(
 				threadCandidates
+					.filter((thread) => isAvailableLocationScopedOpportunityThread(thread, safeLocation.id))
 					.map(normalizeThread)
 					.filter((thread): thread is OpenThread => Boolean(thread))
 					.map((thread) => [thread.id, thread]),

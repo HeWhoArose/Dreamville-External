@@ -1,9 +1,9 @@
 import type { WorldRepository } from '../repositories/worldRepository';
 import { WorkingContextEngine } from './workingContextEngine';
 import { formatCanonicalTimestamp } from './deterministicRng';
-import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
+import { CurrentSituationBuilder, isAvailableLocationScopedOpportunityThread, isLocationScopedOpportunityThread, type CurrentSituation } from './currentSituation';
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
-import type { PlayerIntent } from './playerIntentInterpreter';
+import { isWorkAvailabilityGoal, type PlayerIntent } from './playerIntentInterpreter';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 import { SemanticNarrativeResearchEngine, type SemanticNarrativeResearchProfile } from './semanticNarrativeResearch';
 import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
@@ -31,6 +31,8 @@ export interface NarrativeResearchBlock {
 	expiration: NarrativeResearchExpiration;
 	estimatedTokens: number;
 	content: string;
+	/** Set only after category, OPEN status, and exact current-location checks pass. */
+	availableLocalOpportunity?: boolean;
 }
 
 export interface NarrativeResearchBudgets {
@@ -400,6 +402,7 @@ export class NarrativeResearchPipeline {
 		}
 
 		// Only use threads surfaced through Current Situation. The continuity packet can contain broader server-side threads.
+		const workAvailabilityGoal = Boolean(playerIntent && isWorkAvailabilityGoal(playerIntent));
 		const threadCandidates = [
 			...situation.openThreads,
 			...(typeof params.repository.getStoryThreads === 'function' ? params.repository.getStoryThreads(params.storyId) : []),
@@ -412,7 +415,26 @@ export class NarrativeResearchPipeline {
 			const id = normalize((thread as any)?.id || (thread as any)?.threadId || title);
 			if (seenThreads.has(id)) continue;
 			seenThreads.add(id);
-			const threadText = [title, normalize((thread as any)?.summary), normalize((thread as any)?.status)].filter(Boolean).join(' | ');
+			if (workAvailabilityGoal && !isLocationScopedOpportunityThread(thread)) {
+				excluded.push({
+					label: title,
+					kind: 'THREAD',
+					sourceId: id,
+					reason: 'This is not a canonical work-opportunity posting and cannot answer the current work-availability request.',
+				});
+				continue;
+			}
+			if (!isAvailableLocationScopedOpportunityThread(thread, situation.location.id)) {
+				excluded.push({
+					label: title,
+					kind: 'THREAD',
+					sourceId: id,
+					reason: 'Work/contract opportunity is not explicitly OPEN or is not an explicitly posted opportunity at the player’s current location.',
+				});
+				continue;
+			}
+			const categoryText = normalize((thread as any)?.category).replace(/[\s_-]+/g, ' ');
+			const threadText = [title, categoryText, normalize((thread as any)?.summary), normalize((thread as any)?.status)].filter(Boolean).join(' | ');
 			const overlap = overlapScore(tokens(threadText), queryTokens);
 			const currentSituationThread = situation.openThreads.some((candidate) => {
 				const candidateId = normalize(candidate.id || '');
@@ -444,6 +466,8 @@ export class NarrativeResearchPipeline {
 				expiration: 'UNTIL_CHANGED',
 				relevanceScore: 0.82 + Math.min(0.12, overlap * 0.12),
 				content: threadText,
+				// Candidate already passed canonical category/status/location checks above.
+				availableLocalOpportunity: isLocationScopedOpportunityThread(thread),
 			}, queryTokens);
 		}
 

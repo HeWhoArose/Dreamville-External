@@ -5,6 +5,8 @@ import { DomainAdjudicationBridge } from '../server/domain/aiOrchestrator';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeDirector } from '../server/domain/narrativeDirector';
 import { NarrativeResearchPipeline } from '../server/domain/narrativeResearchPipeline';
+import { StoryBeatDirector } from '../server/domain/storyBeatDirector';
+import { buildNarrationPrompt } from '../server/domain/narrativePromptBuilder';
 import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
@@ -35,6 +37,79 @@ function fixture() {
 	});
 	return { repository, storyId, situation, intent, research };
 }
+
+function workAvailabilityFixture(mode: 'remote-and-closed' | 'local-open') {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase4_work_availability_' + mode;
+	repository.seedStory(storyId);
+	const action = 'I ask around for currently available jobs and contracts.';
+	const initialSituation = CurrentSituationBuilder.build({ storyId, playerAction: action, worldRepo: repository });
+	const currentLocationId = initialSituation.location.id;
+	if (mode === 'remote-and-closed') {
+		repository.saveStoryThread({
+			storyId, threadId: 'phase4_remote_job',
+			title: 'Available work: escort the eastern caravan',
+			summary: 'This open posting belongs to another location.',
+			category: 'JOB_POSTING', status: 'OPEN', locationId: 'loc_phase4_remote_guild',
+			createdAt: 'fixture-remote',
+		});
+		repository.saveStoryThread({
+			storyId, threadId: 'phase4_closed_contract',
+			title: 'Available work: repair the cistern pump',
+			summary: 'This contract has already been completed.',
+			category: 'CONTRACT', status: 'COMPLETED', locationId: currentLocationId,
+			createdAt: 'fixture-closed',
+		});
+	} else {
+		repository.saveStoryThread({
+			storyId, threadId: 'phase4_local_contract',
+			title: 'Available work: repair the cistern pump',
+			summary: 'The local guild has posted a contract for a repair hand.',
+			category: 'CONTRACT', status: 'OPEN', locationId: currentLocationId,
+			createdAt: 'fixture-local',
+		});
+	}
+	const preIntentSituation = CurrentSituationBuilder.build({ storyId, playerAction: action, worldRepo: repository });
+	const intent = PlayerIntentInterpreter.deterministic(action, preIntentSituation);
+	const situation = CurrentSituationBuilder.build({ storyId, playerAction: action, currentAction: intent, worldRepo: repository });
+	const research = NarrativeResearchPipeline.research({ repository, storyId, currentSituation: situation, playerIntent: intent, playerAction: action });
+	const storyBeat = StoryBeatDirector.resolve({ situation, intent, research });
+	const plan = NarrativeDirector.create({ repository, storyId, situation, intent, research, storyBeat });
+	return { situation, intent, research, plan, storyBeat };
+}
+
+test('Phase 4: availability questions preserve uncertainty without an OPEN local work posting', () => {
+	const { situation, intent, research, plan, storyBeat } = workAvailabilityFixture('remote-and-closed');
+	assert.match(intent.informationGoal || '', /work|jobs|contracts/i);
+	assert.equal(research.blocks.some((block) => block.availableLocalOpportunity === true), false);
+	assert.equal(research.blocks.some((block) => /Starlight fissure rumors/i.test(block.content)), false, 'unrelated open threads should be excluded from this retrieval query');
+	assert.equal(plan.episodeProjection.activeThreadSummaries.some((summary) => /Starlight fissure rumors/i.test(summary)), false);
+	assert.equal(plan.informationToReveal.length, 1);
+	assert.equal(plan.informationToReveal[0].presentation, 'NO_RELIABLE_ANSWER');
+	assert.equal(plan.informationToReveal[0].requirement, 'PRESERVE_UNCERTAINTY');
+	assert.deepEqual(plan.informationToReveal[0].sourceBlockIds, []);
+	assert.equal(plan.unresolvedThread, undefined);
+	assert.doesNotMatch(storyBeat.narrativeFocus.join(' '), /Starlight fissure rumors/i);
+	const finalPrompt = buildNarrationPrompt({ situation, intent, research, plan, storyBeat }).prompt;
+	assert.doesNotMatch(finalPrompt, /Starlight fissure rumors/i, 'unrelated rumor must not reach the selected-model prompt');
+});
+
+test('Phase 4: availability questions reveal only a canonical OPEN posting at the current location', () => {
+	const { situation, intent, research, plan, storyBeat } = workAvailabilityFixture('local-open');
+	assert.match(intent.informationGoal || '', /work|jobs|contracts/i);
+	const posting = research.blocks.find((block) => block.sourceId === 'phase4_local_contract');
+	assert.ok(posting, 'the canonical local posting should survive relevance filtering');
+	assert.equal(posting?.availableLocalOpportunity, true);
+	assert.ok(plan.episodeProjection.activeThreadSummaries.some((summary) => /Available work: repair the cistern pump/i.test(summary)));
+	assert.ok(plan.informationToReveal.some((item) =>
+		item.presentation === 'FACT' && item.requirement === 'REVEAL' && item.sourceBlockIds.includes(posting!.id)
+	));
+	assert.equal(plan.unresolvedThread, posting!.content);
+	assert.match(storyBeat.narrativeFocus.join(' '), /Available work: repair the cistern pump/i);
+	const finalPrompt = buildNarrationPrompt({ situation, intent, research, plan, storyBeat }).prompt;
+	assert.match(finalPrompt, /Available work: repair the cistern pump/i, 'canonical local posting must reach the selected-model prompt');
+	assert.doesNotMatch(finalPrompt, /Starlight fissure rumors/i, 'unrelated rumors must not accompany the eligible posting');
+});
 
 test('Phase 4 turns listen-and-approach into an explicit one-turn plan', () => {
 	const { situation, intent, research } = fixture();

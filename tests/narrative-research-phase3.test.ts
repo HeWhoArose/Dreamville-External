@@ -261,3 +261,100 @@ test('Phase 3 excludes an unrelated memory even when its text contains generic c
 		(NarrativeContinuityEngine as any).research = original;
 	}
 });
+
+
+test('Phase 3 exposes only open local work postings and rejects remote or closed opportunities even on the direct repository path', () => {
+	const storyId = 'phase3_location_scoped_work_research';
+	const { repository, player } = setupStory(storyId);
+	const currentLocationId = player.locationId!;
+
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'phase3_local_contract',
+		title: 'Available work: repair the cistern pump',
+		summary: 'The local guild has posted a contract for a repair hand.',
+		category: 'CONTRACT',
+		status: 'OPEN',
+		locationId: currentLocationId,
+		createdAt: 'fixture-local',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'phase3_remote_job',
+		title: 'Available work: escort the eastern caravan',
+		summary: 'This job is posted in the Lantern Vault, not here.',
+		category: 'JOB_POSTING',
+		status: 'OPEN',
+		locationId: 'loc_lantern_vault',
+		createdAt: 'fixture-remote',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'phase3_closed_job',
+		title: 'Available work: sweep the archive',
+		summary: 'The archive job is completed.',
+		category: 'JOB_POSTING',
+		status: 'COMPLETED',
+		locationId: currentLocationId,
+		createdAt: 'fixture-closed',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'phase3_unknown_status_job',
+		title: 'Available work: guard the west bridge',
+		summary: 'The record has unknown status and must not be actionable.',
+		category: 'JOB_POSTING',
+		status: 'UNKNOWN',
+		locationId: currentLocationId,
+		createdAt: 'fixture-unknown-status',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'phase3_missing_status_contract',
+		title: 'Available work: repair the old lift',
+		summary: 'The record has no status and must not be actionable.',
+		category: 'CONTRACT',
+		locationId: currentLocationId,
+		createdAt: 'fixture-missing-status',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'phase3_unlocated_job',
+		title: 'Available work: recover a map',
+		summary: 'The source of this work notice has no known location.',
+		category: 'WORK_OPPORTUNITY',
+		status: 'OPEN',
+		createdAt: 'fixture-unlocated',
+	});
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I check what work is available here.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	const result = NarrativeResearchPipeline.research({
+		repository,
+		storyId,
+		currentSituation: situation,
+		playerIntent: situation.currentAction,
+		playerAction: 'I check what work is available here.',
+		viewerActorId: player.actorId,
+	});
+
+	assert.ok(result.blocks.some((block) => block.kind === 'THREAD' && block.sourceId === 'phase3_local_contract'));
+	assert.equal(result.blocks.some((block) => /eastern caravan|phase3_remote_job/i.test(block.content)), false);
+	assert.equal(result.blocks.some((block) => /archive job|phase3_closed_job/i.test(block.content)), false);
+	assert.equal(result.blocks.some((block) => /recover a map|phase3_unlocated_job/i.test(block.content)), false);
+	assert.equal(result.blocks.some((block) => /guard the west bridge|phase3_unknown_status_job/i.test(block.content)), false);
+	assert.equal(result.blocks.some((block) => /repair the old lift|phase3_missing_status_contract/i.test(block.content)), false);
+	for (const id of [
+		'phase3_remote_job',
+		'phase3_closed_job',
+		'phase3_unlocated_job',
+		'phase3_unknown_status_job',
+		'phase3_missing_status_contract',
+	]) {
+		assert.ok(result.excluded.some((item) => item.sourceId === id || item.label.includes(id)), 'excluded work posting should retain a diagnostic for ' + id);
+	}
+});

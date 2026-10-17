@@ -3735,9 +3735,9 @@ export class MultiModelOrchestrator {
       "narrative.generate": [
         "google_gemini::gemini-3.5-flash",
         "google_gemini::gemini-3.5-flash-lite",
+        "google_gemini::gemini-3.8-flash",
         "google_gemini::gemini-2.5-flash",
         "google_gemini::gemini-3.1-flash-lite",
-        "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
         "openrouter::google/gemma-4-31b-it:free",
         "openrouter::inclusionai/ling-3.0-flash:free"
@@ -3745,9 +3745,9 @@ export class MultiModelOrchestrator {
       "narrative.review": [
         "google_gemini::gemini-3.5-flash",
         "google_gemini::gemini-3.5-flash-lite",
+        "google_gemini::gemini-3.8-flash",
         "google_gemini::gemini-2.5-flash",
         "google_gemini::gemini-3.1-flash-lite",
-        "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
         "openrouter::inclusionai/ling-3.0-flash:free",
         "openrouter::google/gemma-4-31b-it:free"
@@ -7558,7 +7558,12 @@ export class MultiModelOrchestrator {
       Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
       Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
     };
-    const contradiction = (forbiddenByPhase[state.currentDayPhase] || []).find((token) => output.includes(token));
+    // Match temporal markers as words/phrases, not arbitrary substrings. For example,
+    // "knight" should not assert that the scene occurs at "night".
+    const normalizedOutput = ` ${output.replace(/[^a-z0-9]+/g, ' ').trim()} `;
+    const contradiction = (forbiddenByPhase[state.currentDayPhase] || []).find((token) =>
+      normalizedOutput.includes(` ${token} `),
+    );
     if (contradiction) {
       return {
         valid: false,
@@ -7641,6 +7646,8 @@ export class MultiModelOrchestrator {
       situation: params.situation,
       repository: params.repository,
       storyId: params.storyId,
+      plan: params.plan,
+      turnPackage: validation.turnPackage,
       pacingContract: params.narrativePacingContract,
     });
     if (!presentation.valid) {
@@ -7711,6 +7718,8 @@ export class MultiModelOrchestrator {
     situation: CurrentSituation;
     repository: WorldRepository;
     storyId: string;
+    plan: EphemeralNarrativePlan;
+    turnPackage: StructuredTurnPackage;
     pacingContract: NarrativePacingContract;
   }): { valid: boolean; errorReason?: string } {
     const narration = String(params.narration || '').trim();
@@ -7743,7 +7752,9 @@ export class MultiModelOrchestrator {
       params.situation.location.description,
       params.situation.location.ambientSensory,
       params.situation.activeDialogue ? 'Active dialogue: ' + params.situation.activeDialogue.speakerName + ': ' + params.situation.activeDialogue.text : '',
-      ...params.situation.visibleEvents.map((event) => event.summary),
+      ...params.situation.visibleEvents
+        .filter((event) => event.locationId === params.situation.location.id)
+        .map((event) => event.summary),
       ...params.situation.relevantLore.map((fact) => 'Authorized lore: ' + fact.subjectEntityId + ' ' + fact.predicate + ' ' + fact.objectValue),
     ].filter(Boolean).slice(0, 10).join('\n');
 
@@ -7758,11 +7769,197 @@ export class MultiModelOrchestrator {
     const informationContinuity = this.validateNarrativeInformationContinuity(narration, params.playerAction, params.intent);
     if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
 
+    const actionSubstanceEvaluation = NarrativeRichnessEvaluator.evaluate({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+      previousNarrations: params.situation.recentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
+    });
+    const actionSubstance = actionSubstanceEvaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
+    const actionSubstanceEvidence = actionSubstance?.evidence.join(' ').toLowerCase() || '';
+    const isInformationSeekingTurn =
+      Boolean(params.intent.informationGoal) ||
+      params.intent.interactionMode === 'INFORMATION_SEEKING' ||
+      params.intent.interactionMode === 'DIALOGUE' ||
+      Boolean(params.intent.speechIntent);
+    const environmentalPaddingDominates = actionSubstanceEvidence.includes(
+      'environmental detail outweighs substantive action signals',
+    );
+    const informationResponseIsMissing = isInformationSeekingTurn && actionSubstanceEvidence.includes(
+      'the action result or information response is not clearly communicated',
+    );
+    // Keep N18 diagnostic scoring advisory for compact, semantically grounded
+    // action descriptions. Fail closed only for clear scenery-padding cases or
+    // an information-seeking turn that did not answer (or bound) the question.
+    if (
+      actionSubstance &&
+      actionSubstance.score < 0.50 &&
+      (environmentalPaddingDominates || informationResponseIsMissing)
+    ) {
+      return {
+        valid: false,
+        errorReason: informationResponseIsMissing
+          ? 'Narration failed the action-substance gate: the information-seeking turn has no grounded answer or bounded lack of answer.'
+          : 'Narration failed the action-substance gate: environmental description outweighs the current-turn action.',
+      };
+    }
+
     const temporalContinuity = this.validateNarrativeTemporalContinuity(narration, params.repository, params.storyId);
     if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
 
     return { valid: true };
   }
+
+
+  /**
+   * Revalidates a narrative candidate created outside this orchestrator (for example,
+   * a presentation-only repair requested by ServerMockAuthority). Every candidate
+   * that may be shown to the player must pass the same final presentation and semantic
+   * boundary checks as a primary narrative.generate candidate.
+   */
+  /**
+   * Opening scenes are authored setup rather than a response to a player command.
+   * Apply only the shared presentation checks that are context-neutral here; opening
+   * pacing/richness and semantic/epistemic acceptance remain owned by OpeningSceneService.
+   */
+  public validateOpeningNarrativeCandidate(params: {
+    storyId: string;
+    narration: string;
+    repository?: WorldRepository;
+  }): { valid: boolean; errorReason?: string } {
+    const narration = String(params.narration || '').trim();
+    if (!narration) return { valid: false, errorReason: 'Opening narrative candidate is empty.' };
+
+    const repository = params.repository || this.getWorldRepository();
+
+    // A forced opening regeneration is still a new player-facing presentation.
+    // Reuse the ordinary candidate freshness guard against the previously persisted
+    // opening, if any; do not compare against ordinary turns because opening setup
+    // belongs to the story's starting scene, not the player's latest action.
+    const previousOpeningNarration = repository.getStoryRun(params.storyId)?.openingScene?.narrativeText;
+    const freshness = this.validateNarrativeFreshnessContinuity(
+      narration,
+      typeof previousOpeningNarration === 'string' && previousOpeningNarration.trim()
+        ? [previousOpeningNarration]
+        : [],
+    );
+    if (!freshness.valid) {
+      return { valid: false, errorReason: freshness.errorReason || 'Opening narrative failed freshness validation.' };
+    }
+
+    // Opening prose also needs a canonical scene anchor. This is the context-neutral
+    // portion of final presentation validation: it checks the active canonical
+    // location and visible entities without requiring a player action or StoryBeat.
+    const sceneContinuity = this.validateNarrativeSceneContinuity(narration, repository, params.storyId);
+    if (!sceneContinuity.valid) {
+      return { valid: false, errorReason: sceneContinuity.errorReason || 'Opening narrative failed canonical scene-continuity validation.' };
+    }
+
+    const metaLeakage = this.validateNarrativeMetaLeakage(narration);
+    if (!metaLeakage.valid) {
+      return { valid: false, errorReason: metaLeakage.errorReason || 'Opening narrative failed presentation meta-leakage validation.' };
+    }
+
+    // Opening prose is setup, not a turn advancing the world clock. The shared
+    // turn-level temporal guard uses broad word matching (e.g. "night" or "dawn")
+    // that can reject otherwise valid character backstory or figurative language.
+    // Keep opening validation strict for explicit environmental time-of-day claims,
+    // without treating every occurrence of a time word as a contradiction.
+    const clock = repository.getWorldClock(params.storyId).getState();
+    const phase = clock.currentDayPhase;
+    const output = narration.toLowerCase();
+    const explicitClaims: Record<string, string[]> = {
+      Predawn: ['sunset light', 'dusk light', 'afternoon light', 'midday light', 'noon light', 'night light', 'midnight light'],
+      Dawn: ['sunset light', 'dusk light', 'afternoon light', 'midday light', 'noon light', 'midnight light'],
+      Morning: ['first light', 'predawn light', 'sunset light', 'dusk light', 'midnight light', 'late evening light'],
+      Afternoon: ['first light', 'daybreak light', 'dawn light', 'predawn light', 'sunrise light', 'midnight light', 'early morning light'],
+      Dusk: ['first light', 'daybreak light', 'dawn light', 'predawn light', 'sunrise light', 'midday light', 'noon light', 'early morning light'],
+      Night: ['first light', 'daybreak light', 'dawn light', 'sunrise light', 'morning light', 'afternoon light', 'midday light', 'noon light', 'sunset light'],
+    };
+    const contradiction = (explicitClaims[phase] || []).find((claim) => output.includes(claim));
+    if (contradiction) {
+      return {
+        valid: false,
+        errorReason: `Opening narration temporal-continuity guard rejected output: canonical world time is ${phase} at ${String(clock.timestamp.hour).padStart(2, '0')}:${String(clock.timestamp.minute).padStart(2, '0')}, so the opening cannot assert "${contradiction}" without a canonical time change.`,
+      };
+    }
+
+    return { valid: true };
+  }
+
+  public validateNarrativeCandidate(params: {
+    storyId: string;
+    playerAction: string;
+    intent: PlayerIntent;
+    situation: CurrentSituation;
+    plan: EphemeralNarrativePlan;
+    storyBeat?: StoryBeatContract;
+    turnPackage: StructuredTurnPackage;
+    repository?: WorldRepository;
+    /** Exact pacing contract used for the primary candidate, reused by repair and final review. */
+    pacingContract?: NarrativePacingContract;
+  }): { valid: boolean; errorReason?: string } {
+    const narration = (params.turnPackage.narrative || []).join(' ').trim();
+    if (!narration) {
+      return { valid: false, errorReason: 'Final narrative candidate is empty.' };
+    }
+
+    const freshness = this.validateNarrativeFreshnessContinuity(
+      narration,
+      (params.situation.recentTurns || [])
+        .map((turn) => String(turn.narration || ''))
+        .filter(Boolean),
+    );
+    if (!freshness.valid) {
+      return { valid: false, errorReason: freshness.errorReason || 'Final narrative candidate failed freshness validation.' };
+    }
+
+    const repository = params.repository || this.getWorldRepository();
+    const pacingContract = params.pacingContract || NarrativePacingEngine.resolve({
+      situation: params.situation,
+      intent: params.intent,
+    });
+    const presentation = this.validateNarrativePresentation({
+      narration,
+      playerAction: params.playerAction,
+      intent: params.intent,
+      situation: params.situation,
+      repository,
+      storyId: params.storyId,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+      pacingContract,
+    });
+    if (!presentation.valid) {
+      return { valid: false, errorReason: presentation.errorReason || 'Final narrative candidate failed presentation validation.' };
+    }
+
+    const semanticReview = SemanticNarrativeReview.review({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+    });
+    if (semanticReview.decision !== 'ACCEPT') {
+      const details = [
+        ...semanticReview.violations.map((violation) => violation.message),
+        ...semanticReview.missingRequirements,
+      ].join(' | ');
+      return {
+        valid: false,
+        errorReason: 'Final narrative candidate failed semantic review' + (details ? ': ' + details : '.'),
+      };
+    }
+
+    const storyBeat = this.validateNarrativeStoryBeat(narration, params.storyBeat);
+    if (!storyBeat.valid) {
+      return { valid: false, errorReason: storyBeat.errorReason || 'Final narrative candidate failed StoryBeat validation.' };
+    }
+
+    return { valid: true };
+  }
+
 
   /**
    * Presentation-only narrative generation.
@@ -7806,6 +8003,7 @@ export class MultiModelOrchestrator {
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
     narrativePlan?: EphemeralNarrativePlan;
     storyBeat?: StoryBeatContract;
+    narrativePacingContract?: NarrativePacingContract;
     researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
     narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
     narrativeQualityAudit?: {
@@ -7886,6 +8084,61 @@ export class MultiModelOrchestrator {
       storyBeat,
     });
 
+    // Current-scene events are authoritative player-visible evidence. Merge the
+    // bounded CurrentSituation projection with canonical NPC-initiation events
+    // read directly from event history: the initiating event must remain available
+    // even if the generic recent-event projection trims older entries.
+    const projectedSceneEvents = currentSituation.visibleEvents
+      .filter((event) => event.locationId === currentSituation.location.id && event.type !== 'DIALOGUE')
+      .map((event) => ({
+        id: String(event.id || ''),
+        type: String(event.type || 'EVENT'),
+        summary: String(event.summary || ''),
+      }));
+    const committedNpcInitiations = worldRepo.getRecentCanonicalCommandEvents(storyId, 32)
+      .filter((event: any) =>
+        event?.type === 'NPC_INITIATED_INTERACTION' &&
+        String(event?.locationId || '') === currentSituation.location.id &&
+        String(event?.summary || '').trim().length > 0,
+      )
+      .map((event: any) => ({
+        id: String(event.eventId || ''),
+        type: 'NPC_INITIATED_INTERACTION',
+        summary: String(event.summary).trim(),
+      }));
+    const canonicalSceneEvents = new Map<string, { id: string; type: string; summary: string }>();
+    for (const event of [...projectedSceneEvents, ...committedNpcInitiations]) {
+      const key = event.id || event.type + '|' + event.summary;
+      if (!canonicalSceneEvents.has(key)) canonicalSceneEvents.set(key, event);
+    }
+    // Merge these authoritative current-location events into the situation projection
+    // consumed by buildNarrationPrompt. B1 context chunks can be evicted when a small
+    // turn budget is tight, so important visible events cannot exist only in a chunk.
+    const currentSceneVisibleEvents = [...canonicalSceneEvents.values()].map((event) => ({
+      ...event,
+      locationId: currentSituation.location.id,
+      source: event.type === 'NPC_INITIATED_INTERACTION'
+        ? 'CANONICAL_NPC_INITIATION'
+        : 'CURRENT_SITUATION_PROJECTION',
+    }));
+    const mergedVisibleSceneEvents = new Map<string, CurrentSituation['visibleEvents'][number] | typeof currentSceneVisibleEvents[number]>();
+    for (const event of [...currentSituation.visibleEvents, ...currentSceneVisibleEvents]) {
+      if (event.locationId && event.locationId !== currentSituation.location.id) continue;
+      const key = event.id || event.type + '|' + event.summary;
+      if (!mergedVisibleSceneEvents.has(key)) mergedVisibleSceneEvents.set(key, event);
+    }
+    currentSituation.visibleEvents = [...mergedVisibleSceneEvents.values()];
+    currentSituation.sceneEvidence.events = [...mergedVisibleSceneEvents.values()];
+
+    const canonicalSceneEventContext = [...canonicalSceneEvents.values()]
+      .sort((left, right) =>
+        Number(right.type === 'NPC_INITIATED_INTERACTION') - Number(left.type === 'NPC_INITIATED_INTERACTION'),
+      )
+      .slice(0, 4)
+      .map((event) => `[${event.type.slice(0, 48)}] ${event.summary.slice(0, 220)}`)
+      .filter((line) => line.trim().length > 0)
+      .join(' | ') || 'None';
+
     const canonicalSceneAnchor = [
       `Location ID: ${currentSituation.location.id}`,
       `Location name: ${currentSituation.location.name}`,
@@ -7894,6 +8147,7 @@ export class MultiModelOrchestrator {
       currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
       `Canonical world time: ${currentSituation.worldTime}`,
       `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
+      `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
       currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
       'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
       'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
@@ -7960,6 +8214,19 @@ export class MultiModelOrchestrator {
           content: canonicalSceneAnchor,
           estimatedTokens: WorkingContextEngine.estimateTokens(canonicalSceneAnchor),
           sourceAuthority: 'WorldRepository canonical location state',
+          isProtected: true,
+          relevanceScore: 1,
+        },
+        {
+          // Keep authoritative event history available to the prompt without
+          // re-injecting the entire scene anchor (which the narration projection
+          // intentionally filters to avoid duplicating current-situation context).
+          id: 'canonical_scene_event_anchor',
+          band: 'B1_CRITICAL' as const,
+          label: 'Visible Current-Scene Events (Canonical or Projected)',
+          content: `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
+          estimatedTokens: WorkingContextEngine.estimateTokens(canonicalSceneEventContext) + 16,
+          sourceAuthority: 'WorldRepository canonical command event history and CurrentSituation projection',
           isProtected: true,
           relevanceScore: 1,
         },
@@ -8077,6 +8344,12 @@ export class MultiModelOrchestrator {
     });
 
     const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+    const resolvedSceneComposition =
+      'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+    const richnessEvaluationPlan: EphemeralNarrativePlan = {
+      ...narrativePlan,
+      ...(resolvedSceneComposition ? { sceneComposition: resolvedSceneComposition } : {}),
+    };
 
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
@@ -8171,6 +8444,12 @@ export class MultiModelOrchestrator {
           const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction, playerIntent);
           if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
+          if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
+
+          // Semantic review is applied by the final candidate gate after bounded
+          // repair. Keep per-provider validation focused on deterministic schema,
+          // presentation, canonical scene, intent, information, and temporal guards
+          // so a valid alternate phrasing is not over-rejected during failover.
           return temporalContinuity.valid
             ? { valid: true }
             : { valid: false, errorReason: temporalContinuity.errorReason };
@@ -8279,17 +8558,10 @@ export class MultiModelOrchestrator {
         error: finalInformationContinuity.errorReason || 'Narration information continuity validation failed.',
       };
     }
-    const initialSemanticReview = SemanticNarrativeReview.review({
-      intent: playerIntent,
-      situation: currentSituation,
-      plan: narrativePlan,
-      turnPackage: validation.turnPackage,
-    });
-
     let finalNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
       intent: playerIntent,
       situation: currentSituation,
-      plan: narrativePlan,
+      plan: richnessEvaluationPlan,
       turnPackage: validation.turnPackage,
       previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
     });
@@ -8386,28 +8658,55 @@ export class MultiModelOrchestrator {
               if (!rewriteValidation.valid || !rewriteValidation.turnPackage) {
                 return { valid: false, errorReason: rewriteValidation.errorReason || 'Narrative rewrite must return a valid structured turn package.' };
               }
-              const rewritePresentation = this.validateNarrativePresentation({
-                narration: rewriteValidation.turnPackage.narrative.join(' '),
+              if (!narrativePlan) {
+                return { valid: false, errorReason: 'Narrative rewrite cannot be accepted without its active narrative plan.' };
+              }
+              const rewriteFinalValidation = this.validateNarrativeCandidate({
+                storyId,
                 playerAction,
                 intent: playerIntent,
                 situation: currentSituation,
+                plan: richnessEvaluationPlan,
+                storyBeat,
+                turnPackage: rewriteValidation.turnPackage,
                 repository: worldRepo,
-                storyId,
                 pacingContract: narrativePacingContract,
               });
-              if (!rewritePresentation.valid) return { valid: false, errorReason: rewritePresentation.errorReason || 'Narrative rewrite failed presentation validation.' };
+              if (!rewriteFinalValidation.valid) {
+                return {
+                  valid: false,
+                  errorReason: rewriteFinalValidation.errorReason || 'Narrative rewrite failed the complete final-candidate validation.',
+                };
+              }
               return { valid: true };
             },
           },
         );
         if (rewrite.text && rewrite.source !== 'DETERMINISTIC_FALLBACK') {
           const rewriteValidation = this.validateTurnPackage(rewrite.text, { allowPlainTextNarration: true });
-          if (rewriteValidation.valid && rewriteValidation.turnPackage) {
+          const rewriteCandidateFinalValidation = rewriteValidation.valid && rewriteValidation.turnPackage && narrativePlan
+            ? this.validateNarrativeCandidate({
+                storyId,
+                playerAction,
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: richnessEvaluationPlan,
+                storyBeat,
+                turnPackage: rewriteValidation.turnPackage,
+                repository: worldRepo,
+              })
+            : {
+                valid: false,
+                errorReason: !narrativePlan
+                  ? 'Narrative rewrite cannot be accepted without its active narrative plan.'
+                  : (rewriteValidation.errorReason || 'The rewrite did not produce a complete turn package.'),
+              };
+          if (rewriteValidation.valid && rewriteValidation.turnPackage && rewriteCandidateFinalValidation.valid) {
             const rewriteNarration = rewriteValidation.turnPackage.narrative.join(' ');
             const postRewriteEvaluation = NarrativeRichnessEvaluator.evaluate({
               intent: playerIntent,
               situation: currentSituation,
-              plan: narrativePlan,
+              plan: richnessEvaluationPlan,
               turnPackage: rewriteValidation.turnPackage,
               previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
             });
@@ -8437,19 +8736,30 @@ export class MultiModelOrchestrator {
             } else {
               narrativeQualityAudit.rewriteErrorReason = !rewriteNarration.trim()
                 ? 'The rewrite returned empty narration.'
-                : rewriteEnvironmentExcess
-                  ? 'The rewrite still spent too many sentences on environment-only description.'
-                  : !rewriteStoryBeatContinuity.valid
-                    ? (rewriteStoryBeatContinuity.errorReason || 'The rewrite did not communicate the meaningful story beat.')
-                    : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
+                : !rewriteCandidateFinalValidation.valid
+                  ? (rewriteCandidateFinalValidation.errorReason || 'The rewrite failed complete final-candidate validation.')
+                  : rewriteEnvironmentExcess
+                    ? 'The rewrite still spent too many sentences on environment-only description.'
+                    : !rewriteStoryBeatContinuity.valid
+                      ? (rewriteStoryBeatContinuity.errorReason || 'The rewrite did not communicate the meaningful story beat.')
+                      : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
             }
           } else {
-            narrativeQualityAudit.rewriteErrorReason = rewriteValidation.errorReason || 'The rewrite returned an invalid structured turn package.';
+            narrativeQualityAudit.rewriteErrorReason = !rewriteCandidateFinalValidation.valid
+              ? (rewriteCandidateFinalValidation.errorReason || 'The rewrite failed complete final-candidate validation.')
+              : (rewriteValidation.errorReason || 'The rewrite returned an invalid structured turn package.');
           }
         } else if (rewrite.text) {
           narrativeQualityAudit.rewriteErrorReason = 'The rewrite path returned deterministic fallback, so the original narration was preserved.';
         } else {
-          narrativeQualityAudit.rewriteErrorReason = 'The rewrite path returned no usable output, so the original narration was preserved.';
+          const attemptErrors = (rewrite.attemptsTrail || [])
+            .filter((attempt) => attempt.status === 'FAILED' && attempt.error)
+            .map((attempt) => `${attempt.displayName || attempt.modelId}: ${attempt.error}`);
+          narrativeQualityAudit.rewriteErrorReason = [
+            rewrite.fallbackReason,
+            ...attemptErrors,
+          ].filter(Boolean).join(' | ') ||
+            'The rewrite path returned no usable output, so the original narration was preserved.';
         }
       } catch (rewriteError: any) {
         narrativeQualityAudit.rewriteErrorReason = rewriteError?.message || 'The narrative rewrite path failed.';
@@ -8463,28 +8773,45 @@ export class MultiModelOrchestrator {
       narrativeQualityAudit.rewriteSkippedReason = 'The narrative review task has already exhausted its per-turn call budget; rewrite was skipped.';
     }
 
-    const postRewriteSemanticReview = SemanticNarrativeReview.review({
-      intent: playerIntent,
-      situation: currentSituation,
-      plan: narrativePlan,
-      turnPackage: validation.turnPackage,
-    });
-    if (postRewriteSemanticReview.decision !== 'ACCEPT') {
+    // N18 may authorize a rewrite, but a skipped, unavailable, invalid, or
+    // ineffective rewrite must never make the original environment-heavy prose
+    // player-visible. Recheck the actual final candidate after every rewrite path.
+    const finalEnvironmentSentenceCounts = countNarrativeEnvironmentSentences(
+      finalNarrationText,
+      currentSituation.player.name,
+    );
+    const finalEnvironmentExcess = detectNarrativeEnvironmentExcess(
+      finalNarrationText,
+      (validation.turnPackage.dialogue || []).length > 0,
+      currentSituation.player.name,
+    ) && !openingTurn;
+    if (finalEnvironmentExcess) {
+      const environmentFailure =
+        'N18 environment/substance gate rejected final narration: environment-only description remained after the available rewrite budget was skipped or exhausted.';
+      narrativeQualityAudit.finalDecision = 'IMPROVE';
+      narrativeQualityAudit.environmentExcessEmissions = finalEnvironmentSentenceCounts.environment;
+      narrativeQualityAudit.rewriteErrorReason = narrativeQualityAudit.rewriteErrorReason || environmentFailure;
       return {
         success: false,
         providerId: generated.providerId,
         modelId: generated.modelId,
         source: generated.source,
-        fallbackReason: generated.fallbackReason,
+        fallbackReason: environmentFailure,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
         narrativePlan,
-        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        storyBeat,
+        researchAudit: {
+          blocks: researchResult.blocks,
+          excluded: researchResult.excluded,
+          budgets: researchResult.budgets,
+          totalTokens: researchResult.totalTokens,
+          query: researchResult.query,
+        },
         contextAudit,
-        error: 'Narration failed semantic grounding review: ' + [
-          ...postRewriteSemanticReview.violations.map((v) => v.message),
-          ...postRewriteSemanticReview.missingRequirements,
-        ].join(' | '),
+        narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
+        narrativeQualityAudit,
+        error: environmentFailure,
       };
     }
 
@@ -8513,6 +8840,49 @@ export class MultiModelOrchestrator {
       errorReason: finalStoryBeatContinuity.errorReason,
     };
 
+    if (!narrativePlan) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: 'The active narrative plan is unavailable for final candidate review.',
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        contextAudit,
+        error: 'Narration failed final validation because the active narrative plan was unavailable.',
+      };
+    }
+    const finalCandidateValidation = this.validateNarrativeCandidate({
+      storyId,
+      playerAction,
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: richnessEvaluationPlan,
+      storyBeat,
+      turnPackage: validation.turnPackage,
+      repository: worldRepo,
+      pacingContract: narrativePacingContract,
+    });
+    if (!finalCandidateValidation.valid) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: finalCandidateValidation.errorReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        storyBeat,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        contextAudit,
+        narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
+        narrativeQualityAudit,
+        error: finalCandidateValidation.errorReason || 'Narration failed complete final-candidate validation.',
+      };
+    }
+
     return {
       success: true,
       turnPackage: {
@@ -8525,7 +8895,8 @@ export class MultiModelOrchestrator {
       fallbackReason: generated.fallbackReason,
       attemptsTrail: generated.attemptsTrail,
       researchPacket,
-      narrativePlan,
+      narrativePlan: richnessEvaluationPlan,
+      narrativePacingContract,
       researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
       contextAudit,
       narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
@@ -8637,6 +9008,35 @@ export class MultiModelOrchestrator {
         viewerActorId: initialSituation.player.actorId,
         worldRepo: repo,
       });
+
+      // The HTTP action route reaches executeTurn(), not only the standalone
+      // narration helper above. Restore committed NPC-initiation evidence here
+      // before research, planning, context budgeting, and prompt construction.
+      const committedNpcInitiationsForTurn = repo.getRecentCanonicalCommandEvents(storyId, 32)
+        .filter((event: any) =>
+          event?.type === 'NPC_INITIATED_INTERACTION' &&
+          String(event?.locationId || '') === currentSituation.location.id &&
+          String(event?.summary || '').trim().length > 0,
+        )
+        .map((event: any) => ({
+          id: String(event.eventId || ''),
+          type: 'NPC_INITIATED_INTERACTION',
+          summary: String(event.summary).trim(),
+          entityId: event.entityId ? String(event.entityId) : undefined,
+          turnNumber: Number.isFinite(Number(event.turnNumber)) ? Number(event.turnNumber) : undefined,
+          timestamp: event.timestamp ? String(event.timestamp) : undefined,
+          locationId: currentSituation.location.id,
+          source: 'CANONICAL_NPC_INITIATION',
+        }));
+      const visibleEventsForTurn = new Map<string, typeof currentSituation.visibleEvents[number]>();
+      for (const event of [...currentSituation.visibleEvents, ...committedNpcInitiationsForTurn]) {
+        if (event.locationId && event.locationId !== currentSituation.location.id) continue;
+        const key = event.id || event.type + '|' + event.summary;
+        if (!visibleEventsForTurn.has(key)) visibleEventsForTurn.set(key, event);
+      }
+      currentSituation.visibleEvents = [...visibleEventsForTurn.values()];
+      currentSituation.sceneEvidence.events = [...visibleEventsForTurn.values()];
+
       const isNarrativeTask = task === 'narrative.generate';
       const rawResearchResult = isNarrativeTask
         ? NarrativeResearchPipeline.research({
@@ -8719,6 +9119,13 @@ export class MultiModelOrchestrator {
       const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, continuityState: narrativeContinuityState });
 
       // 1b. CH15 Source Adaptation Adjudication Check
+      const fallbackVisibleSceneEventContext = currentSituation.visibleEvents
+        .filter((event) => !event.locationId || event.locationId === currentSituation.location.id)
+        .slice(0, 8)
+        .map((event) => `[${String(event.type || 'EVENT').slice(0, 48)}] ${String(event.summary || '').slice(0, 220)}`)
+        .filter((event) => event.trim().length > 0)
+        .join(' | ') || 'None';
+
       const narrationPrompt = isNarrativeTask && researchResult && narrativePlan
         ? buildNarrationPrompt({
             situation: currentSituation,
@@ -8736,13 +9143,27 @@ export class MultiModelOrchestrator {
             maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {
-            prompt: assembledContext.assembledText,
+            prompt: [
+              assembledContext.assembledText,
+              'CURRENT SCENE — canonical fallback evidence',
+              'Location: ' + currentSituation.location.name + ' (' + currentSituation.location.id + ')',
+              'Visible current-scene events (canonical or projected): ' + fallbackVisibleSceneEventContext,
+              'Fallback grounding rule: preserve committed current-location events; do not infer events from other locations.',
+            ].join('\n\n'),
             styleInstruction: '',
             totalTokens: assembledContext.totalTokens,
             narrativeProviderHandoff: undefined,
           };
 
         const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+    const resolvedSceneComposition =
+      'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+    const richnessEvaluationPlan: EphemeralNarrativePlan | undefined = narrativePlan
+      ? {
+          ...narrativePlan,
+          ...(resolvedSceneComposition ? { sceneComposition: resolvedSceneComposition } : {}),
+        }
+      : undefined;
 
     const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);
@@ -8987,6 +9408,8 @@ export class MultiModelOrchestrator {
                 situation: currentSituation,
                 repository: repo,
                 storyId,
+                plan: narrativePlan!,
+                turnPackage: validation.turnPackage,
                 pacingContract: narrativePacingContract,
               });
               if (!presentation.valid) {
@@ -9055,7 +9478,7 @@ export class MultiModelOrchestrator {
               narrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
                 intent: playerIntent,
                 situation: currentSituation,
-                plan: narrativePlan,
+                plan: richnessEvaluationPlan || narrativePlan,
                 turnPackage: reviewedTurnPackage,
                 previousNarrations,
               });
@@ -9087,6 +9510,8 @@ export class MultiModelOrchestrator {
                   situation: currentSituation,
                   repository: repo,
                   storyId,
+                  plan: narrativePlan!,
+                  turnPackage: literaryValidation.turnPackage,
                   pacingContract: narrativePacingContract,
                 });
                 if (!literaryPresentation.valid) throw new Error(literaryPresentation.errorReason || 'Literary rewrite failed final presentation validation.');
@@ -9120,7 +9545,7 @@ export class MultiModelOrchestrator {
                 const postRichness = NarrativeRichnessEvaluator.evaluate({
                   intent: playerIntent,
                   situation: currentSituation,
-                  plan: narrativePlan,
+                  plan: richnessEvaluationPlan || narrativePlan,
                   turnPackage: literaryValidation.turnPackage,
                   previousNarrations,
                 });
@@ -9360,6 +9785,8 @@ export class MultiModelOrchestrator {
                   situation: currentSituation,
                   repository: repo,
                   storyId,
+                  plan: narrativePlan!,
+                  turnPackage: validation.turnPackage,
                   pacingContract: narrativePacingContract,
                 })
               : { valid: true };
@@ -9369,6 +9796,7 @@ export class MultiModelOrchestrator {
               let emergencyTurnPackage = validation.turnPackage;
               let emergencyNarrativeReview: NarrativeReview | undefined;
               let emergencyLiteraryReview: LiteraryReview | undefined;
+              let emergencyNarrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
               if (isNarrativeTask && narrativePlan) {
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
@@ -9412,6 +9840,15 @@ export class MultiModelOrchestrator {
                     emergencyLiteraryReview = emergencyLiterary;
                   }
                 }
+              }
+              if (isNarrativeTask && narrativePlan) {
+                emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: richnessEvaluationPlan || narrativePlan,
+                  turnPackage: emergencyTurnPackage,
+                  previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                });
               }
               const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,
@@ -9507,6 +9944,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview: emergencyNarrativeReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
               attemptsTrail: [...turnAttemptsTrail, {
                 providerId: emergencyModel.providerId,

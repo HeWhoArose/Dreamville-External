@@ -45,7 +45,7 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
     }
   });
 
-  it('1. Model Registry: Seed models contain Gemini 3.6 Flash, Gemini 2.5 Pro, Gemini 2.5 Flash, and Emergency Floor', () => {
+  it('1. Model Registry: Seed model health matches the current Gemini routes and Emergency Floor', () => {
     const models = orchestrator.getAllModels();
     assert.ok(models.length >= 4);
 
@@ -55,7 +55,9 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
 
     const flash25Model = models.find((m) => m.modelId === 'gemini-2.5-flash');
     assert.ok(flash25Model);
-    assert.equal(flash25Model?.health, 'Throttled');
+    assert.equal(flash25Model?.health, 'Healthy');
+    assert.equal(flash25Model?.quota, 'Healthy');
+    assert.equal(flash25Model?.accessStatus, 'accessible');
 
     const flash35Model = models.find((m) => m.modelId === 'gemini-3.5-flash');
     assert.ok(flash35Model);
@@ -123,5 +125,22 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
     const floor = orchestrator.getModel('provider_deterministic_emergency', 'emergency-fallback-local');
     assert.equal(floor?.health, 'Healthy');
     assert.equal(floor?.isEmergencyFloor, true);
+  });
+
+  it('8. Production narration route orders Gemini 3.8 before Gemini 2.5 and preserves the emergency floor', () => {
+    const productionConfigPath = path.join(process.cwd(), 'server', 'data', 'orchestrator_config.json');
+    const productionConfig = JSON.parse(fs.readFileSync(productionConfigPath, 'utf8'));
+    const chain: string[] = productionConfig.fallbackChains?.['narrative.generate'] || [];
+    const gemini38 = chain.indexOf('google_gemini::gemini-3.8-flash');
+    const gemini25 = chain.indexOf('google_gemini::gemini-2.5-flash');
+
+    assert.ok(gemini38 >= 0, 'production narration chain must include Gemini 3.8 Flash');
+    assert.ok(gemini25 >= 0, 'production narration chain must include Gemini 2.5 Flash');
+    assert.ok(gemini38 < gemini25, 'Gemini 3.8 Flash must be attempted before Gemini 2.5 Flash');
+    assert.equal(
+      chain[chain.length - 1],
+      'provider_deterministic_emergency::emergency-fallback-local',
+      'the deterministic emergency floor must remain the final fallback',
+    );
   });
 });

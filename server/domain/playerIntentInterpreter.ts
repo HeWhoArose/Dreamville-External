@@ -48,22 +48,38 @@ export interface PlayerIntentInterpretation {
 	fallbackReason?: string;
 }
 
+export function isWorkAvailabilityGoal(intent: Pick<PlayerIntent, 'originalText' | 'informationGoal'>): boolean {
+	const text = [intent.originalText, intent.informationGoal].filter(Boolean).join(' ');
+	const workTopic = /\b(?:jobs?|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|work orders?)\b/i.test(text);
+	const availabilityRequest = /\b(?:available|availability|currently open|open postings?|posted|listed|offered|what work|what jobs?|find work|find jobs?|look for work|ask around for|check what(?:'s| is) available|see what(?:'s| is) available)\b/i.test(text);
+	return workTopic && availabilityRequest;
+}
+
 const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|draw nearer|move closer|move nearer|make (?:my|our|your) way|proceed|continue toward|continue towards)\b/i;
 const CONTINUE_ACTION_PATTERN = /^(?:continue|continue on|keep going|go on|proceed|carry on|keep moving)[.!\s]*$/i;
+
+function movementDestination(text: string): string | undefined {
+	// Preserve the named destination while trimming clauses that describe
+	// another action on the route. Do not mistake infinitive "to move" for a
+	// spatial target; a later spatial preposition may still supply the target.
+	const match = clean(text).match(
+		/\b(?:towards?|into|to(?!\s+(?:move|walk|step|approach|head|travel|go|enter|leave|return|follow|run|sneak|creep|make\s+(?:my|our|your)\s+way|hear|listen|watch|look|observe|scan|see|inspect|examine|ask|talk|speak|read|check|search|find|learn)\b))\s+(?:(?:the|a|an)\s+)?(.+?)(?=\s+(?:and then|and|while|before|after|so I can)\b|\s+to\s+(?:inspect|watch|look|listen|hear|ask|talk|speak|read|check|search|examine|scan)\b|[.!?;,]|$)/i,
+	);
+	const destination = clean(match?.[1] || '').replace(/^(?:the|a|an)\s+/i, '').trim();
+	return destination.length >= 3 ? destination : undefined;
+}
 
 function pendingMovementDestination(situation?: CurrentSituation): string | undefined {
 	const previous = situation?.recentTurns.slice(-1)[0];
 	if (!previous?.playerAction || !MOVEMENT_PATTERN.test(previous.playerAction)) return undefined;
-	const action = previous.playerAction;
-	const destination = action.match(/\b(?:toward|towards|to|into)\s+(?:the\s+)?(.+?)(?:[.!?]|$)/i)?.[1];
-	if (destination) return clean(destination).replace(/\s+(?:as|while|and then|and)\s+.*$/i, '').trim();
-	return undefined;
+	return movementDestination(previous.playerAction);
 }
 const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|fight|cast at|defend|parry)\b/i;
 const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;
 const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|call out|shout|yell)\b/i;
 const PASSIVE_OBSERVATION_PATTERN = /\b(?:listen|hear|overhear|eavesdrop|observe|watch|look|look around|look for|notice|study|scan|inspect)\b/i;
 const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?rs?|gossip|what happened|what(?:'s| is| are)\s+(?:available|offered|posted|listed)|check further|look further|find more|learn more|who|why|where|when|how|hear|listen|hear about|listen for|overhear)\b/i;
+const FOLLOW_UP_INFORMATION_PATTERN = /\b(?:check further|look further|find more|learn more|tell me more|go deeper|dig deeper|investigate further|keep looking|look into it further|see what else)\b/i;
 const OPPORTUNITY_TOPIC_PATTERN = /\b(?:jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|job requests?)\b/i;
 const AVAILABILITY_LOOKUP_PATTERN =
 	/\b(?:check|look|see|find|search|browse|read|review|inspect)\b[\s\S]{0,55}\b(?:what(?:'s| is| are)\s+)?(?:currently\s+)?(?:available|open|posted|listed|offered|jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?)\b|\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing))\b[\s\S]{0,45}\b(?:jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|requests?)\b/i;
@@ -124,6 +140,15 @@ function explicitLocation(text: string, situation?: CurrentSituation): IntentLoc
 	return found ? { ...found, source: 'EXPLICIT' } : undefined;
 }
 
+function unresolvedExplicitMovementDestination(text: string): IntentLocationReference | undefined {
+	// A name explicitly supplied after a spatial preposition remains part of the
+	// player's intent even when it is not in the current location's link list.
+	// Keep it name-only (no synthetic id); canonical resolution must still decide
+	// whether the destination exists and can be reached.
+	const name = movementDestination(text);
+	return name ? { name, source: 'EXPLICIT' } : undefined;
+}
+
 function extractedTarget(text: string): string | undefined {
 	const quoted = text.match(/["“”']([^"“”']{2,80})["“”']/);
 	if (quoted?.[1]) return clean(quoted[1]);
@@ -135,6 +160,30 @@ function extractedTarget(text: string): string | undefined {
 	for (const pattern of patterns) {
 		const match = text.match(pattern);
 		if (match?.[1]) return clean(match[1]).slice(0, 120);
+	}
+	return undefined;
+}
+
+function inheritedInformationGoal(situation?: CurrentSituation): string | undefined {
+	const recent = (situation?.recentTurns || []).slice(-8).reverse();
+	for (const turn of recent) {
+		const action = clean(turn.playerAction);
+		if (!action) continue;
+		// Continue a short chain of follow-up prompts, but do not revive an old goal
+		// after the player has moved on to another action or topic.
+		if (FOLLOW_UP_INFORMATION_PATTERN.test(action)) continue;
+		const opportunityQuestion = OPPORTUNITY_TOPIC_PATTERN.test(action) &&
+			/\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing)|look(?:ing)?|search(?:ing)?|check(?:ing)?|find|finding|read|review|inspect|available|offered|request(?:s|ed|ing)?)\b/i.test(action);
+		if (opportunityQuestion) {
+			return 'find available work, jobs, contracts, tasks, or notices';
+		}
+		if (AVAILABILITY_LOOKUP_PATTERN.test(action)) {
+			return 'check what is currently available in the current scene';
+		}
+		if (INFORMATION_PATTERN.test(action)) {
+			return extractedTarget(action) || 'learn what can be discovered from the current scene';
+		}
+		return undefined;
 	}
 	return undefined;
 }
@@ -180,6 +229,7 @@ export class PlayerIntentInterpreter {
 		const opportunityInquiry = OPPORTUNITY_TOPIC_PATTERN.test(originalText) &&
 			/\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing)|look(?:ing)?|search(?:ing)?|check(?:ing)?|find|finding|read|review|inspect|available|offered|request(?:s|ed|ing)?)\b/i.test(originalText);
 		const information = INFORMATION_PATTERN.test(originalText) || availabilityLookup || opportunityInquiry;
+		const inheritedGoal = FOLLOW_UP_INFORMATION_PATTERN.test(originalText) ? inheritedInformationGoal(situation) : undefined;
 		const manipulation = ITEM_USE_PATTERN.test(originalText);
 		const ooc = OOC_PATTERN.test(originalText);
 		const dice = DICE_PATTERN.test(originalText);
@@ -199,18 +249,20 @@ export class PlayerIntentInterpreter {
 		const targetText = extractedTarget(originalText);
 		const explicitLocationTarget = explicitLocation(originalText, situation) || (continuationDestination
 			? { name: continuationDestination, source: 'IMPLIED' as const }
-			: undefined);
+			: movement ? unresolvedExplicitMovementDestination(originalText) : undefined);
 
 		let goal: string | undefined;
 		let informationGoal: string | undefined;
-		if (information) {
+		if (isTravelContinuation) {
+			goal = 'continue_travel_toward_destination';
+		} else if (information) {
 			goal = 'gather_information';
 			if (availabilityLookup || opportunityInquiry) {
 				informationGoal = OPPORTUNITY_TOPIC_PATTERN.test(originalText)
 					? 'find available work, jobs, contracts, tasks, or notices'
 					: 'check what is currently available in the current scene';
 			} else {
-				informationGoal = targetText || 'learn what can be discovered from the current scene';
+				informationGoal = targetText || inheritedGoal || 'learn what can be discovered from the current scene';
 			}
 		} else if (combat) goal = 'resolve_threat';
 		else if (movement) goal = 'change_position_or_approach_target';

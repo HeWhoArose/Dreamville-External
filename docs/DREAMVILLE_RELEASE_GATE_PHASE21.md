@@ -66,6 +66,20 @@ The release is not considered green unless:
 5. Manual scenario coverage above is exercised on the integration target.
 6. The Phase 20 orphan/connection audit has no unresolved release-critical entry.
 
-## Environment status for this implementation session
+## Verified status at the 2026-10-16 integration candidate
 
-The working environment could not access the repository over the network, so the npm commands were not executed locally. GitHub Actions has nevertheless executed the release gate on this branch: contract verification and TypeScript have passed, while the full test suite is still red on remaining earlier-phase/integration regressions. Therefore Phase 21 is implemented but the release candidate is not yet green. The final main-branch gate remains the authoritative release verification.
+The latest code-bearing integration commit verified by all three exact-head GitHub Actions checks is `13f9b8ce3f7463da1e8d23f69e824aa9b052a374` on PR #76. A later documentation-only commit can advance the branch head, so confirm exact-head CI before release:
+
+- `npm run verify:contracts`: passed.
+- `npm run lint` / TypeScript check: passed.
+- `npm test`: **1,523/1,523 passed**.
+- `npm run build`: passed.
+- Both verification workflows: passed.
+
+Evidence: [release gate](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229176), [verification 1](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229050), [verification 2](https://github.com/HeWhoArose/Dreamville-External/actions/runs/38967229076).
+
+The 125-turn live-provider play session is deliberately deferred to the player after code integrations are complete because repeated automated calls can consume provider token/quota limits. It is a documented final player acceptance test, not a routine CI gate. The deterministic/mock HTTP marathon remains part of automated regression coverage. Manual UI/model scenarios also remain post-integration acceptance work.
+
+The forensic recorder now preserves between-command state changes in explicit `AUXILIARY` interactions. It keeps full-snapshot hashes—including `runtimeState`—and has regression coverage for both boundary gaps and state-patch tampering. The final CI runs show no real `default_story` or marathon state-before mismatch; the remaining warning is deliberately produced by the invalid-state negative test.
+
+PR #76 remains open and unmerged. The exact-head PR #76 release gate passed. The final merged-main gate must still be run after integration. See `docs/DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md` for the player checklist and historical telemetry context.

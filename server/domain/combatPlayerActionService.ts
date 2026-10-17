@@ -107,7 +107,7 @@ export class CombatPlayerActionService {
       canonicalEventIds: mechanical.canonicalEventIds || [],
       createdAt: formatCanonicalTimestamp(params.repository.getWorldClock(params.storyId).getTimestamp()),
     }, params.storyId);
-    const narration = await this.generateNarration(params, mechanicalSummary, targetName, updatedTargets[0]?.hpCurrent, actionResolution);
+    const narrationResult = await this.generateNarration(params, mechanicalSummary, targetName, updatedTargets[0]?.hpCurrent, actionResolution);
     const resolution: CombatNarrativeResolution = {
       id: deterministicId('combat_player_resolution', params.storyId, params.actorId, params.actionText, combat.getCurrentRound(), combat.getDiceEngine().getRollCounter()),
       actorId: params.actorId,
@@ -120,7 +120,9 @@ export class CombatPlayerActionService {
       damage,
       targetHp: updatedTargets,
       mechanicalSummary,
-      narrativeResponse: narration,
+      narrativeResponse: narrationResult.text,
+      fallbackUsed: narrationResult.fallbackUsed,
+      narrativeSource: narrationResult.source,
       canonicalEventIds: mechanical.canonicalEventIds || [],
       createdAt: formatCanonicalTimestamp(params.repository.getWorldClock(params.storyId).getTimestamp()),
     };
@@ -134,7 +136,7 @@ export class CombatPlayerActionService {
     return explicit || (participants.length === 1 ? participants[0] : undefined);
   }
 
-  private async generateNarration(params: { storyId: string; actorId: string; actionText: string; repository: WorldRepository }, mechanicalSummary: string, targetName: string, targetHp?: number, actionResolution?: import('./actionResolution').ActionResolution): Promise<string> {
+  private async generateNarration(params: { storyId: string; actorId: string; actionText: string; repository: WorldRepository }, mechanicalSummary: string, targetName: string, targetHp?: number, actionResolution?: import('./actionResolution').ActionResolution): Promise<{ text: string; source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK'; fallbackUsed: boolean }> {
     try {
       const generated = await params.repository.getAiOrchestrator().generateNarrativeOnly({
         storyId: params.storyId,
@@ -143,11 +145,15 @@ export class CombatPlayerActionService {
         committedOutcome: mechanicalSummary + (targetHp !== undefined ? ' ' + targetName + ' has ' + targetHp + ' HP remaining.' : ''),
         continuationDirective: 'This is an active tactical combat action. The mechanical result is already resolved. Narrate only that committed outcome; never invent a different roll, damage, target state, or condition.',
       });
-      if (generated.success && generated.turnPackage?.narrative?.length) return generated.turnPackage.narrative.join('\n\n').trim();
+      const text = generated.success ? (generated.turnPackage?.narrative || []).join('\n\n').trim() : '';
+      if (text) {
+        const source = generated.source || 'AI_FALLBACK';
+        return { text, source, fallbackUsed: source !== 'AI_PRIMARY' };
+      }
     } catch {
       // Deterministic fallback below.
     }
-    return mechanicalSummary + (targetHp !== undefined ? ' ' + targetName + ' has ' + targetHp + ' HP remaining.' : '');
+    return { text: mechanicalSummary + (targetHp !== undefined ? ' ' + targetName + ' has ' + targetHp + ' HP remaining.' : ''), source: 'DETERMINISTIC_FALLBACK', fallbackUsed: true };
   }
 }
 

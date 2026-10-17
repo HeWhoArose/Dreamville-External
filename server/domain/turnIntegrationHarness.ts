@@ -55,7 +55,12 @@ function buildDeterministicNarration(
 	const evidence = String(firstReveal?.topic || '').trim();
 
 	const parts: string[] = [];
-	if (intent.movementIntent) {
+	if (intent.movementIntent && intent.locationTarget?.name) {
+		parts.push(
+			'You begin moving toward ' + intent.locationTarget.name +
+			'; it remains your intended destination, and arrival is not confirmed by this narration.',
+		);
+	} else if (intent.movementIntent) {
 		parts.push('You move closer to the relevant source without changing the action into a conversation.');
 	}
 	if (intent.speechIntent) {

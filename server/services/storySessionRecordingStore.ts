@@ -8,33 +8,33 @@ export class StorySessionRecordingStore {
 	private readonly enabled: boolean;
 	private readonly lastPersistedSequence = new Map<string, number>();
 
-	constructor(baseDirectory = process.env.DREAMBOOK_RECORDINGS_PATH) {
+	constructor(baseDirectory = process.env.DREAMBOOK_RECORDINGS_PATH, options: { enabled?: boolean } = {}) {
 		this.directory = resolve(baseDirectory || resolve(process.cwd(), '.dreambook', 'recordings'));
 		const isTestRun =
 			process.env.NODE_ENV === 'test' ||
 			process.env.npm_lifecycle_event === 'test' ||
 			process.argv.some((arg) => arg.includes('test'));
-		this.enabled = !isTestRun && process.env.DREAMBOOK_DISABLE_RECORDING_PERSISTENCE !== '1';
+		this.enabled = options.enabled ?? (!isTestRun && process.env.DREAMBOOK_DISABLE_RECORDING_PERSISTENCE !== '1');
 	}
 
 	private safeStoryId(storyId: string): string {
 		return String(storyId).replace(/[^a-zA-Z0-9._-]/g, '_');
 	}
 
-	private storyDirectory(storyId: string): string {
-		return resolve(this.directory, this.safeStoryId(storyId));
+	private storyDirectory(storyId: string, runSessionId: string): string {
+		return resolve(this.directory, this.safeStoryId(storyId), this.safeStoryId(runSessionId));
 	}
 
-	private manifestPath(storyId: string): string {
-		return resolve(this.storyDirectory(storyId), 'manifest.json');
+	private manifestPath(storyId: string, runSessionId: string): string {
+		return resolve(this.storyDirectory(storyId, runSessionId), 'manifest.json');
 	}
 
-	private interactionsDirectory(storyId: string): string {
-		return resolve(this.storyDirectory(storyId), 'interactions');
+	private interactionsDirectory(storyId: string, runSessionId: string): string {
+		return resolve(this.storyDirectory(storyId, runSessionId), 'interactions');
 	}
 
-	private interactionPath(storyId: string, sequence: number): string {
-		return resolve(this.interactionsDirectory(storyId), String(sequence).padStart(8, '0') + '.json');
+	private interactionPath(storyId: string, runSessionId: string, sequence: number): string {
+		return resolve(this.interactionsDirectory(storyId, runSessionId), String(sequence).padStart(8, '0') + '.json');
 	}
 
 	private writeAtomic(path: string, value: unknown): void {
@@ -43,13 +43,13 @@ export class StorySessionRecordingStore {
 		renameSync(temporaryPath, path);
 	}
 
-	load(storyId: string): StorySessionRecording | null {
-		if (!this.enabled) return null;
-		const manifestPath = this.manifestPath(storyId);
+	load(storyId: string, runSessionId: string): StorySessionRecording | null {
+		if (!this.enabled || !runSessionId) return null;
+		const manifestPath = this.manifestPath(storyId, runSessionId);
 		if (!existsSync(manifestPath)) return null;
 		try {
 			const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as StorySessionRecording;
-			const interactionsPath = this.interactionsDirectory(storyId);
+			const interactionsPath = this.interactionsDirectory(storyId, runSessionId);
 			const interactions: StorySessionInteraction[] = existsSync(interactionsPath)
 				? readdirSync(interactionsPath)
 					.filter((name) => name.endsWith('.json'))
@@ -58,10 +58,11 @@ export class StorySessionRecordingStore {
 				: [];
 			const recording: StorySessionRecording = { ...manifest, interactions };
 			const validation = StorySessionRecorder.validate(recording);
-			if (!validation.valid) {
-				console.warn('[StorySessionRecordingStore] Forensic recording integrity notice for ' + storyId + ':', validation.errorReason);
+			if (!validation.valid) throw new Error(validation.errorReason || 'Invalid story session recording.');
+			if (recording.runSessionId !== runSessionId) {
+				throw new Error('Story session recording runSessionId mismatch.');
 			}
-			this.lastPersistedSequence.set(storyId, interactions.length);
+			this.lastPersistedSequence.set(recording.recordingId, interactions.length);
 			return recording;
 		} catch (error) {
 			console.error('[StorySessionRecordingStore] Failed to load recording.', { storyId, error });
@@ -71,13 +72,13 @@ export class StorySessionRecordingStore {
 
 	save(recording: StorySessionRecording): void {
 		if (!this.enabled) return;
-		const storyDir = this.storyDirectory(recording.storyId);
-		const interactionsDir = this.interactionsDirectory(recording.storyId);
+		const storyDir = this.storyDirectory(recording.storyId, recording.runSessionId);
+		const interactionsDir = this.interactionsDirectory(recording.storyId, recording.runSessionId);
 		mkdirSync(interactionsDir, { recursive: true });
 
-		const persistedSequence = this.lastPersistedSequence.get(recording.storyId) || 0;
+		const persistedSequence = this.lastPersistedSequence.get(recording.recordingId) || 0;
 		for (const interaction of recording.interactions.slice(persistedSequence)) {
-			this.writeAtomic(this.interactionPath(recording.storyId, interaction.sequence), interaction);
+			this.writeAtomic(this.interactionPath(recording.storyId, recording.runSessionId, interaction.sequence), interaction);
 		}
 
 		// The manifest is intentionally compact: the growing per-turn evidence lives
@@ -87,8 +88,8 @@ export class StorySessionRecordingStore {
 			interactions: [],
 			finalState: undefined,
 		};
-		this.writeAtomic(this.manifestPath(recording.storyId), manifest);
-		this.lastPersistedSequence.set(recording.storyId, recording.interactions.length);
+		this.writeAtomic(this.manifestPath(recording.storyId, recording.runSessionId), manifest);
+		this.lastPersistedSequence.set(recording.recordingId, recording.interactions.length);
 	}
 
 	delete(storyId: string): void {

@@ -1,5 +1,5 @@
 import type { CurrentSituation } from './currentSituation';
-import type { PlayerIntent, IntentEntityReference } from './playerIntentInterpreter';
+import { isWorkAvailabilityGoal, type PlayerIntent, type IntentEntityReference } from './playerIntentInterpreter';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
@@ -131,9 +131,18 @@ function entityTargets(situation: CurrentSituation, intent: PlayerIntent): Inten
 
 function informationReveals(intent: PlayerIntent, research: NarrativeResearchResult): InformationReveal[] {
 	if (!intent.informationGoal && intent.interactionMode !== 'PASSIVE_OBSERVATION') return [];
-	const goalTokens = clean(intent.informationGoal || intent.originalText).toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4);
-	const selected = research.blocks
-		.filter((block) => block.kind === 'SCENE' || block.kind === 'KNOWLEDGE' || block.kind === 'MEMORY' || block.kind === 'THREAD')
+	const goalText = clean(intent.informationGoal || intent.originalText);
+	const workAvailabilityGoal = isWorkAvailabilityGoal(intent);
+	const goalTokens = goalText.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4);
+	const candidates = research.blocks.filter((block) =>
+		block.kind === 'SCENE' || block.kind === 'KNOWLEDGE' || block.kind === 'MEMORY' || block.kind === 'THREAD'
+	);
+	// Scene details, rumors and unrelated threads cannot answer a work-availability query.
+	// The research pipeline only marks a block after checking canonical category/status/location.
+	const answerCandidates = workAvailabilityGoal
+		? candidates.filter((block) => block.kind === 'THREAD' && block.availableLocalOpportunity === true)
+		: candidates;
+	const selected = answerCandidates
 		.map((block) => {
 			const haystack = (block.content + ' ' + block.reason).toLowerCase();
 			const overlap = goalTokens.filter((token) => haystack.includes(token)).length;
@@ -152,13 +161,19 @@ function informationReveals(intent: PlayerIntent, research: NarrativeResearchRes
 	return selected.map(({ block }) => ({
 		topic: intent.informationGoal || 'the current information goal',
 		sourceBlockIds: [block.id],
-		presentation: block.kind === 'MEMORY' || /rumou?r|hearsay|whisper|gossip/i.test(block.content) ? 'RUMOR' : block.kind === 'KNOWLEDGE' ? 'FACT' : 'UNCERTAIN',
-		requirement: block.kind === 'KNOWLEDGE' ? 'REVEAL' : 'PRESERVE_UNCERTAINTY',
+		presentation: block.availableLocalOpportunity === true
+			? 'FACT'
+			: block.kind === 'MEMORY' || /rumou?r|hearsay|whisper|gossip/i.test(block.content) ? 'RUMOR' : block.kind === 'KNOWLEDGE' ? 'FACT' : 'UNCERTAIN',
+		requirement: block.availableLocalOpportunity === true || block.kind === 'KNOWLEDGE' ? 'REVEAL' : 'PRESERVE_UNCERTAINTY',
 	}));
 }
 
-function topThread(research: NarrativeResearchResult): string | undefined {
-	return research.blocks.filter((block) => block.kind === 'THREAD').sort((a, b) => b.relevanceScore - a.relevanceScore)[0]?.content;
+function topThread(intent: PlayerIntent, research: NarrativeResearchResult): string | undefined {
+	const threads = research.blocks.filter((block) => block.kind === 'THREAD');
+	if (isWorkAvailabilityGoal(intent)) {
+		return threads.filter((block) => block.availableLocalOpportunity === true).sort((a, b) => b.relevanceScore - a.relevanceScore)[0]?.content;
+	}
+	return threads.sort((a, b) => b.relevanceScore - a.relevanceScore)[0]?.content;
 }
 
 export class NarrativeDirector {
@@ -197,6 +212,7 @@ export class NarrativeDirector {
 		if (intent.movementIntent) continuityRequirements.push('Preserve movement as movement; do not replace the positional action with a conversation.');
 		if (intent.observationIntent) continuityRequirements.push('Preserve observation/listening as observation; do not invent a spoken inquiry.');
 		if (intent.informationGoal) continuityRequirements.push('Answer the information goal from selected research or explicitly preserve uncertainty/no-answer.');
+		if (isWorkAvailabilityGoal(intent)) continuityRequirements.push('For work availability, only an explicitly categorized OPEN posting attached to this exact location counts as evidence. If no such posting appears in the selected research, do not invent work; preserve uncertainty/no-answer.');
 
 		const forbiddenAssumptions = [
 			'Do not invent hidden facts, secret locations, unavailable entities, or unsupported causal explanations.',
@@ -219,7 +235,7 @@ export class NarrativeDirector {
 			informationToReveal: informationReveals(intent, research).slice(0, 4),
 			entitiesToReact: entityTargets(situation, intent),
 			npcCognition: npcCognition,
-			unresolvedThread: topThread(research),
+			unresolvedThread: topThread(intent, research),
 			continuityRequirements: continuityRequirements.slice(0, 10),
 			forbiddenAssumptions: forbiddenAssumptions.slice(0, 8),
 			stateEffectsExpected: stateEffectsExpected.slice(0, 4),

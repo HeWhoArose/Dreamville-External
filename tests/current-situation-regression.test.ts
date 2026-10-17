@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeContinuityEngine } from '../server/domain/narrativeContinuityEngine';
-import { formatCanonicalTimestamp } from '../server/domain/deterministicRng';
+import { formatCanonicalTimestamp, hashStringToSeed } from '../server/domain/deterministicRng';
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import type { KnowledgeFact, WorldTimestamp } from '../server/domain/types';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { WorldActivityDirector } from '../server/domain/worldActivityDirector';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 function makeKnowledgeFact(
@@ -403,4 +404,207 @@ test('occupancy projection preserves authored inhabited, restricted, and abandon
 		if (population.status === 'RESTRICTED') assert.equal(situation.sceneEvidence.occupancy.accessControlled, true);
 		if (population.status === 'ABANDONED') assert.match(situation.sceneEvidence.occupancy.explanation || '', /Evacuated/i);
 	}
+});
+
+test('current-scene activity and NPC-initiated events reach the canonical narration context without off-location bleed', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'current_scene_activity_handoff';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+	const template = repository.getEntityCards(storyId, { status: 'ACTIVE' })[0];
+	assert.ok(template, 'seed story should provide a canonical entity card template');
+
+	const merchantId = 'merchant_activity_handoff_mira';
+	repository.saveEntityCard(storyId, {
+		...template,
+		id: merchantId,
+		name: 'Mira Fen',
+		kind: 'MERCHANT',
+		isTemplate: false,
+		identity: { ...(template.identity || {}), aliases: [] },
+		classification: {
+			...(template.classification || {}),
+			role: 'merchant',
+			profession: 'merchant',
+			tags: [...(template.classification?.tags || []), 'ambient_population'],
+		},
+		worldState: {
+			...(template.worldState || {}),
+			locationId: player.locationId,
+			presence: 'present',
+			isAlive: true,
+			currentActivity: 'calling out wares to passersby',
+		},
+		lifecycle: { ...(template.lifecycle || {}), status: 'ACTIVE' },
+		metadata: { ...(template.metadata || {}), hidden: false, ambientPopulation: true },
+	});
+
+	repository.appendCanonicalCommandEvent(storyId, {
+		eventId: 'off_location_activity_marker',
+		type: 'OBSERVE',
+		summary: 'Distant archive marker',
+		locationId: 'loc_lantern_vault',
+		timestamp: 'fixture-off-location',
+	});
+	let actionId = 'activity-handoff-action';
+	let attempts = 0;
+	while (
+		(hashStringToSeed(storyId + '|' + player.locationId + '|' + actionId + '|init-slot') % 5 !== 0 ||
+		 hashStringToSeed(merchantId + '|init|' + actionId) % 3 !== 0) &&
+		attempts < 1000
+	) {
+		actionId = 'activity-handoff-action-' + (++attempts);
+	}
+	assert.ok(attempts < 1000, 'a deterministic action seed should qualify');
+	const canonicalInitiation = WorldActivityDirector.commitEligibleNpcInitiatedInteraction(
+		repository,
+		storyId,
+		player.locationId!,
+		actionId,
+		'I watch Mira Fen and the nearby stalls.',
+		[{
+			id: merchantId,
+			name: 'Mira Fen',
+			kind: 'MERCHANT',
+			role: 'merchant',
+			locationId: player.locationId!,
+			currentActivity: 'calling out wares to passersby',
+			presence: 'present',
+			isAlive: true,
+			visibleToPlayer: true,
+		}],
+	);
+	assert.ok(canonicalInitiation, 'authority helper should commit a qualifying visible interaction');
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I watch Mira Fen and the nearby stalls.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	const initiation = situation.visibleEvents.find((event) =>
+		event.type === 'NPC_INITIATED_INTERACTION' && event.entityId === merchantId
+	);
+	assert.ok(initiation, 'CurrentSituation must receive the committed NPC-initiated interaction');
+	assert.equal(initiation!.id, canonicalInitiation!.id, 'the scene projection must preserve canonical event identity');
+	assert.equal(initiation!.source, 'WORLD_ACTIVITY_DIRECTOR');
+	assert.equal(initiation!.locationId, player.locationId);
+
+	const workingContext = WorkingContextEngine.assembleTurnContext({
+		storyId,
+		playerAction: 'I watch Mira Fen and the nearby stalls.',
+		viewerActorId: player.actorId,
+		currentSituation: situation,
+		currentAction: situation.currentAction,
+		worldRepo: repository,
+		hardTokenBudget: 1200,
+	});
+	assert.match(workingContext.assembledText, /CURRENT-LOCATION ACTIVITY & OBSERVABLE EVENTS/i);
+	assert.match(workingContext.assembledText, /Mira Fen.*currently calling out wares to passersby/);
+	assert.match(workingContext.assembledText, /NPC_INITIATED_INTERACTION/);
+	assert.ok(workingContext.assembledText.includes(initiation!.summary), 'the assembled narrator context must include the exact observable interaction cue');
+	assert.doesNotMatch(workingContext.assembledText, /Distant archive marker/);
+	assert.ok(
+		workingContext.includedChunks.some((chunk) => chunk.id === 'b2_current_scene_activity'),
+		'current-scene activity should be a bounded B2 block and must not inflate the critical B1 scene chunk',
+	);
+
+	assert.equal(
+		situation.visibleEvents.some((event) => /Distant archive marker/.test(event.summary)),
+		false,
+		'off-location canonical events belong in recent history, not current-scene event evidence',
+	);
+});
+
+
+test('current situation scopes actionable work and contract threads to open postings at the current location', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'current_situation_location_scoped_work';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+	const currentLocationId = player.locationId!;
+
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'local_cistern_contract',
+		title: 'Available work: repair the cistern pump',
+		description: 'A local guild contract seeks a repair hand for the damaged pump.',
+		category: 'CONTRACT',
+		status: 'OPEN',
+		locationId: currentLocationId,
+		createdAt: 'fixture-local-open',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'remote_caravan_job',
+		title: 'Available work: escort the eastern caravan',
+		description: 'A caravan job is posted at a different settlement.',
+		category: 'JOB_POSTING',
+		status: 'OPEN',
+		locationId: 'loc_lantern_vault',
+		createdAt: 'fixture-remote-open',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'resolved_archive_job',
+		title: 'Available work: sweep the archive',
+		description: 'This job was already completed.',
+		category: 'JOB_POSTING',
+		status: 'RESOLVED',
+		locationId: currentLocationId,
+		createdAt: 'fixture-local-resolved',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'unlocated_work_opportunity',
+		title: 'Available work: recover a map',
+		description: 'An unlocated opportunity with no canonical posting site.',
+		category: 'WORK_OPPORTUNITY',
+		status: 'OPEN',
+		createdAt: 'fixture-locationless',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'unknown_status_job',
+		title: 'Available work: guard the west bridge',
+		description: 'A purported posting with unknown status.',
+		category: 'JOB_POSTING',
+		status: 'UNKNOWN',
+		locationId: currentLocationId,
+		createdAt: 'fixture-unknown-status',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'missing_status_contract',
+		title: 'Available work: repair the old lift',
+		description: 'A purported contract that has no status field.',
+		category: 'CONTRACT',
+		locationId: currentLocationId,
+		createdAt: 'fixture-missing-status',
+	});
+	repository.saveStoryThread({
+		storyId,
+		threadId: 'world_story_thread',
+		title: 'Investigate the starlight fissures',
+		description: 'The origin of the fissures remains unknown.',
+		category: 'QUEST',
+		status: 'OPEN',
+		createdAt: 'fixture-general-thread',
+	});
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I check what work is available here.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	assert.ok(situation.openThreads.some((thread) => thread.id === 'local_cistern_contract'));
+	assert.ok(situation.openThreads.some((thread) => thread.id === 'world_story_thread'), 'general quest/story threads keep their existing scope');
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'remote_caravan_job'), false);
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'resolved_archive_job'), false);
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'unlocated_work_opportunity'), false);
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'unknown_status_job'), false);
+	assert.equal(situation.openThreads.some((thread) => thread.id === 'missing_status_contract'), false);
 });

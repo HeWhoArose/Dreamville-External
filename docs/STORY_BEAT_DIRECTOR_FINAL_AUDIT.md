@@ -1,5 +1,7 @@
 # StoryBeatDirector — Final Surgical Audit
 
+**Document role:** historical verification evidence for the recorded implementation head, not an implementation checklist. The implementation plan is archived under `docs/outdated/completed-plans/`; follow this final audit and the current code/tests rather than reimplementing StoryBeatDirector.
+
 ## Status
 
 **Status:** VERIFIED — RUNTIME TESTED  

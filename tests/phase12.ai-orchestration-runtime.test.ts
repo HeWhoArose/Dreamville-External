@@ -948,7 +948,11 @@ test('Phase 12: canonical scene anchor is preserved in narration context', async
 	const orchestrator = createTestOrchestrator(repository);
 	const observer = new DeterministicMockAdapter('phase12_scene_anchor_provider');
 	observer.cannedResponses.set('narrative.generate', JSON.stringify({
-		narrative: [`The scene remains centered on ${location!.name}, with the immediate surroundings responding to your movement.`],
+		narrative: [
+			`You move toward the passage, keeping it as your intended direction while the scene remains within ${location!.name}.`,
+			`The current place stays centered on ${location!.name}; no arrival at another location is confirmed.`,
+			'You continue toward the route ahead without assuming what lies beyond the current scene.',
+		],
 		dialogue: [],
 		events: [],
 		stateChanges: [],
@@ -997,7 +1001,11 @@ test('Phase 12: narration scene drift is rejected and falls through to the next 
 
 	const recovery = new DeterministicMockAdapter('phase12_scene_recovery_provider');
 	recovery.cannedResponses.set('narrative.generate', JSON.stringify({
-		narrative: [`The surroundings remain rooted in ${location!.name} as the passage draws your attention deeper into the same place.`],
+		narrative: [
+			`You continue toward the passage while the current scene remains rooted in ${location!.name}.`,
+			'Your movement does not confirm arrival, and the surrounding place stays the same.',
+			'You keep your attention on the intended route without assuming what lies beyond it.',
+		],
 		dialogue: [],
 		events: [],
 		stateChanges: [],
@@ -1186,8 +1194,17 @@ test('Phase 12: production narration surfaces provider failure instead of emerge
 
 		assert.equal(result.success, false, JSON.stringify(result));
 		assert.equal(result.source, undefined);
-		assert.equal(result.modelId, undefined);
+		assert.notEqual(
+			result.modelId,
+			'emergency-fallback-local',
+			'When AI candidates are exhausted, return diagnostics from the last failed AI candidate, never deterministic emergency prose.',
+		);
 		assert.equal(result.turnPackage, undefined);
+		assert.equal(
+			result.attemptsTrail?.some((attempt) => attempt.modelId === 'emergency-fallback-local'),
+			false,
+			'Production narration may report AI failures but must not invoke the deterministic emergency adapter.',
+		);
 		assert.match(result.error || '', /AI candidates were exhausted|provider|narrative/i);
 	} finally {
 		if (previousNodeEnv === undefined) {
@@ -1233,6 +1250,14 @@ test('Phase 12 regression: narrative generation route prefers the configured Gem
 	assert.ok(route.indexOf('google_gemini::gemini-3.5-flash') < route.indexOf('google_gemini::gemini-2.5-flash'), route.join(' -> '));
 	assert.ok(route.indexOf('google_gemini::gemini-3.8-flash') < route.indexOf('google_gemini::gemini-2.5-flash'), route.join(' -> '));
 	assert.ok(route.some((key) => key.includes('provider_deterministic_emergency::emergency-fallback-local')), 'emergency floor remains available');
+	
+	const configPath = path.join(process.cwd(), 'server', 'data', 'orchestrator_config.json');
+	const runtimeConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+	const configuredRoute: string[] = runtimeConfig.fallbackChains['narrative.generate'];
+	assert.ok(
+		configuredRoute.indexOf('google_gemini::gemini-3.8-flash') < configuredRoute.indexOf('google_gemini::gemini-2.5-flash'),
+		'persisted runtime config must preserve the same Gemini 3.8-before-2.5 narrative order: ' + configuredRoute.join(' -> '),
+	);
 });
 
 
@@ -1301,4 +1326,61 @@ test('Phase 12 regression: deterministic emergency floor answers direct NPC soci
 	assert.equal(result.turnPackage?.dialogue[0]?.speaker, 'Barren');
 	assert.match(result.turnPackage?.dialogue[0]?.text || '', /appeal|impressive/i);
 	assert.match(result.turnPackage?.narrative.join(' ') || '', /Barren|question/i);
+});
+
+
+test('Phase 12 regression: environment-heavy narration fails closed when the N18 rewrite is skipped', async () => {
+	const storyId = 'phase12_environment_gate_skipped_rewrite';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	// Make this a continuing turn rather than an exempt opening scene.
+	repository.appendCanonicalCommandEvent(storyId, {
+		eventId: 'phase12_environment_gate_prior_event',
+		kind: 'TEST_PRIOR_TURN',
+		storyId,
+	});
+
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const location = repository.getGeographyGraph(storyId).getNode(player.locationId);
+	assert.ok(location);
+
+	const orchestrator = createTestOrchestrator(repository);
+	const scenery = new DeterministicMockAdapter('phase12_environment_heavy_provider');
+	scenery.cannedResponses.set('narrative.generate', JSON.stringify({
+		narrative: [
+			`You look around ${location!.name}, taking in the colossal bronze astrolabe suspended over a bottomless chasm.`,
+			'Concentric rings hum softly above the bottomless chasm.',
+			'A faint ozone tang hangs in the air beside rhythmic metallic ticking.',
+			'The colossal bronze astrolabe remains suspended over the bottomless chasm.',
+			'Rhythmic metallic ticking continues around the concentric rings as they hum softly.',
+		],
+		dialogue: [],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	}));
+	orchestrator.registerAdapter(scenery);
+	orchestrator.registerModel(model('phase12_environment_heavy_provider', 'environment-heavy-model', ['narrative.generate']));
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_environment_heavy_provider::environment-heavy-model',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const result = await orchestrator.generateNarrativeOnly({
+		storyId,
+		playerAction: 'Look around the room.',
+		hardTokenBudget: 1100,
+		timeoutMs: 100,
+		maxRetries: 0,
+	});
+
+	assert.equal(result.success, false, 'Environment-heavy original narration must not be shown when its rewrite gate is skipped.');
+	assert.equal(result.turnPackage, undefined);
+	assert.match(result.error || result.fallbackReason || '', /environment-only|environment-heavy|substance/i);
+	assert.match(
+		result.error || result.fallbackReason || '',
+		/N18 environment\/substance gate rejected final narration/i,
+		'The rejection must come from the final N18 guard, not an unrelated validation failure.',
+	);
 });

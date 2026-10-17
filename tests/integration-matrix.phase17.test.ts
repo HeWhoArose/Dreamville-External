@@ -31,7 +31,7 @@ describe('Phase 17 — cross-system integration matrix', () => {
 
 	it('documents the canonical narrative dependency chain and visual dependency chain', async () => {
 		const matrix = await fs.readFile(
-			new URL('../docs/DREAMVILLE_INTEGRATION_MATRIX_PHASE17.md', import.meta.url),
+			new URL('../docs/outdated/phase-17-to-24/DREAMVILLE_INTEGRATION_MATRIX_PHASE17_HISTORICAL.md', import.meta.url),
 			'utf8',
 		);
 		assert.match(matrix, /PLAYER INPUT.*PlayerIntent.*CurrentSituation.*NarrativeResearch.*NarrativePlan/s);
@@ -41,7 +41,7 @@ describe('Phase 17 — cross-system integration matrix', () => {
 
 	it('keeps visual presentation separate from canonical mutation', async () => {
 		const matrix = await fs.readFile(
-			new URL('../docs/DREAMVILLE_INTEGRATION_MATRIX_PHASE17.md', import.meta.url),
+			new URL('../docs/outdated/phase-17-to-24/DREAMVILLE_INTEGRATION_MATRIX_PHASE17_HISTORICAL.md', import.meta.url),
 			'utf8',
 		);
 		assert.match(matrix, /presentation-only/);

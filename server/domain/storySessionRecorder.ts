@@ -61,9 +61,11 @@ export interface StorySessionInteraction {
 
 export interface StorySessionRecording {
 	format: 'DREAMVILLE_STORY_SESSION_RECORDING';
-	schemaVersion: '1.0.0';
-	recorderVersion: '1.0.0';
+	schemaVersion: '1.1.0';
+	recorderVersion: '1.1.0';
 	recordingId: string;
+	/** Identifies the concrete StoryRun incarnation; storyId alone can be reused. */
+	runSessionId: string;
 	storyId: string;
 	title: string;
 	startedAt: string;
@@ -105,8 +107,21 @@ function escapePointerSegment(value: string): string {
 }
 
 function hash(value: unknown): string {
+	// Session-recording integrity hashes cover the entire lossless snapshot,
+	// including denormalized runtimeState fields. Intervening changes are
+	// represented by explicit AUXILIARY bridge interactions rather than omitted
+	// from the hash and made invisible to tamper detection.
 	return crypto.createHash('sha256').update(JSON.stringify(value ?? null), 'utf8').digest('hex');
 }
+
+interface ReconstructedRecordingTail {
+	state: unknown;
+	interactionCount: number;
+	lastStateAfterHash: string;
+	lastPatchHash: string;
+}
+
+const reconstructedRecordingTails = new WeakMap<StorySessionRecording, ReconstructedRecordingTail>();
 
 function diff(before: unknown, after: unknown, path = ''): StorySessionJsonPatchOperation[] {
 	if (Object.is(before, after)) return [];
@@ -200,6 +215,7 @@ function applyPatch(root: any, operations: StorySessionJsonPatchOperation[]): an
 
 export interface StartStorySessionRecordingParams {
 	storyId: string;
+	runSessionId?: string;
 	title?: string;
 	initialState: unknown;
 	engineVersion?: string;
@@ -226,8 +242,8 @@ export interface RecordStorySessionInteractionParams {
 
 export class StorySessionRecorder {
 	public static readonly FORMAT = 'DREAMVILLE_STORY_SESSION_RECORDING' as const;
-	public static readonly SCHEMA_VERSION = '1.0.0';
-	public static readonly RECORDER_VERSION = '1.0.0';
+	public static readonly SCHEMA_VERSION = '1.1.0';
+	public static readonly RECORDER_VERSION = '1.1.0';
 
 	public static start(params: StartStorySessionRecordingParams): StorySessionRecording {
 		const now = new Date().toISOString();
@@ -236,6 +252,7 @@ export class StorySessionRecorder {
 			schemaVersion: this.SCHEMA_VERSION,
 			recorderVersion: this.RECORDER_VERSION,
 			recordingId: crypto.randomUUID(),
+			runSessionId: params.runSessionId || `legacy:${params.storyId}`,
 			storyId: params.storyId,
 			title: params.title?.trim() || 'Dreamville Story Session',
 			startedAt: now,
@@ -265,6 +282,101 @@ export class StorySessionRecorder {
 		};
 	}
 
+	private static reconstructedTail(recording: StorySessionRecording): unknown {
+		const interactions = recording.interactions;
+		const last = interactions[interactions.length - 1];
+		const lastPatchHash = last ? hash(last.statePatch) : '';
+		const cached = reconstructedRecordingTails.get(recording);
+		if (
+			cached &&
+			cached.interactionCount === interactions.length &&
+			cached.lastStateAfterHash === (last?.stateAfterHash || hash(recording.initialState)) &&
+			cached.lastPatchHash === lastPatchHash
+		) {
+			return clone(cached.state);
+		}
+
+		// A loaded recording is reconstructed once and then cached. If its tail was
+		// edited outside the recorder, validate the existing chain before extending it.
+		const validation = this.validate(recording);
+		if (!validation.valid) {
+			throw new Error('Existing story session recording integrity failure: ' + validation.errorReason);
+		}
+		const state = this.applyPatches(recording);
+		const tailHash = hash(state);
+		const expectedTailHash = last?.stateAfterHash || hash(recording.initialState);
+		if (tailHash !== expectedTailHash) {
+			throw new Error('Existing story session recording tail does not match its stored integrity hash.');
+		}
+		reconstructedRecordingTails.set(recording, {
+			state: clone(state),
+			interactionCount: interactions.length,
+			lastStateAfterHash: expectedTailHash,
+			lastPatchHash,
+		});
+		return state;
+	}
+
+	/**
+	 * Preserve state changes observed between interaction recorder boundaries.
+	 * This does not relax append-time hash checks: the gap becomes its own,
+	 * explicitly labelled AUXILIARY interaction with a normal before/after hash
+	 * and patch. It must never be attributed silently to the next command.
+	 */
+	public static appendBoundaryTransitionIfNeeded(
+		recording: StorySessionRecording,
+		params: {
+			storyId: string;
+			stateBefore: unknown;
+			nextInteractionKind: StorySessionInteractionKind;
+			nextInteractionSource: string;
+		},
+	): boolean {
+		if (recording.interactions.length === 0 || recording.endedAt) return false;
+		const candidate = params.stateBefore as any;
+		const isCanonicalSnapshot = Boolean(
+			candidate &&
+			typeof candidate === 'object' &&
+			typeof candidate.storyId === 'string' &&
+			candidate.storyId === params.storyId &&
+			Object.prototype.hasOwnProperty.call(candidate, 'worldClock') &&
+			Object.prototype.hasOwnProperty.call(candidate, 'player') &&
+			candidate.adaptation &&
+			typeof candidate.adaptation === 'object',
+		);
+		if (!isCanonicalSnapshot) return false;
+
+		const previousState = this.reconstructedTail(recording);
+		if (hash(previousState) === hash(params.stateBefore)) return false;
+
+		const stateBefore = clone(previousState);
+		const stateAfter = clone(params.stateBefore);
+		const changedPaths = diff(stateBefore, stateAfter).map((operation) => operation.path);
+		const timestamp = new Date().toISOString();
+		this.append(recording, {
+			storyId: params.storyId,
+			kind: 'AUXILIARY',
+			source: 'STORY_SESSION_BOUNDARY_RECONCILIATION',
+			startedAt: timestamp,
+			completedAt: timestamp,
+			success: true,
+			rolledBack: false,
+			request: {
+				nextInteractionKind: params.nextInteractionKind,
+				nextInteractionSource: params.nextInteractionSource,
+			},
+			result: {
+				kind: 'OUT_OF_BAND_STATE_TRANSITION',
+				note: 'Observed state changes between recorder boundaries were preserved as a separate AUXILIARY interaction and are not attributed to the next command.',
+				changedPathCount: changedPaths.length,
+			},
+			stateBefore,
+			stateAfter,
+			mutationPaths: changedPaths.slice(0, 128),
+		});
+		return true;
+	}
+
 	public static append(
 		recording: StorySessionRecording,
 		params: RecordStorySessionInteractionParams,
@@ -272,13 +384,30 @@ export class StorySessionRecorder {
 		if (recording.storyId !== params.storyId) {
 			throw new Error('Story session recording storyId mismatch.');
 		}
-		if (recording.interactions.length === 0 && params.stateBefore !== undefined) {
-			recording.initialState = clone(params.stateBefore);
+		if (recording.endedAt) {
+			throw new Error('Cannot append to a stopped story session recording.');
+		}
+		// StateRun.runtimeState is an ignored/denormalized projection for canonical
+		// hash purposes, but its latest value still belongs in the reconstructable
+		// snapshot. Patch from the previous recorded post-state so intervening cache
+		// reserialization is captured instead of breaking the next interaction chain.
+		const previousState = this.reconstructedTail(recording);
+		const expectedBeforeHash = recording.interactions.length
+			? recording.interactions[recording.interactions.length - 1].stateAfterHash
+			: hash(recording.initialState);
+		if (hash(previousState) !== expectedBeforeHash) {
+			throw new Error('Existing story session recording tail has an invalid integrity hash.');
+		}
+		const suppliedBeforeHash = hash(params.stateBefore);
+		if (suppliedBeforeHash !== expectedBeforeHash) {
+			throw new Error(
+				`Story session state-before mismatch at interaction ${recording.interactions.length + 1}: expected ${expectedBeforeHash}, got ${suppliedBeforeHash}.`,
+			);
 		}
 		const sequence = recording.interactions.length + 1;
 		const before = clone(params.stateBefore);
 		const after = clone(params.stateAfter);
-		const statePatch = diff(before, after);
+		const statePatch = diff(previousState, after);
 		const interaction: StorySessionInteraction = {
 			sequence,
 			interactionId: crypto.randomUUID(),
@@ -302,6 +431,12 @@ export class StorySessionRecorder {
 		};
 		recording.interactions.push(interaction);
 		recording.finalStateHash = hash(after);
+		reconstructedRecordingTails.set(recording, {
+			state: clone(after),
+			interactionCount: recording.interactions.length,
+			lastStateAfterHash: interaction.stateAfterHash,
+			lastPatchHash: hash(interaction.statePatch),
+		});
 		delete recording.finalState;
 	}
 
@@ -315,14 +450,23 @@ export class StorySessionRecorder {
 		if (!recording || typeof recording !== 'object') return { valid: false, errorReason: 'Recording root must be an object.' };
 		const value = recording as Partial<StorySessionRecording>;
 		if (value.format !== this.FORMAT) return { valid: false, errorReason: 'Unsupported story session recording format.' };
-		if (value.schemaVersion !== this.SCHEMA_VERSION) return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
+		if (value.schemaVersion !== this.SCHEMA_VERSION && value.schemaVersion !== '1.0.0') {
+			return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
+		}
+		if (value.schemaVersion === this.SCHEMA_VERSION && (typeof value.runSessionId !== 'string' || !value.runSessionId.trim())) {
+			return { valid: false, errorReason: 'Recording is missing runSessionId.' };
+		}
 		if (!value.storyId || !value.recordingId) return { valid: false, errorReason: 'Recording metadata is incomplete.' };
 		if (!value.initialState) return { valid: false, errorReason: 'Recording is missing initialState.' };
 		if (!Array.isArray(value.interactions)) return { valid: false, errorReason: 'Recording interactions must be an array.' };
 
 		let reconstructed = clone(value.initialState);
-		for (const interaction of value.interactions) {
+		for (let index = 0; index < value.interactions.length; index += 1) {
+			const interaction = value.interactions[index];
 			if (!interaction || typeof interaction !== 'object') return { valid: false, errorReason: 'Recording contains an invalid interaction.' };
+			if (interaction.sequence !== index + 1) {
+				return { valid: false, errorReason: `Recording sequence is not contiguous at interaction ${index + 1}.` };
+			}
 			const beforeHash = hash(reconstructed);
 			if (interaction.stateBeforeHash !== beforeHash) {
 				if (interaction.sequence === 1 && interaction.stateAfterHash === beforeHash) {
@@ -360,6 +504,7 @@ export class StorySessionRecorder {
 
 	public static summarize(recording: StorySessionRecording): {
 		recordingId: string;
+		runSessionId: string;
 		storyId: string;
 		title: string;
 		startedAt: string;
@@ -390,6 +535,7 @@ export class StorySessionRecorder {
 		}
 		return {
 			recordingId: recording.recordingId,
+			runSessionId: recording.runSessionId,
 			storyId: recording.storyId,
 			title: recording.title,
 			startedAt: recording.startedAt,

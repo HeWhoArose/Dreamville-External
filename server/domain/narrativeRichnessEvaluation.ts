@@ -7,6 +7,7 @@ export type NarrativeRichnessDecision = 'PASS' | 'IMPROVE';
 export type NarrativeRichnessSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type NarrativeRichnessDimension =
+	| 'ACTION_SUBSTANCE'
 	| 'SPECIFICITY'
 	| 'CHARACTER_DIALOGUE_INDIVIDUALITY'
 	| 'SUBTEXT'
@@ -48,18 +49,19 @@ export interface NarrativeRichnessEvaluation {
 }
 
 const WEIGHTS: Record<NarrativeRichnessDimension, number> = {
+	ACTION_SUBSTANCE: 0.16,
 	SPECIFICITY: 0.11,
 	CHARACTER_DIALOGUE_INDIVIDUALITY: 0.09,
 	SUBTEXT: 0.08,
-	EMOTIONAL_PROGRESSION: 0.10,
-	SENSORY_VARIETY: 0.09,
+	EMOTIONAL_PROGRESSION: 0.08,
+	SENSORY_VARIETY: 0.05,
 	BEAT_PROGRESSION: 0.10,
 	DRAMATIC_TENSION: 0.08,
 	MEANINGFUL_REACTION: 0.08,
-	FRESHNESS: 0.10,
-	SETUP_PAYOFF: 0.07,
-	CLOSURE: 0.05,
-	PLAYER_AGENCY: 0.05,
+	FRESHNESS: 0.08,
+	SETUP_PAYOFF: 0.04,
+	CLOSURE: 0.02,
+	PLAYER_AGENCY: 0.03,
 };
 
 const STOP_WORDS = new Set([
@@ -151,6 +153,69 @@ function isMicroTurn(intent: PlayerIntent, plan: EphemeralNarrativePlan): boolea
 		intent.action === 'observe' ||
 		plan.sceneComposition?.pacingShape === 'MICRO_BEAT'
 	);
+}
+
+const ACTION_SUBSTANCE_ACTION_PATTERN =
+	/\b(?:ask|asks|asked|inquire|inquires|inquired|question|questions|questioned|look|looks|looked|see|sees|saw|notice|notices|noticed|observe|observes|observed|inspect|inspects|inspected|examine|examines|examined|study|studies|studied|scan|scans|scanned|check|checks|checked|read|reads|reading|listen|listens|listened|hear|hears|heard|move|moves|moved|step|steps|stepped|approach|approaches|approached|walk|walks|walked|cross|crosses|crossed|turn|turns|turned|open|opens|opened|close|closes|closed|touch|touches|touched|grip|grips|gripped|draw|draws|drew|prepare|prepares|prepared|wait|waits|waited|take|takes|took|use|uses|used|find|finds|found|discover|discovers|discovered|pick|picks|picked|enter|enters|entered|leave|leaves|left|give|gives|gave|receive|receives|received|hold|holds|held|settle|settles|settled|raise|raises|raised|lower|lowers|lowered|attack|attacks|attacked|cast|casts|tested|test|tests|tighten|tightens|tightened|follow|follows|followed|fall|falls|fell|break|breaks|broke|unsheathe|unsheathes|unsheathed|sheath|sheathes|sheathed|slide|slides|slid)\b/gi;
+const ACTION_SUBSTANCE_REACTION_PATTERN =
+	/\b(?:nod|nods|nodded|flinch|flinches|flinched|hesitate|hesitates|hesitated|glance|glances|glanced|stare|stares|stared|recoil|recoils|recoiled|smile|smiles|smiled|frown|frowns|frowned|laugh|laughs|laughed|gasp|gasps|gasped|freeze|freezes|froze|watch|watches|watched|acknowledge|acknowledges|acknowledged|gesture|gestures|gestured|pause|pauses|paused|respond|responds|responded|answer|answers|answered|reply|replies|replied|refuse|refuses|refused|warn|warns|warned|explain|explains|explained|say|says|said|tell|tells|told|speak|speaks|spoke|turn|turns|turned|shrug|shrugs|shrugged|shake|shakes|shook|tighten|tightens|tightened|soften|softens|softened|exhale|exhales|exhaled)\b/gi;
+const ACTION_SUBSTANCE_INFORMATION_PATTERN =
+	/\b(?:answer|answers|answered|reply|replies|replied|respond|responds|responded|report|reports|reported|tell|tells|told|say|says|said|speak|speaks|spoke|explain|explains|explained|reveal|reveals|revealed|confirm|confirms|confirmed|state|states|stated|mention|mentions|mentioned|admit|admits|admitted|warn|warns|warned|refuse(?:s|d)? to answer|nothing|unknown|uncertain|unclear|no reliable answer|no answer|cannot answer|can't answer|do not know|don't know|not sure)\b/gi;
+const ACTION_SUBSTANCE_SENSORY_PATTERN =
+	/\b(?:shadow|light|glow|dark|sky|stone|air|dust|smell|scent|sound|echo|murmur|roar|wind|cold|warm|autumn|brass|iron|earth|floor|wall|arch|rain|mist|haze|color|colour|gleam|shimmer|quiet|silence|smoke|ticking|hum|humming)\b/gi;
+
+function scoreActionSubstance(
+	text: string,
+	intent: PlayerIntent,
+	plan: EphemeralNarrativePlan,
+	hasStructuredDialogue: boolean,
+): NarrativeRichnessDimensionResult {
+	const sentenceCount = sentences(text).length;
+	const actionText = String(intent.action || '') + ' ' + String(intent.originalText || '');
+	const isInformationTurn =
+		intent.interactionMode === 'DIALOGUE' ||
+		intent.interactionMode === 'INFORMATION_SEEKING' ||
+		Boolean(intent.speechIntent) ||
+		/\b(?:ask|asked|question|questioned|inquire|inquired|find out|learn|what happened|who|why|where|how|rumou?rs?|gossip)\b/i.test(actionText);
+	const actionSignals = (text.match(ACTION_SUBSTANCE_ACTION_PATTERN) || []).length;
+	const reactionSignals = (text.match(ACTION_SUBSTANCE_REACTION_PATTERN) || []).length;
+	const informationSignals = (text.match(ACTION_SUBSTANCE_INFORMATION_PATTERN) || []).length;
+	const sensorySignals = (text.match(ACTION_SUBSTANCE_SENSORY_PATTERN) || []).length;
+
+	// Focused one- or two-sentence observations should not be forced into a longer
+	// action arc, but they still need to report a specific observable detail.
+	const focusedObservation = /\b(?:look|looks|looked|see|sees|saw|notice|notices|noticed|observe|observes|observed|inspect|inspects|inspected|glint|glints|glinted|reflect|reflects|reflected|visible|shows|showed|lies|rests|hangs|sounds|smells|feels|hear|heard|listen|listened|mark|marks|scratch|scratches|trace|traces|catches|caught)\b/i.test(text);
+	if (isMicroTurn(intent, plan) && sentenceCount <= 2 && focusedObservation) {
+		return dimension('ACTION_SUBSTANCE', 0.70, [
+			'A focused micro-turn communicates one concrete observation without requiring a longer action arc.',
+		]);
+	}
+
+	const hasResolution = isInformationTurn
+		? informationSignals > 0 || hasStructuredDialogue
+		: reactionSignals > 0 || informationSignals > 0 ||
+			Boolean(plan.sceneComposition?.closingBeat && overlap(text, plan.sceneComposition.closingBeat) > 0.05);
+	let actionCoverage: number;
+	if (isInformationTurn) {
+		actionCoverage = informationSignals > 0 || hasStructuredDialogue ? 0.32 : actionSignals > 0 ? 0.18 : 0.10;
+	} else {
+		actionCoverage = actionSignals > 0
+			? Math.min(1, 0.42 + Math.min(0.38, Math.min(actionSignals, 5) * 0.08))
+			: 0.18;
+	}
+	const resolutionCoverage = hasResolution ? 0.22 : isInformationTurn ? 0 : 0.10;
+	const sensoryPenalty =
+		sensorySignals > Math.max(1, actionSignals) * 2.5 && sentenceCount >= 4
+			? 0.24
+			: sensorySignals > Math.max(1, actionSignals) * 1.75 && sentenceCount >= 3
+				? 0.12
+				: 0;
+	const score = clamp(actionCoverage + resolutionCoverage - sensoryPenalty);
+	return dimension('ACTION_SUBSTANCE', score, [
+		actionSignals ? actionSignals + ' current-turn action/observation signals detected.' : 'No clear current-turn action/observation signal detected.',
+		hasResolution ? 'A response, consequence, information result, or bounded answer is present.' : 'The action result or information response is not clearly communicated.',
+		sensoryPenalty ? 'Environmental detail outweighs substantive action signals.' : 'Environmental detail remains subordinate to the current-turn action.',
+	]);
 }
 
 function scoreSpecificity(
@@ -377,7 +442,20 @@ export class NarrativeRichnessEvaluator {
 			};
 		}
 
+		const actionSubstanceText = [
+			text,
+			...(Array.isArray(params.turnPackage.dialogue)
+				? params.turnPackage.dialogue.map((entry) => String(entry?.speaker || '') + ': ' + String(entry?.text || ''))
+				: []),
+		].filter(Boolean).join(' ');
+		const actionSubstance = scoreActionSubstance(
+			actionSubstanceText,
+			params.intent,
+			params.plan,
+			Array.isArray(params.turnPackage.dialogue) && params.turnPackage.dialogue.some((entry) => String(entry?.text || '').trim().length > 0),
+		);
 		const dimensions = [
+			actionSubstance,
 			scoreSpecificity(text, params.situation, params.plan),
 			scoreDialogueIndividuality(text, params.intent, params.turnPackage),
 			scoreSubtext(text, params.plan),
@@ -410,8 +488,11 @@ export class NarrativeRichnessEvaluator {
 			.slice(0, 4)
 			.map((result) => result.dimension.toLowerCase().replace(/_/g, ' '));
 
+		const substanceDimension = dimensions.find((result) => result.dimension === 'ACTION_SUBSTANCE');
 		const decision: NarrativeRichnessDecision =
-			overallScore >= 0.68 && !weak.some((result) => result.dimension === 'PLAYER_AGENCY' || result.score < 0.32)
+			overallScore >= 0.68 &&
+			!weak.some((result) => result.dimension === 'PLAYER_AGENCY' || result.score < 0.32) &&
+			Boolean(substanceDimension && substanceDimension.score >= 0.50)
 				? 'PASS'
 				: 'IMPROVE';
 
@@ -447,6 +528,7 @@ export class NarrativeRichnessEvaluator {
 			'N18 richness improvement guidance:',
 			...evaluation.issues.slice(0, 6).map((issue) => '- ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
 			'Improve presentation richness only. Preserve canonical facts, semantic player intent, knowledge boundaries, state effects, plot direction, and player agency.',
+			'For action-substance failures, resolve the player action first: show the concrete attempt, then an immediate observable response, consequence, information result, or clearly bounded unresolved result. Do not substitute environmental description for the action.',
 		].join('\n');
 	}
 }

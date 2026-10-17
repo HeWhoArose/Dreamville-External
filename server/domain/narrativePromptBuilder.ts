@@ -96,6 +96,13 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		].filter(Boolean).join(' '))
 		.join('; ') || 'None';
 
+	const visibleSceneEvents = (Array.isArray(situation.visibleEvents) ? situation.visibleEvents : [])
+		.filter((event) => !event.locationId || event.locationId === situation.location?.id)
+		.slice(0, 8)
+		.map((event) => '[' + String(event.type || 'EVENT').slice(0, 48) + '] ' + String(event.summary || '').slice(0, 220))
+		.filter((event) => event.trim().length > 0)
+		.join(' | ') || 'None';
+
 	const recentTurns = (Array.isArray(situation.recentTurns) ? situation.recentTurns : [])
 		.slice(-2)
 		.map((turn) => [
@@ -115,6 +122,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		situation.location?.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
 		'Visible entities: ' + visibleEntities,
 		'Canonical visible scene objects: ' + visibleObjects,
+		'Visible current-scene events (canonical or projected): ' + visibleSceneEvents,
 		'Canonical location occupancy: ' + JSON.stringify(situation.sceneEvidence?.occupancy || { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' }),
 		'Occupancy rule: UNKNOWN does not mean ABANDONED. Do not assert a location is empty, deserted, evacuated, or populated unless canonical occupancy, visible entities, sensory evidence, or a committed event supports that claim. If occupancy is unknown, preserve uncertainty and let observation/search actions investigate.',
 		'Canonical scene structures/features: ' + ((situation.sceneEvidence?.structures || []).join('; ') || 'None explicitly registered.'),
@@ -192,6 +200,14 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const globalInstruction = input.globalInstruction || 'You are the narrative presentation engine for Dreamville. Generate only the player-facing narrative turn. Canonical state, player intent, bounded research, and the ephemeral plan are authoritative inputs; prose is not canonical truth.';
 	const styleInstruction = input.styleInstruction || defaultNarrationStyle();
 	const situationContext = input.situation ? buildNarrationSituationContext(input.situation) : '[current situation unavailable]';
+	// Keep bounded canonical event evidence outside truncatable situation prose so
+	// low-token compact prompts cannot silently drop committed NPC interactions.
+	const canonicalVisibleSceneEvents = (Array.isArray(input.situation.visibleEvents) ? input.situation.visibleEvents : [])
+		.filter((event) => !event.locationId || event.locationId === input.situation.location?.id)
+		.slice(0, 8)
+		.map((event) => '[' + String(event.type || 'EVENT').slice(0, 48) + '] ' + String(event.summary || '').slice(0, 220))
+		.filter((event) => event.trim().length > 0)
+		.join(' | ') || 'None';
 	const intentContext = JSON.stringify(input.intent);
 	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
 	const narrativeContinuityState = input.narrativeContinuityState || NarrativeContinuityStateEngine.defaultState(input.situation.storyId);
@@ -218,6 +234,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'CANONICAL CURRENT SCENE ANCHOR:',
 		'Canonical constraints:',
 		'- The current location and time in Current Situation are authoritative.',
+		'- Visible current-scene events (canonical or projected): ' + canonicalVisibleSceneEvents,
 		'- Stay in the canonical current location unless the canonical game state has already committed a location change.',
 		'- Player Intent is the semantic description of what the player meant to attempt.',
 		'- The structured Action Resolution is authoritative for mechanics, outcome tier, effects, and consequences; never reconstruct hidden mechanics from prose.',
@@ -323,7 +340,12 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microSocialTopology = truncatePromptSection(socialTopologyContext, 420);
 			const microEpisodeProjection = truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 500);
 			const microStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
-			const microCanonical = 'The current location and time are authoritative. Stay in the canonical current location unless the canonical game state has already committed a location change. Do not invent unsupported facts or turn rumor into certainty.';
+			const microCanonical = [
+				'The current location and time are authoritative.',
+				'Visible current-scene events (canonical or projected): ' + canonicalVisibleSceneEvents,
+				'Stay in the canonical current location unless the canonical game state has already committed a location change.',
+				'Do not invent unsupported facts or turn rumor into certainty.',
+			].join(' ');
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
 				section('GLOBAL NARRATION INSTRUCTIONS', microGlobal),
@@ -462,6 +484,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const compactStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
 			const compactCanonical = [
 				'State changes must come from canonical engines/commands.',
+				'Visible current-scene events (canonical or projected): ' + canonicalVisibleSceneEvents,
 				'Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
 				'Omitted or excluded information is not permission to invent it.',
 				'Stay in the canonical scene unless the canonical game state has already committed a location change.',

@@ -736,7 +736,17 @@ export class InMemoryWorldRepository implements WorldRepository {
             ambientSensory: isObj && typeof nodeItem.ambientSensory === 'string'
               ? nodeItem.ambientSensory
               : `Visual: Distinct environment of ${name}. Sounds: Ambient murmurs. Scent: Fresh air. Tactile: Stable terrain.`,
+            // Authored visible props are canonical scene evidence; dropping them
+            // here makes CurrentSituationBuilder and SemanticNarrativeReview
+            // reject valid observation prose as if those props had been invented.
+            sceneObjects: isObj && Array.isArray(nodeItem.sceneObjects)
+              ? JSON.parse(JSON.stringify(nodeItem.sceneObjects))
+              : undefined,
             provenance: (isObj && nodeItem.provenance) || 'authored',
+            // Preserve the authored occupancy contract so ambient seeding respects restricted/abandoned/NONE locations.
+            population: isObj && nodeItem.population && typeof nodeItem.population === 'object'
+              ? { ...nodeItem.population }
+              : undefined,
           };
           registeredNodes.push(locNode);
           geographyGraph.addNode(locNode as any);
@@ -3147,12 +3157,25 @@ export class InMemoryWorldRepository implements WorldRepository {
     });
   }
 
+  private getStorySessionRunId(run: any | null): string {
+    if (!run) return 'unknown-run';
+    return deterministicId(
+      'recording-session',
+      String(run.storyId || run.id || 'unknown'),
+      String(run.createdAt || ''),
+      String(run.activeCharacterId || run.characterName || 'unknown-character'),
+      String(run.worldVersion || run.worldId || 'unknown-world'),
+    );
+  }
+
   public getStorySessionRecording(storyId: string): StorySessionRecording | null {
     const key = String(storyId || '');
     if (!key) return null;
+    const runSessionId = this.getStorySessionRunId(this.getStoryRun(key));
     const existing = this.storySessionRecordings.get(key);
-    if (existing) return existing;
-    const persisted = storySessionRecordingStore.load(key);
+    if (existing && existing.runSessionId === runSessionId) return existing;
+    if (existing) this.storySessionRecordings.delete(key);
+    const persisted = storySessionRecordingStore.load(key, runSessionId);
     if (persisted) {
       this.storySessionRecordings.set(key, persisted);
       return persisted;
@@ -3165,10 +3188,13 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (!key) throw new Error('storyId is required for session recording.');
     const existing = this.getStorySessionRecording(key);
     if (existing) return existing;
+    const run = this.getStoryRun(key);
+    const runSessionId = this.getStorySessionRunId(run);
     const snapshot = initialState !== undefined ? initialState : captureCanonicalStateSnapshot(key, this);
     const recording = StorySessionRecorder.start({
       storyId: key,
-      title: title || this.getStoryRun(key)?.title || 'Dreamville Story Session',
+      runSessionId,
+      title: title || run?.title || 'Dreamville Story Session',
       initialState: snapshot,
       engineVersion: CampaignArchiveService.CURRENT_ENGINE_VERSION,
     });
@@ -3179,8 +3205,29 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public recordStorySessionInteraction(params: RecordStorySessionInteractionParams): StorySessionRecording {
     const recording = this.ensureStorySessionRecording(params.storyId, this.getStoryRun(params.storyId)?.title, params.stateBefore);
-    StorySessionRecorder.append(recording, params);
-    storySessionRecordingStore.save(recording);
+    try {
+      StorySessionRecorder.appendBoundaryTransitionIfNeeded(recording, {
+        storyId: params.storyId,
+        stateBefore: params.stateBefore,
+        nextInteractionKind: params.kind,
+        nextInteractionSource: params.source,
+      });
+      StorySessionRecorder.append(recording, params);
+      storySessionRecordingStore.save(recording);
+    } catch (error) {
+      // Forensic recording is observability, not canonical gameplay authority.
+      // A failed append must never turn a committed player action into a failed action.
+      // Persist any explicit AUXILIARY boundary gap already captured before the failure.
+      try {
+        storySessionRecordingStore.save(recording);
+      } catch {
+        // Storage errors remain non-authoritative for canonical gameplay.
+      }
+      console.error(
+        `[StorySessionRecorder] Failed to record interaction for story "${params.storyId}"; canonical gameplay continues.`,
+        error,
+      );
+    }
     return recording;
   }
 

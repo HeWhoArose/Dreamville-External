@@ -1,5 +1,5 @@
 import type { CurrentSituation, RecentTurnContext } from './currentSituation';
-import type { PlayerIntent } from './playerIntentInterpreter';
+import { isWorkAvailabilityGoal, type PlayerIntent } from './playerIntentInterpreter';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import type { NarrativeContinuityState } from './narrativeContinuityState';
 
@@ -66,7 +66,33 @@ function recentHistory(situation: CurrentSituation, limit = 6): RecentTurnContex
 	return (Array.isArray(situation.recentTurns) ? situation.recentTurns : []).slice(-limit);
 }
 
-function unresolvedThreads(situation: CurrentSituation): Array<{ id: string; title: string; summary?: string; priority: number }> {
+function unresolvedThreads(
+	situation: CurrentSituation,
+	intent: PlayerIntent,
+	research?: NarrativeResearchResult,
+): Array<{ id: string; title: string; summary?: string; priority: number }> {
+	if (isWorkAvailabilityGoal(intent)) {
+		const currentThreads = Array.isArray(situation.openThreads) ? situation.openThreads : [];
+		return (research?.blocks || [])
+			.filter((block) => block.kind === 'THREAD' && block.availableLocalOpportunity === true)
+			.map((block) => {
+				const sourceId = String(block.sourceId || block.id || '');
+				const current = currentThreads.find((thread) => String(thread.id || '') === sourceId);
+				const groundedTitle = normalize(block.content.split(' | ')[0] || current?.title);
+				return {
+					id: sourceId,
+					// The research block was built from the canonical posting after category,
+					// status, and location validation. Prefer its title over a stale or
+					// differently-normalized CurrentSituation projection.
+					title: groundedTitle,
+					summary: normalize([block.content, current?.summary].filter(Boolean).join(' — ')),
+					priority: Number(current?.priority || block.priority || 0),
+				};
+			})
+			.filter((thread) => thread.title)
+			.sort((a, b) => b.priority - a.priority || a.title.localeCompare(b.title))
+			.slice(0, 5);
+	}
 	return (Array.isArray(situation.openThreads) ? situation.openThreads : [])
 		.filter((thread) => !thread.status || String(thread.status).toUpperCase() === 'OPEN')
 		.map((thread) => ({
@@ -281,7 +307,7 @@ export class NarrativeEpisodeProjectionEngine {
 		};
 
 		const history = recentHistory(params.situation, Math.max(3, Math.min(10, params.historyWindow ?? 6)));
-		const threads = unresolvedThreads(params.situation);
+		const threads = unresolvedThreads(params.situation, params.intent, params.research);
 		const classification = classifyPhase(params.situation, params.intent, continuity, history, threads);
 		const beats = buildRecentBeats(history, params.situation);
 		const entities = keyEntities(params.situation, params.intent);

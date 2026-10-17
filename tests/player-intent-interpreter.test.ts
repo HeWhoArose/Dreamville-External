@@ -258,6 +258,60 @@ test('follow-up request to check further remains information-seeking', () => {
 });
 
 
+
+test('follow-up check further inherits the previous opportunity goal across consecutive follow-ups', () => {
+	const { currentSituation } = situation();
+	const turn = {
+		locationId: currentSituation.location.id,
+		stateChanges: [],
+		isOpeningScene: false,
+	};
+	currentSituation.recentTurns.push({
+		...turn,
+		turnId: 'prior-job-inquiry',
+		playerAction: 'I check the board for currently available job postings.',
+		narration: 'Edda Marr, the guild clerk, sorts posted contracts and answers adventurers’ questions.',
+	});
+	currentSituation.recentTurns.push({
+		...turn,
+		turnId: 'prior-follow-up',
+		playerAction: 'I check further for what I can do.',
+		narration: 'The clerk continues sorting the posted contracts.',
+	});
+
+	const result = PlayerIntentInterpreter.deterministic('I check further for what I can do.', currentSituation);
+	assert.equal(result.goal, 'gather_information');
+	assert.equal(result.interactionMode, 'INFORMATION_SEEKING');
+	assert.match(result.informationGoal || '', /find available work, jobs, contracts, tasks, or notices/i);
+	assert.equal(result.speechIntent, false);
+	assert.equal(result.observationIntent, false);
+});
+
+test('generic check further does not revive an opportunity goal after a different action intervenes', () => {
+	const { currentSituation } = situation();
+	const turn = {
+		locationId: currentSituation.location.id,
+		stateChanges: [],
+		isOpeningScene: false,
+	};
+	currentSituation.recentTurns.push({
+		...turn,
+		turnId: 'prior-job-inquiry',
+		playerAction: 'I check the board for currently available job postings.',
+		narration: 'Edda Marr sorts posted contracts.',
+	});
+	currentSituation.recentTurns.push({
+		...turn,
+		turnId: 'intervening-move',
+		playerAction: 'I walk to the northern gate.',
+		narration: 'You reach the northern gate.',
+	});
+
+	const result = PlayerIntentInterpreter.deterministic('I check further for what I can do.', currentSituation);
+	assert.equal(result.goal, 'gather_information');
+	assert.match(result.informationGoal || '', /learn what can be discovered/i);
+});
+
 test('movement phrasing preserves the named destination in make-my-way actions', () => {
 	const { currentSituation } = situation();
 	const result = PlayerIntentInterpreter.deterministic('I make my way towards the Archive of Contracts.', currentSituation);
@@ -265,6 +319,40 @@ test('movement phrasing preserves the named destination in make-my-way actions',
 	assert.equal(result.movementIntent, true);
 	assert.equal(result.goal, 'change_position_or_approach_target');
 	assert.equal(result.locationTarget?.name, 'Archive of Contracts');
+	assert.equal(result.locationTarget?.source, 'EXPLICIT');
+	assert.equal(result.locationTarget?.id, undefined, 'an unlisted destination stays name-only until canonical resolution');
+});
+
+
+test('movement to a named destination preserves it before a second action clause', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic(
+		'I want to move to the Quiet Archive and inspect the sealed gate.',
+		currentSituation,
+	);
+
+	assert.equal(result.movementIntent, true);
+	assert.equal(result.locationTarget?.name, 'Quiet Archive');
+	assert.equal(result.locationTarget?.source, 'EXPLICIT');
+	assert.equal(result.locationTarget?.id, undefined, 'an unlisted destination remains name-only until canonical resolution');
+});
+
+test('Continue retains a destination from movement phrasing with an extra action clause', () => {
+	const { currentSituation } = situation();
+	currentSituation.recentTurns.push({
+		turnId: 'previous-travel-with-extra-action',
+		playerAction: 'I make my way to the Quiet Archive and inspect the sealed gate.',
+		narration: 'You begin moving toward the Lantern Vault while keeping the gate in view.',
+		locationId: currentSituation.location.id,
+		stateChanges: [],
+		isOpeningScene: false,
+	});
+	const result = PlayerIntentInterpreter.deterministic('Continue', currentSituation);
+
+	assert.equal(result.movementIntent, true);
+	assert.equal(result.action, 'continue_travel');
+	assert.equal(result.locationTarget?.name, 'Quiet Archive');
+	assert.equal(result.locationTarget?.source, 'IMPLIED');
 });
 
 test('Continue inherits an unfinished travel destination from the immediately previous movement turn', () => {

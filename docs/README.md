@@ -54,6 +54,10 @@ This is the complete, active owner plan for:
 
 Say “Phase 1 of `docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`” when referring to the live-model test gate. Do not say only “Phase 1”: older historical documents use that label for different work (CurrentSituation, StoryBeat contract, Master Plan phase work and other systems).
 
+## 3a. Narrative research and gap audit (2026-10-17)
+
+Read [Narrative Competitive Research & Gap Audit](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md) for how comparable AI game-master systems keep narration consistent and objective-driven, an evidence-tiered review of Dreamville against them, and the proposals that feed §10 and §15 of the active plan. It is an evidence input, not an implementation authority; every proposal still needs a reproduced failure first.
+
 ## 3. Latest baseline audit (2026-10-15)
 
 Read [Narrative Grounding Phase 0 Baseline Audit](NARRATIVE_GROUNDING_PHASE0_BASELINE_AUDIT_2026-10-15.md) before implementing the active narrative plan. It records which systems already exist, which integrations remain unverified, the current main-branch CI baseline, and the required human gates. It is a dated snapshot; inspect current code and CI before relying on its status.

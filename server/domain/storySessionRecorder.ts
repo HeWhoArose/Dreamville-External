@@ -61,8 +61,8 @@ export interface StorySessionInteraction {
 
 export interface StorySessionRecording {
 	format: 'DREAMVILLE_STORY_SESSION_RECORDING';
-	schemaVersion: '1.1.0';
-	recorderVersion: '1.1.0';
+	schemaVersion: '1.0.0' | '1.1.0' | '1.2.0';
+	recorderVersion: '1.1.0' | '1.2.0';
 	recordingId: string;
 	/** Identifies the concrete StoryRun incarnation; storyId alone can be reused. */
 	runSessionId: string;
@@ -106,12 +106,55 @@ function escapePointerSegment(value: string): string {
 	return value.replace(/~/g, '~0').replace(/\//g, '~1');
 }
 
-function hash(value: unknown): string {
+/**
+ * Insertion-order-sensitive hash used by schema 1.0.0 and 1.1.0 recordings.
+ * Kept only so those recordings still validate and extend exactly as before.
+ *
+ * Its weakness: `JSON.stringify` depends on object key order, while the
+ * positional array diff used for patches can legitimately rebuild an object
+ * with the same content in a different key order (for example when a new
+ * action-log entry becomes index 0 and a field is added in the middle). The
+ * reconstructed state then hashes differently from the live state even though
+ * the data is identical, and export validation fails.
+ */
+function legacyHash(value: unknown): string {
 	// Session-recording integrity hashes cover the entire lossless snapshot,
 	// including denormalized runtimeState fields. Intervening changes are
 	// represented by explicit AUXILIARY bridge interactions rather than omitted
 	// from the hash and made invisible to tamper detection.
 	return crypto.createHash('sha256').update(JSON.stringify(value ?? null), 'utf8').digest('hex');
+}
+
+/**
+ * JSON-equivalent serialization with object keys sorted, so equal data hashes
+ * equally regardless of key insertion order. Matches `JSON.stringify` semantics
+ * for undefined, functions, symbols, NaN and `toJSON`, so tamper detection still
+ * covers every value `JSON.stringify` would cover.
+ */
+function canonicalStringify(value: unknown): string | undefined {
+	if (value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined;
+	if (value === null || typeof value !== 'object') return JSON.stringify(value);
+	const withToJson = value as { toJSON?: () => unknown };
+	if (typeof withToJson.toJSON === 'function') return canonicalStringify(withToJson.toJSON());
+	if (Array.isArray(value)) {
+		return '[' + value.map((item) => canonicalStringify(item) ?? 'null').join(',') + ']';
+	}
+	const record = value as Record<string, unknown>;
+	const parts: string[] = [];
+	for (const key of Object.keys(record).sort()) {
+		const serialized = canonicalStringify(record[key]);
+		if (serialized !== undefined) parts.push(JSON.stringify(key) + ':' + serialized);
+	}
+	return '{' + parts.join(',') + '}';
+}
+
+function canonicalHash(value: unknown): string {
+	return crypto.createHash('sha256').update(canonicalStringify(value ?? null) ?? 'null', 'utf8').digest('hex');
+}
+
+/** Schema 1.2.0 and later use the key-order-independent hash; older schemas keep the legacy one. */
+function hashFor(recording: { schemaVersion?: string }): (value: unknown) => string {
+	return recording.schemaVersion === '1.2.0' ? canonicalHash : legacyHash;
 }
 
 interface ReconstructedRecordingTail {
@@ -242,8 +285,8 @@ export interface RecordStorySessionInteractionParams {
 
 export class StorySessionRecorder {
 	public static readonly FORMAT = 'DREAMVILLE_STORY_SESSION_RECORDING' as const;
-	public static readonly SCHEMA_VERSION = '1.1.0';
-	public static readonly RECORDER_VERSION = '1.1.0';
+	public static readonly SCHEMA_VERSION = '1.2.0' as const;
+	public static readonly RECORDER_VERSION = '1.2.0' as const;
 
 	public static start(params: StartStorySessionRecordingParams): StorySessionRecording {
 		const now = new Date().toISOString();
@@ -283,6 +326,7 @@ export class StorySessionRecorder {
 	}
 
 	private static reconstructedTail(recording: StorySessionRecording): unknown {
+		const hash = hashFor(recording);
 		const interactions = recording.interactions;
 		const last = interactions[interactions.length - 1];
 		const lastPatchHash = last ? hash(last.statePatch) : '';
@@ -333,6 +377,7 @@ export class StorySessionRecorder {
 		},
 	): boolean {
 		if (recording.interactions.length === 0 || recording.endedAt) return false;
+		const hash = hashFor(recording);
 		const candidate = params.stateBefore as any;
 		const isCanonicalSnapshot = Boolean(
 			candidate &&
@@ -387,6 +432,7 @@ export class StorySessionRecorder {
 		if (recording.endedAt) {
 			throw new Error('Cannot append to a stopped story session recording.');
 		}
+		const hash = hashFor(recording);
 		// StateRun.runtimeState is an ignored/denormalized projection for canonical
 		// hash purposes, but its latest value still belongs in the reconstructable
 		// snapshot. Patch from the previous recorded post-state so intervening cache
@@ -441,6 +487,7 @@ export class StorySessionRecorder {
 	}
 
 	public static stop(recording: StorySessionRecording): void {
+		const hash = hashFor(recording);
 		recording.endedAt = new Date().toISOString();
 		recording.finalState = this.applyPatches(recording);
 		recording.finalStateHash = hash(recording.finalState);
@@ -450,15 +497,16 @@ export class StorySessionRecorder {
 		if (!recording || typeof recording !== 'object') return { valid: false, errorReason: 'Recording root must be an object.' };
 		const value = recording as Partial<StorySessionRecording>;
 		if (value.format !== this.FORMAT) return { valid: false, errorReason: 'Unsupported story session recording format.' };
-		if (value.schemaVersion !== this.SCHEMA_VERSION && value.schemaVersion !== '1.0.0') {
+		if (value.schemaVersion !== this.SCHEMA_VERSION && value.schemaVersion !== '1.1.0' && value.schemaVersion !== '1.0.0') {
 			return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
 		}
-		if (value.schemaVersion === this.SCHEMA_VERSION && (typeof value.runSessionId !== 'string' || !value.runSessionId.trim())) {
+		if (value.schemaVersion !== '1.0.0' && (typeof value.runSessionId !== 'string' || !value.runSessionId.trim())) {
 			return { valid: false, errorReason: 'Recording is missing runSessionId.' };
 		}
 		if (!value.storyId || !value.recordingId) return { valid: false, errorReason: 'Recording metadata is incomplete.' };
 		if (!value.initialState) return { valid: false, errorReason: 'Recording is missing initialState.' };
 		if (!Array.isArray(value.interactions)) return { valid: false, errorReason: 'Recording interactions must be an array.' };
+		const hash = hashFor(value);
 
 		let reconstructed = clone(value.initialState);
 		for (let index = 0; index < value.interactions.length; index += 1) {

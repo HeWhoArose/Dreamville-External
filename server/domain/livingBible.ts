@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   LivingBibleRequirement,
@@ -16,7 +17,18 @@ import {
  * (DreamBook §406, §408, §412-§420)
  */
 
-const STORAGE_FILE_PATH = path.join(process.cwd(), 'data', 'workstation_ledger.json');
+/**
+ * Where the workstation ledger persists. Production default: data/workstation_ledger.json.
+ * Under a test run it goes to a per-process temp file, so a normal `npm test` never rewrites the
+ * tracked ledger. DREAMVILLE_WORKSTATION_LEDGER_PATH overrides both.
+ */
+export function getWorkstationLedgerPath(): string {
+  const override = process.env.DREAMVILLE_WORKSTATION_LEDGER_PATH;
+  if (override) return override;
+  const isTestRun = process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT);
+  if (isTestRun) return path.join(os.tmpdir(), `dreamville-workstation-ledger-${process.pid}.json`);
+  return path.join(process.cwd(), 'data', 'workstation_ledger.json');
+}
 
 export const INITIAL_LIVING_BIBLE_REQUIREMENTS: LivingBibleRequirement[] = [
   {
@@ -1137,7 +1149,7 @@ export class LivingBibleRegistry {
 
   private saveLedgerToFile(): void {
     try {
-      const dir = path.dirname(STORAGE_FILE_PATH);
+      const dir = path.dirname(getWorkstationLedgerPath());
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
@@ -1149,7 +1161,7 @@ export class LivingBibleRegistry {
         iterationHistory: this.iterationHistory,
       };
 
-      fs.writeFileSync(STORAGE_FILE_PATH, JSON.stringify(payload, null, 2), 'utf-8');
+      fs.writeFileSync(getWorkstationLedgerPath(), JSON.stringify(payload, null, 2), 'utf-8');
     } catch {
       // Graceful fallback if storage write fails
     }
@@ -1157,8 +1169,8 @@ export class LivingBibleRegistry {
 
   private loadLedgerFromFile(): void {
     try {
-      if (fs.existsSync(STORAGE_FILE_PATH)) {
-        const raw = fs.readFileSync(STORAGE_FILE_PATH, 'utf-8');
+      if (fs.existsSync(getWorkstationLedgerPath())) {
+        const raw = fs.readFileSync(getWorkstationLedgerPath(), 'utf-8');
         const parsed = JSON.parse(raw);
         if (parsed.requirements && Array.isArray(parsed.requirements)) {
           for (const req of parsed.requirements) {

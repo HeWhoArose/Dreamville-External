@@ -30,6 +30,8 @@
  * PROGRESS: each segment appends to artifacts/chaos-progress.log so partial
  * progress survives a process kill.
  */
+import os from 'node:os';
+import path from 'node:path';
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
@@ -44,10 +46,14 @@ const STORY = 'chaos_story';
 const PRIMARY_MODEL = 'chaos-primary';
 const FALLBACK_MODEL = 'chaos-fallback';
 
-const PROGRESS_LOG = 'artifacts/chaos-progress.log';
+// Progress logs survive a killed run. They go to a temp directory by default so a normal test run
+// never rewrites the tracked evidence under artifacts/. Set DREAMVILLE_ARTIFACT_DIR=artifacts to
+// refresh the repository copy deliberately.
+const ARTIFACT_DIR = process.env.DREAMVILLE_ARTIFACT_DIR || path.join(os.tmpdir(), 'dreamville-artifacts');
+const PROGRESS_LOG = path.join(ARTIFACT_DIR, 'chaos-progress.log');
 function logProgress(line: string): void {
   try {
-    mkdirSync('artifacts', { recursive: true });
+    mkdirSync(ARTIFACT_DIR, { recursive: true });
     appendFileSync(PROGRESS_LOG, `[${new Date().toISOString()}] ${line}\n`);
   } catch {
     // progress logging must never fail the run

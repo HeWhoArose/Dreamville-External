@@ -1296,11 +1296,40 @@ export class ServerMockAuthority {
     let narrativePlanForFinalReview: import('../domain/narrativeDirector').EphemeralNarrativePlan | undefined;
     let narrativeStoryBeatForFinalReview: import('../domain/storyBeatDirector').StoryBeatContract | undefined;
     let narrativePacingContractForFinalReview: import('../domain/narrativePacingEngine').NarrativePacingContract | undefined;
+    const forensicSink: import('../domain/aiOrchestrator').NarrativeOnlyForensicSink = {};
+    const stageNarrativeForensics = (generatedResult?: any, thrown?: any) => {
+      try {
+        worldRepository.stageStorySessionTurn(targetStoryId, {
+          task: 'narrative.generate',
+          playerAction: String(freeformText),
+          ...(forensicSink.playerIntent ? { playerIntent: forensicSink.playerIntent } : {}),
+          ...(forensicSink.forensicContext || {}),
+          ...(generatedResult?.contextAudit ? { contextAudit: generatedResult.contextAudit } : {}),
+          ...(generatedResult?.turnPackage ? { turnPackage: generatedResult.turnPackage } : {}),
+          ...(generatedResult?.narrativeRichnessEvaluation ? { narrativeRichnessEvaluation: generatedResult.narrativeRichnessEvaluation } : {}),
+          telemetry: {
+            path: 'narrative-only',
+            success: Boolean(generatedResult?.success),
+            providerId: generatedResult?.providerId,
+            modelId: generatedResult?.modelId,
+            source: generatedResult?.source,
+            fallbackReason: generatedResult?.fallbackReason,
+            error: generatedResult?.error ?? (thrown ? String(thrown?.message || thrown) : undefined),
+            storyBeat: generatedResult?.storyBeat,
+            narrativeQualityAudit: generatedResult?.narrativeQualityAudit,
+          },
+          attemptsTrail: generatedResult?.attemptsTrail ?? thrown?.attemptsTrail,
+        });
+      } catch {
+        // Forensic recording is observability only and must never affect gameplay.
+      }
+    };
     try {
       const narrator = worldRepository.getAiOrchestrator();
       const generated = await narrator.generateNarrativeOnly({
         storyId: targetStoryId,
         playerAction: String(freeformText),
+        forensicSink,
         actionResolution,
         committedOutcome,
         hardTokenBudget: 700,
@@ -1334,6 +1363,7 @@ export class ServerMockAuthority {
       narrativePacingContractForFinalReview = generated.narrativePacingContract;
       narrativeResearchPacket = generated.researchPacket;
       narrativeContextAudit = generated.contextAudit;
+      stageNarrativeForensics(generated);
       narrativeGeneration = {
         source: generated.source,
         providerId: generated.providerId,
@@ -1396,6 +1426,7 @@ export class ServerMockAuthority {
         });
       }
     } catch (error: any) {
+      stageNarrativeForensics(undefined, error);
       narrativeResponse = '';
       narrativeTurnPackage = undefined;
       narrativeGeneration = undefined;

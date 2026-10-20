@@ -427,6 +427,8 @@ export class CanonicalCommandEngine {
 				const recordingStartedAt = new Date().toISOString();
 				const recordingBefore = captureCanonicalStateSnapshot(command.storyId, repository);
 				try {
+					// A staged narration payload only ever belongs to the command that produced it.
+					repository.clearStagedStorySessionTurn(command.storyId);
 					const freshResult = await this.executeFresh(repository, command, handler, fingerprint);
 					const recordingAfter = captureCanonicalStateSnapshot(command.storyId, repository);
 					repository.recordStorySessionInteraction({

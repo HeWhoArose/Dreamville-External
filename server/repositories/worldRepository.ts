@@ -3203,7 +3203,33 @@ export class InMemoryWorldRepository implements WorldRepository {
     return recording;
   }
 
-  public recordStorySessionInteraction(params: RecordStorySessionInteractionParams): StorySessionRecording {
+  /**
+   * Forensic payload for a freeform narration turn, staged by the authority that ran the
+   * narrator and consumed once by the next DIRECT_TURN recording. Observability only: it is
+   * never read by gameplay and never returned to a client.
+   */
+  private stagedStorySessionTurns = new Map<string, NonNullable<RecordStorySessionInteractionParams['turn']>>();
+
+  public stageStorySessionTurn(storyId: string, turn: NonNullable<RecordStorySessionInteractionParams['turn']>): void {
+    try {
+      // Deep-clone now: the live objects may be mutated before the interaction is recorded.
+      this.stagedStorySessionTurns.set(storyId, JSON.parse(JSON.stringify(turn)));
+    } catch {
+      // Recording is observability; staging must never affect gameplay.
+    }
+  }
+
+  public clearStagedStorySessionTurn(storyId: string): void {
+    this.stagedStorySessionTurns.delete(storyId);
+  }
+
+  public recordStorySessionInteraction(incomingParams: RecordStorySessionInteractionParams): StorySessionRecording {
+    const staged = this.stagedStorySessionTurns.get(incomingParams.storyId);
+    this.stagedStorySessionTurns.delete(incomingParams.storyId);
+    const params: RecordStorySessionInteractionParams =
+      !incomingParams.turn && staged && incomingParams.kind === 'DIRECT_TURN'
+        ? { ...incomingParams, turn: staged }
+        : incomingParams;
     const recording = this.ensureStorySessionRecording(params.storyId, this.getStoryRun(params.storyId)?.title, params.stateBefore);
     try {
       StorySessionRecorder.appendBoundaryTransitionIfNeeded(recording, {

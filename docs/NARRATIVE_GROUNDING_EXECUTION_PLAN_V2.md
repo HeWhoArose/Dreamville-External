@@ -196,6 +196,8 @@ Each phase lists carried tasks (from the deferred plan), new tasks or slices, te
 
 **Recording requirement:** run every scenario with session recording on. For each scenario record the seeded fixture, input, preceding turns, canonical before/after state, intent, `CurrentSituation`, research evidence, `StoryBeatContract`, narrative plan, provider and model, every primary/repair/fallback output, each review decision, the final text shown, calls, latency and the recording ID.
 
+**Run procedure:** follow [`NARRATIVE_PHASE1_LIVE_RUN_SHEET.md`](NARRATIVE_PHASE1_LIVE_RUN_SHEET.md). **Fixture note:** the names in the tables below (a trench, an arena, a viewing box, a guild board) come from automated test fixtures and do not exist in a live world. In live sessions use the nearest equivalent feature of the generated world and record which one you used; a scenario with no equivalent is recorded as **BLOCKED**, not skipped silently. Scenarios that need failure injection or special world data (H, I, K, N) are deferred to a later Phase 1 session.
+
 #### Scenarios A–E (carried)
 
 | ID | Setup / input | Expected | Critical failure |

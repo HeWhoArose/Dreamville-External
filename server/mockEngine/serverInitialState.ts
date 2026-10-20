@@ -118,7 +118,7 @@ export const INITIAL_DIALOGUE_NODES: Record<string, DialogueNode> = {
     nodeId: 'maren_record_done',
     speakerId: 'char_maren',
     speakerName: 'Maren the Archivist',
-    text: 'The record is entered. If the core engine validates this inscription, the chronicle shall reflect the acoustic anomaly for posterity.',
+    text: 'The record is entered. Should the chronicle accept this inscription, it shall reflect the acoustic anomaly for posterity.',
     epistemicNote: 'Dialogue concluded; chronicle state modified.',
     choices: [
       {

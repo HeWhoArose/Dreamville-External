@@ -560,6 +560,29 @@ export interface OrchestratedTurnTelemetry {
   }>;
 }
 
+/**
+ * Recorder-only side channel for narrative-only turns. The caller passes an empty object; the
+ * orchestrator fills it once the turn context exists. It is never included in an API response
+ * and exists so the forensic session recorder can capture freeform narration turns.
+ */
+export interface NarrativeOnlyForensicSink {
+  playerIntent?: PlayerIntent;
+  forensicContext?: {
+    currentSituation?: unknown;
+    researchPacket?: unknown;
+    researchAudit?: unknown;
+    narrativePlan?: unknown;
+    contextAudit?: unknown;
+    narrationPrompt?: string;
+    narrationStyleInstruction?: string;
+    narrativeProviderHandoff?: unknown;
+    narratorVoiceState?: unknown;
+    narrativePacingContract?: unknown;
+    narrativeContinuityState?: unknown;
+    narrativeNoveltyState?: unknown;
+  };
+}
+
 export interface OrchestratedTurnResult {
   success: boolean;
   playerIntent?: PlayerIntent;
@@ -670,7 +693,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         break;
       case 'ooc.respond':
         text = JSON.stringify({
-          response: 'DreamBook OOC is running in deterministic mode. The current story context and canonical systems are active. Please refer to your character sheet, active location, and journal for authoritative state.',
+          response: 'Dreamville OOC is running in deterministic mode. The current story context and canonical systems are active. Please refer to your character sheet, active location, and journal for authoritative state.',
         });
         break;
       case 'story.advice':
@@ -2629,7 +2652,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
     let text: string;
     if (task === 'ooc.respond') {
       text = JSON.stringify({
-        response: 'DreamBook OOC: Based on the current story context, everything is currently operating within canonical rules.',
+        response: 'Dreamville OOC: Based on the current story context, everything is currently operating within canonical rules.',
       });
     } else if (task === 'character.extract' || prompt.includes('Character Genesis') || prompt.includes('CharacterGenesisDraft')) {
       text = JSON.stringify({
@@ -7984,6 +8007,8 @@ export class MultiModelOrchestrator {
     sceneContext?: string;
     forceModelId?: string;
     narratorVoiceControls?: NarratorVoiceControls;
+    /** Optional recorder-only sink; see NarrativeOnlyForensicSink. */
+    forensicSink?: NarrativeOnlyForensicSink;
   }): Promise<{
     success: boolean;
     turnPackage?: StructuredTurnPackage;
@@ -8350,6 +8375,22 @@ export class MultiModelOrchestrator {
       ...narrativePlan,
       ...(resolvedSceneComposition ? { sceneComposition: resolvedSceneComposition } : {}),
     };
+    if (params.forensicSink) {
+      params.forensicSink.playerIntent = playerIntent;
+      params.forensicSink.forensicContext = {
+        currentSituation,
+        researchPacket,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        narrativePlan: richnessEvaluationPlan,
+        narrationPrompt: narrationPrompt.prompt,
+        narrationStyleInstruction: styleInstruction,
+        narrativeProviderHandoff,
+        narratorVoiceState,
+        narrativePacingContract,
+        narrativeContinuityState,
+        narrativeNoveltyState,
+      };
+    }
 
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,

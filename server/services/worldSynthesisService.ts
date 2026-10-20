@@ -490,10 +490,10 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
     // Player-friendly generation status
     const generationStatus =
       generationSource === 'AI_PRIMARY'
-        ? 'Generated with DreamBook AI'
+        ? 'Generated with Dreamville AI'
         : generationSource === 'AI_FALLBACK'
         ? 'Primary AI unavailable · Generated with fallback AI'
-        : 'AI unavailable · DreamBook used its offline world generator';
+        : 'AI unavailable · Dreamville used its offline world generator';
 
     const provenance = {
       generationSource,

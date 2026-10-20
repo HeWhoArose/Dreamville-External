@@ -179,11 +179,8 @@ export const Header: React.FC<HeaderProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-serif font-bold tracking-tight text-stone-100">
-                Dreamville External
+                Dreamville
               </h1>
-              <span className="text-[10px] uppercase font-mono tracking-widest px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400/90 border border-amber-500/20">
-                Presentation Layer
-              </span>
             </div>
             <p className="text-xs text-stone-400 flex items-center gap-1.5 mt-0.5">
               <Compass className="w-3 h-3 text-amber-400" />

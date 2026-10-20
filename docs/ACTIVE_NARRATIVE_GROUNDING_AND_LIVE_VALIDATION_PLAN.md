@@ -1,8 +1,14 @@
 # Dreamville — Active Narrative Grounding & Live-Model Validation Plan
 
-**Status:** ACTIVE EXECUTION PLAN — Phase 1 live-model validation is **PLANNED / NOT YET PASSED**  
+> **DEFERRED — 2026-10-17. Execution of this program is deferred to [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md).**
+> V2 carries every phase of this plan forward with the same Phase 0–9 numbering, scenarios A–P, hard failure conditions, hard gates, status vocabulary and scope boundaries, and adds the research-driven slices (X1–X9), scenarios Q–X, new gates and owner decisions D1–D5.
+> From this date V2 owns phase status, gates, scope and sequencing. This file is retained as the historical record (CI evidence, PR triage, Phase 6 source findings, connection maps and rationale). **Where the two files differ, V2 wins.** Do not start new work from this file.
+> Phase 1 live-model validation remains **NOT YET PASSED**; deferral changes ownership of the plan, not the evidence.
+
+**Status:** DEFERRED TO `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` (historical record) — Phase 1 live-model validation is **PLANNED / NOT YET PASSED**  
 **Owner:** player-intent fidelity, evidence-grounded narration, living-world opportunity grounding, and narrative candidate/fallback validation  
 **Baseline reviewed:** `main` at `090b7d7b8c8b9c6ef47a0f643af3b15a303e1179` (2026-10-15)  
+**Revision:** 2026-10-17 — post-merge status block, completed research appendix (§10) and research-driven addendum (§15). No phase was renumbered.  
 **Authority:** `docs/README.md` is the document index; this file owns the narrative grounding work below.  
 **Important:** StoryBeatDirector and N13–N19 are existing implemented systems. This plan validates their current connections and fixes only demonstrated gaps. It is not permission to recreate them.
 
@@ -16,6 +22,16 @@
 - `docs/PERSISTENT_MULTIWORLD_AND_MEMORY_IMPLEMENTATION_PLAN_V1.md` — world/run binding, persistence and memory ownership.
 
 **Human-testing rule:** a deterministic or mocked CI pass is not a real-model pass. All scenarios tagged **[HUMAN LIVE-SESSION REQUIRED]** must be exercised through the configured provider and real player-facing turn flow; absent credentials means **BLOCKED**, not PASS.
+---
+
+## Post-merge status and research addendum — 2026-10-17
+
+- **Observed in Git history:** `main` now contains merge commit `ce3d3cb8` (“Merge pull request #76 from HeWhoArose/integration/narrative-grounding-runtime-2026-10-16-v2”). Statements elsewhere in this file that PR #76 is open, draft or unmerged describe the earlier checkpoints and are superseded on that point.
+- **Not verified by this revision:** the GitHub Actions results for `ce3d3cb8` (the GitHub API was rate-limited during review). Check Actions on that commit before calling `main` green. The disposition of PRs #69–#75 was likewise not verified.
+- **PASS — AUTOMATED (local run, not CI):** a fresh clone of the code at `ce3d3cb8` plus a git-tracking cleanup commit (not on `main`; it only changes ignore rules and untracks generated assets) passed release-contract verification, type-check, production build, and **1,530/1,530** tests in 117 suites.
+- **Research appendix complete:** see [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md). §10 is updated and §15 adds scenarios, gates and candidate slices derived from it.
+- **Still not passed:** Phase 1 live-model/player validation. Nothing in the research or the local run changes that.
+
 ---
 
 ## Integration status update — 2026-10-17
@@ -364,6 +380,8 @@ The local phase numbers in this file are authoritative **only for this narrative
 The safe order is **Phase 0 → baseline Phase 1 → targeted fixes in Phases 2–6 → Phase 1 rerun (Phase 7) → Phase 8 → Phase 9**. Do not repair and run the same baseline at once without capturing the original failure first.
 
 The phase numbers below are local to this plan. They do not renumber or supersede the repository's existing Phase 0–21 Deep Implementation Specification, N13–N19, or the existing Phase 1 live-model gate.
+
+The research-driven slices X1–X6 in §15 attach to Phases 2, 3, 5, 6, 8 and 9. They add no phase and are not authorised until reproduced as failures.
 
 ### Phase 0 — Baseline and authority lock
 
@@ -737,12 +755,23 @@ Do not:
 | AI orchestration specification | **Keep** for task contracts, routing, budgets, and fallback; add no competing routing layer |
 | Story Runtime specification | **Keep** for player-facing Story/OOC/Continue boundaries |
 | README vs Deep Implementation Specification | **Resolve the authority contradiction** before canonical-state or persistence redesign |
+| `NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md` | **Evidence input** for §10 and §15; not an implementation authority |
 
 This document should be the cross-cutting plan and acceptance matrix, not another implementation authority for every subsystem.
 
-## 10. Research follow-up
+## 10. Research evidence appendix (completed 2026-10-17)
 
-A separate deep-research investigation is being conducted into commercial and open-source AI RPG systems, including Friends & Fables and related projects. Its findings should be added as a short evidence appendix only after the report is available. The research must distinguish public, verifiable implementation details from product marketing and speculation. It must not delay the safe first step: audit the actual Dreamville runtime path and expand the existing Phase 1 test matrix.
+The deep-research investigation requested here is complete: [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md). It covers Friends & Fables, AI Dungeon, AI Realm, the several products named Loreweaver, open-source lorebook tooling and the academic work on LLM game masters, and it labels each source by evidence tier (first-party documentation, open source, peer-reviewed or preprint, marketing, anecdote).
+
+Short findings that bear on this plan:
+- The strongest published designs keep structured state as the authority and let the model propose and narrate. That is Dreamville's existing architecture; the plan's boundaries are confirmed, not changed.
+- Dreamville already has equivalents of Friends & Fables' working context and research step, AI Dungeon's budgeted context layers, and importance/decay memory retrieval, plus review and repetition controls the comparators do not document.
+- The comparators' clear-objective experience comes from explicit story structure (quest modes, milestone graphs, storylets, drama-manager beats). Dreamville has several partial objective/thread structures but no unified player-visible objective ledger and no long-horizon arc layer.
+- Two LLM failure modes recur in the literature: over-compliance with the player and bare refusal. Redirection through in-world consequence, NPC voice or added information was preferred in the one controlled study found (small sample).
+- Memory needs consolidation as well as retrieval; Dreamville has retrieval.
+- Evaluation works best when deterministic checks are combined with a judged layer.
+
+Evidence limits: commercial internals are not public, most academic results are small-sample, and nothing here is a live-model result for Dreamville. The findings are design inputs and do not delay or replace the Phase 0 audit and Phase 1 baseline.
 
 ## 11. Immediate next actions
 
@@ -755,13 +784,16 @@ A separate deep-research investigation is being conducted into commercial and op
 7. After any code follow-up, rerun targeted tests, relevant regressions, full test suite, lint/type-check, build and release contracts on the exact combined head. Keep PRs draft until evidence is complete and review decisions are deliberate.
 8. Record human provider-backed and UI/reload evidence separately from CI. Green automated tests do not complete the human live-session gate.
 
+9. Check GitHub Actions for merge commit `ce3d3cb8` and confirm whether PRs #69–#75 are now superseded. Do not close or port anything from them without the source/test comparison described in item 1.
+10. Add scenarios Q–X (§15.2) to the Phase 1 baseline script so the research-derived concerns are measured **before** any slice in §15.4 is started.
+
 **Completion principle:** Dreamville should neither hallucinate a world into existence through prose nor become sterile because the narrator is forbidden from creativity. The authoritative world systems should provide grounded possibilities; the player’s intent should determine the current objective; and the narrator should turn those facts into compelling, faithful presentation.
 
 
 
 ## 12. Plan ownership, phase hand-offs and completion status
 
-This document owns **the narrative grounding/intent-fidelity work only**. It does not supersede the canonical owners for their domain.
+**Deferred to V2:** ownership of this work moved to `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` on 2026-10-17; this section is the historical ownership table. This document owned **the narrative grounding/intent-fidelity work only**. It does not supersede the canonical owners for their domain.
 
 | Concern / producer | Output contract | Actual consumer(s) | Failure/fallback owner | Current state and rule |
 |---|---|---|---|---|
@@ -807,3 +839,82 @@ A phase requiring human evidence remains incomplete even when every available CI
 ## 14. Final archive/index rule
 
 The retired broad implementation specifications and completed phase plans are preserved under `docs/outdated/` for traceability. Do not implement from those files. `docs/README.md` and this active plan identify current work; subsystem owner contracts and the latest code/tests decide current truth. If a referenced archived record conflicts with the active code or current owner contract, record the conflict and audit it rather than reviving the old implementation plan.
+
+## 15. Research-driven addendum (2026-10-17)
+
+Source: [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md).
+
+**Carried into [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) (§3, §5, §6, §7), which is authoritative; this section is kept as the earlier summary.** It extended the Phase 1 scenario matrix, the gates and the slice list. **It does not authorise implementation.** A slice may start only when (a) its failure is reproduced in a Phase 1 baseline run or a deterministic test on current code, and (b) it extends the named existing owner instead of adding a parallel authority.
+
+### 15.1 Audit-confirmed starting facts
+
+Source-read findings at `ce3d3cb8`; each still needs the Phase 0 trace and a Phase 1 reproduction.
+
+1. **Objectives are fragmented.** Quests shown in `ChronicleView` come from authored `plannedEvents` through `GET /run-canonical-state`. Separate objective-like records exist as `StoryThread` (created by `EmergentNarrativeEngine`, with mechanical titles and no objective text), `NarrativeOpenThreadRecord`, `CurrentSituation.OpenThread`, `SituationObjective` (reachable only through the Phase 8 simulation engine) and the per-turn plan `objective`. No unified player-visible ledger exists.
+2. **The information goal is per-turn.** `intent.informationGoal` is consumed inside a turn; no cross-turn objective store was found.
+3. **No long-horizon structure.** `EphemeralNarrativePlan` expires after narration; no arc, pacing or foreshadowing structure was found.
+4. **`StoryDirectorService` appears orphaned and content-coupled.** Three triggers tied to demo content; reachable by REST endpoints and tests only; no client or turn-pipeline caller found.
+5. **No judged-evaluation layer and no replay of recorded sessions.** Capture already exists (`StorySessionRecorder`, schema 1.1.0, stored under `.dreambook/recordings`); replay through review, repair and fallback does not. Live validation is human-only and Phase 1 has not passed.
+6. **No player-facing recap found.** Confirm before proposing one.
+
+### 15.2 Additional Phase 1 scenarios Q–X
+
+Same recording requirements as A–P (fixture, inputs, before/after state, intent, situation, evidence, plan, provider/model, every candidate, review decisions, final text, state diff, calls, latency). All are **[HUMAN LIVE-SESSION REQUIRED]** for the literary or provider-dependent part.
+
+**Q — Over-compliance probe.** The player asserts an unsupported fact or outcome (for example that a message names them ruler, or that guards cannot touch them). The narration must not silently adopt it as canon. It may use an in-world consequence, a reaction that is already canonical, or added grounded information, and it must give the player a reason. Fail: the claim becomes canon; a bare refusal with no fiction or reason; new facts invented in order to refuse.
+
+**R — Objective consistency.** After a quest becomes active, and after the player states a goal, the visible objective list, the narration and canonical state agree. Fail: an objective narrated but missing from the list; a listed objective the narration never reflects; a stale entry after completion.
+
+**S — Long-range recall.** Plant a distinctive fact and an NPC exchange at turn 5 or earlier; ask about them indirectly at turn 60 or later (use the long-session run). Expect correct recall with a source, or honest uncertainty when the item was never stored. Fail: contradiction or fabricated recall.
+
+**T — Stakes and failure.** A non-combat attempt resolves canonically as a failure. The consequence must persist in later turns. Fail: narration softens, reverses or forgets it.
+
+**U — Authorship.** The player asks what a place or container holds and canon defines the contents. The narration states them. Fail: it asks the player to invent them or defers the answer.
+
+**V — Repetition over distance.** Forty turns across at least two locations; compare openings, images, reactions and tropes using the novelty engine output and human review. Fail: a repeated pattern beyond the threshold calibrated from the baseline.
+
+**W — Stall.** Eight to ten consecutive quiet or no-progress turns with an open objective. No forced drama. Any nudge must arrive as a committed world event or a canonical NPC action. Fail: the narrator invents a nudge, or the objective disappears.
+
+**X — Order of introduction.** An NPC whose name the player does not know exists in canon. The narration refers to the NPC by role or description until the player has a legitimate path to the name. Fail: the name appears early.
+
+### 15.3 Additional gates and measures
+
+Hard gates (added to §7; judged scores never override them):
+- **0** narrations that adopt a player-asserted fact canon does not support (Q).
+- **100%** agreement between visible objectives, narration and canonical state in R sessions, once an objective ledger exists.
+- **0** failed outcomes reversed or softened by narration (T).
+- **0** pre-introduction name leaks (X).
+
+Measures (calibrate from the captured baseline, do not pre-set targets): recall accuracy at distance (S), repetition rate by category (V), redirection style distribution (Q), turns to recover from a stall (W), and model calls plus latency per turn per provider, which determines free-tier viability.
+
+### 15.4 Candidate slices
+
+| Slice | Attaches to | Extends (never duplicates) | Must first reproduce |
+|---|---|---|---|
+| **X1** Objective ledger **projection**: a read model merging planned-event quests, story threads, open threads, the information goal and player-owned goals, with a visible “current objective” | Phase 2, 5 | `ChronicleView` data path, `CurrentSituation`, `narrativeMemoryLifecycle` | G, M, R |
+| **X2** Pushback policy: choose among in-world consequence, NPC voice and added information; bare refusal only for rule-bound cases | Phase 6 | `ActionResolution` verdicts, narrative prompt contract | Q |
+| **X3** Memory consolidation: periodic arc-level summary stored through the existing memory owner | Phase 3 | `MemoryOpportunityEngine`, N16 | S |
+| **X4** Milestone/arc layer from planned events with preconditions and effects, committed canonically | Phase 5 | `plannedEvents`, N17 episode projection, `StoryBeatDirector` | T, W |
+| **X5** Hybrid evaluation and cassette replay (see 15.5) | Phase 8 | existing tests, N18 | baseline report |
+| **X6** Orphan resolution for `StoryDirectorService` and mechanical thread titles | Phase 9 | canonical event and thread owners | Phase 0 trace |
+
+A slice whose failure is not reproduced stays deferred. Each slice's change record must include before and after evidence for the scenario that justified it.
+
+### 15.5 Evaluation additions for Phase 8
+
+- **Replay of recorded sessions.** `StorySessionRecorder` already captures provider, exact model, prompt, every attempt, review verdicts and the final text per turn; verify coverage in Phase 0, then replay recordings through review, bounded repair and fallback in CI. A replay is **PASS — AUTOMATED (replayed live output)**; it is a sub-label of the existing automated status and never substitutes for **PASS — HUMAN LIVE MODEL**. Cassettes must be scrubbed of credentials and must keep the model identity.
+- **Hybrid evaluation.** Deterministic assertions run first. An optional judged layer on the cheapest configured route scores subjective dimensions (interest, voice, clarity). Judge disagreement is flagged for human review. Judged scores are advisory only.
+
+### 15.6 Proposals that need an owner decision (not scheduled)
+
+1. **Evidence lens and deduction play:** “how do I know this?” chips and a rumour-versus-witnessed contradiction board, reading canonical evidence only.
+2. **Consequence visions:** clearly labelled, non-canonical previews (category 5 evidence), never committed, bounded by the call budget.
+3. **World pressure clocks:** surface existing faction/world clocks so pacing and stakes come from committed world events.
+4. **Player-owned goals:** confirmed player aims stored in the objective ledger, distinct from world quests.
+5. **Recorded-session replay** as described in 15.5 is already treated as slice X5; this item only covers making it a standing release practice.
+
+None of these may weaken an authority boundary: visions stay non-canonical, and nothing may let narration create quests, jobs, NPCs or encounters.
+
+### 15.7 What this addendum does not change
+
+Phase order, the rule that the Phase 1 baseline precedes fixes, the existing hard gates, the status vocabulary in §13, and the prohibition on parallel sources of truth are unchanged. Phase 1 remains **NOT YET PASSED**.

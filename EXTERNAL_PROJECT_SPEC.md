@@ -1,7 +1,6 @@
 # Dreamville — Current Integrated Project Specification
 
-**Status:** CURRENT PROJECT BOUNDARY  
-**Supersedes:** the historical “external client only” description preserved under `docs/outdated/`.
+**Status:** CURRENT PROJECT BOUNDARY
 
 ## 1. Purpose
 
@@ -42,8 +41,8 @@ Before changing a subsystem:
 
 StoryBeatDirector and the N13–N19 narrative layers already have implementation evidence in the repository. This is not evidence that every current-model narrative behaviour is perfect.
 
-The active [Narrative Grounding & Live-Model Validation Plan](docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md) preserves and expands the original live-model Phase 1. The real-provider and human-session gate is **PLANNED / NOT YET PASSED** until outputs, provider/model identity, scenario results and relevant regression evidence are recorded.
+The active [Narrative Grounding Execution Plan V2](docs/NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) preserves and expands the original live-model Phase 1. The real-provider and human-session gate is **PLANNED / NOT YET PASSED** until outputs, provider/model identity, scenario results and relevant regression evidence are recorded.
 
 ## 5. Historical documents
 
-The earlier specification described Dreamville External as a frontend around an external core and suggested using mock data only during the initial phase. That description is not the active repository boundary; its content is preserved under `docs/outdated/` for traceability. Use the current code and [documentation index](docs/README.md) for decisions.
+Superseded documents are preserved under `docs/outdated/` for traceability only. They are not implementation instructions. Use the current code and the [documentation index](docs/README.md) for decisions.

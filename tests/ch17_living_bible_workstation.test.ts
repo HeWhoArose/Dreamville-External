@@ -4,7 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
-import { livingBibleRegistry } from '../server/domain/livingBible';
+import { livingBibleRegistry, getWorkstationLedgerPath } from '../server/domain/livingBible';
 import { gameRouter } from '../server/api/gameRoutes';
 
 const expressApp = express();
@@ -122,7 +122,7 @@ describe('CH17 Living Bible & Workstation Tests', () => {
     });
 
     // Check ledger file existence
-    const ledgerPath = path.join(process.cwd(), 'data', 'workstation_ledger.json');
+    const ledgerPath = getWorkstationLedgerPath();
     assert(fs.existsSync(ledgerPath), 'Ledger file must exist on disk');
 
     const rawData = JSON.parse(fs.readFileSync(ledgerPath, 'utf-8'));
@@ -142,7 +142,7 @@ describe('CH17 Living Bible & Workstation Tests', () => {
     assert.strictEqual(ws.nextTask, 'Execute full regression and verify UI modal');
 
     // Reload from disk file to verify persistence
-    const ledgerPath = path.join(process.cwd(), 'data', 'workstation_ledger.json');
+    const ledgerPath = getWorkstationLedgerPath();
     const rawData = JSON.parse(fs.readFileSync(ledgerPath, 'utf-8'));
     assert.strictEqual(rawData.metadata.currentPhase, 'CH17 — Living Bible & Workstation Persistence Audit');
   });

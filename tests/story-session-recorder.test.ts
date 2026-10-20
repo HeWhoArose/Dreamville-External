@@ -447,3 +447,84 @@ test('repository records out-of-band canonical snapshot changes as explicit AUXI
 	assert.equal(StorySessionRecorder.validate(recording).valid, true);
 	assert.deepEqual(StorySessionRecorder.applyPatches(recording), afterSecond);
 });
+
+test('story session recorder validates when a new head entry has the same fields in a different key order', () => {
+	// Regression (Phase 0 audit): a failed-narration turn after a successful turn made a new
+	// action-log entry become index 0. The positional patch rebuilt the old head with the new
+	// field appended at the end, while the live entry had it in the middle. The data was identical
+	// but the order-sensitive hash differed, so export validation failed with a 500.
+	const before = {
+		log: [{ id: 'a1', turnNumber: 1, narrativeResponse: 'first', actionResolution: { ok: true } }],
+	};
+	const after = {
+		log: [
+			{ id: 'a2', turnNumber: 2, narrativeError: { code: 'X' }, actionResolution: { ok: true } },
+			{ id: 'a1', turnNumber: 1, narrativeResponse: 'first', actionResolution: { ok: true } },
+		],
+	};
+	const recording = StorySessionRecorder.start({ storyId: 'story_order', initialState: before, engineVersion: 'test' });
+	StorySessionRecorder.append(recording, {
+		storyId: 'story_order',
+		kind: 'DIRECT_TURN',
+		source: 'AI',
+		startedAt: '2026-10-18T10:00:00.000Z',
+		completedAt: '2026-10-18T10:00:01.000Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: before,
+		stateAfter: after,
+	});
+
+	assert.equal(recording.schemaVersion, '1.2.0');
+	const validation = StorySessionRecorder.validate(recording);
+	assert.equal(validation.valid, true, validation.errorReason);
+	// Reconstruction is semantically identical even though key order may differ.
+	assert.deepEqual(StorySessionRecorder.applyPatches(recording), after);
+});
+
+test('story session recorder still detects tampering with key-order independent hashing', () => {
+	const initial = { a: { x: 1, y: 2 }, list: [1, 2, 3] };
+	const recording = StorySessionRecorder.start({ storyId: 'story_tamper2', initialState: initial, engineVersion: 'test' });
+	const after = { a: { x: 1, y: 3 }, list: [1, 2, 3, 4] };
+	StorySessionRecorder.append(recording, {
+		storyId: 'story_tamper2',
+		kind: 'AUXILIARY',
+		source: 'TEST',
+		startedAt: '2026-10-18T10:00:00.000Z',
+		completedAt: '2026-10-18T10:00:00.500Z',
+		success: true,
+		rolledBack: false,
+		stateBefore: initial,
+		stateAfter: after,
+	});
+	assert.equal(StorySessionRecorder.validate(recording).valid, true);
+	const value = (recording.interactions[0].statePatch.find((op) => op.path === '/a/y') as any);
+	value.value = 999;
+	assert.equal(StorySessionRecorder.validate(recording).valid, false);
+});
+
+test('story session recorder keeps validating and extending schema 1.1.0 recordings with their original hash', async () => {
+	const { createHash } = await import('node:crypto');
+	const legacyHash = (v: unknown) => createHash('sha256').update(JSON.stringify(v ?? null), 'utf8').digest('hex');
+	const initial = { n: 1, name: 'legacy' };
+	const mid = { n: 2, name: 'legacy' };
+	const last = { n: 3, name: 'legacy' };
+	const recording = StorySessionRecorder.start({ storyId: 'story_legacy', initialState: initial, engineVersion: 'test' });
+	// Emulate a recording created before schema 1.2.0.
+	recording.schemaVersion = '1.1.0';
+	recording.recorderVersion = '1.1.0';
+	StorySessionRecorder.append(recording, {
+		storyId: 'story_legacy', kind: 'AUXILIARY', source: 'TEST',
+		startedAt: '2026-10-18T10:00:00.000Z', completedAt: '2026-10-18T10:00:01.000Z',
+		success: true, rolledBack: false, stateBefore: initial, stateAfter: mid,
+	});
+	assert.equal(recording.interactions[0].stateAfterHash, legacyHash(mid), 'legacy recordings keep the original hash');
+	StorySessionRecorder.append(recording, {
+		storyId: 'story_legacy', kind: 'AUXILIARY', source: 'TEST',
+		startedAt: '2026-10-18T10:00:02.000Z', completedAt: '2026-10-18T10:00:03.000Z',
+		success: true, rolledBack: false, stateBefore: mid, stateAfter: last,
+	});
+	assert.equal(recording.schemaVersion, '1.1.0');
+	assert.equal(StorySessionRecorder.validate(recording).valid, true);
+	assert.deepEqual(StorySessionRecorder.applyPatches(recording), last);
+});

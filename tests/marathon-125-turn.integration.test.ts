@@ -25,6 +25,8 @@
  * partial progress survives a process kill; TAP also flushes after each of
  * the six segment it()s.
  */
+import os from 'node:os';
+import path from 'node:path';
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
@@ -43,10 +45,14 @@ const BOUNDARY_SECRET = 'TEST_SECRET_SIGIL_OMEGA_ARCHIVAL_7734';
 const SERVER_HELD_BOUNDARY_SECRET = 'boundary_verified_secure_token';
 
 // ── kill-surviving progress log ─────────────────────────────────────────────
-const PROGRESS_LOG = 'artifacts/marathon-progress.log';
+// Progress logs survive a killed run. They go to a temp directory by default so a normal test run
+// never rewrites the tracked evidence under artifacts/. Set DREAMVILLE_ARTIFACT_DIR=artifacts to
+// refresh the repository copy deliberately.
+const ARTIFACT_DIR = process.env.DREAMVILLE_ARTIFACT_DIR || path.join(os.tmpdir(), 'dreamville-artifacts');
+const PROGRESS_LOG = path.join(ARTIFACT_DIR, 'marathon-progress.log');
 function logProgress(line: string): void {
   try {
-    mkdirSync('artifacts', { recursive: true });
+    mkdirSync(ARTIFACT_DIR, { recursive: true });
     appendFileSync(PROGRESS_LOG, `[${new Date().toISOString()}] ${line}\n`);
   } catch {
     // progress logging must never fail the run

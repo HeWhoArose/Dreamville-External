@@ -3,3 +3,25 @@ server/data/.provider_credentials.json
 
 # Local DreamBook runtime persistence
 .dreambook/
+
+# Dependencies (installed via npm install)
+node_modules/
+
+# Production build output
+dist/
+
+# Local environment files (copy .env.example to .env; never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Dice assets are copied from @3d-dice/dice-box-threejs by the postinstall
+# script (scripts/copy-dice-assets.mjs); regenerate with `npm install`
+public/assets/dice-box/
+
+# Runtime-generated media written by server/services/mediaAdapterService.ts
+public/assets/generated/
+public/assets/placeholders/
+
+# OS files
+.DS_Store

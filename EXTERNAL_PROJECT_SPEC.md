@@ -1,7 +1,6 @@
 # Dreamville — Current Integrated Project Specification
 
-**Status:** CURRENT PROJECT BOUNDARY  
-**Supersedes:** the historical “external client only” description preserved under `docs/outdated/`.
+**Status:** CURRENT PROJECT BOUNDARY
 
 ## 1. Purpose
 
@@ -46,4 +45,4 @@ The active [Narrative Grounding & Live-Model Validation Plan](docs/ACTIVE_NARRAT
 
 ## 5. Historical documents
 
-The earlier specification described Dreamville External as a frontend around an external core and suggested using mock data only during the initial phase. That description is not the active repository boundary; its content is preserved under `docs/outdated/` for traceability. Use the current code and [documentation index](docs/README.md) for decisions.
+Superseded documents are preserved under `docs/outdated/` for traceability only. They are not implementation instructions. Use the current code and the [documentation index](docs/README.md) for decisions.

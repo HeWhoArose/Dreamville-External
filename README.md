@@ -95,8 +95,11 @@ in the simulation.
 ```bash
 npm install
 cp .env.example .env     # then add your GEMINI_API_KEY
-npm run dev
+npx tsx --env-file=.env server.ts
 ```
+
+The app listens on <http://localhost:3000>. `npm run dev` also starts it, but it does
+**not** read `.env`; use it when you enter the key in the app instead (see below).
 
 ### Scripts
 
@@ -114,9 +117,15 @@ requests to `main`.
 
 ### Configuration
 
-Copy `.env.example` to `.env` and set:
+The server reads `GEMINI_API_KEY` from the process environment. Nothing in the app loads a
+`.env` file by itself, so provide the key in one of these ways:
 
-- `GEMINI_API_KEY`: your Gemini API key.
+1. **Env file (Node 20.6 or newer):** copy `.env.example` to `.env`, set
+   `GEMINI_API_KEY`, and start with `npx tsx --env-file=.env server.ts`.
+2. **Shell variable:** set `GEMINI_API_KEY` in the shell, then run `npm run dev`.
+3. **In the app:** run `npm run dev`, open Settings, go to Providers, choose Google Gemini
+   AI, and save the key. It is stored on the server in
+   `server/data/.provider_credentials.json` (git-ignored).
 
 Local provider credentials and runtime persistence are git-ignored. Never
 commit API keys.

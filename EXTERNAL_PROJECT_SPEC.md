@@ -41,7 +41,7 @@ Before changing a subsystem:
 
 StoryBeatDirector and the N13–N19 narrative layers already have implementation evidence in the repository. This is not evidence that every current-model narrative behaviour is perfect.
 
-The active [Narrative Grounding & Live-Model Validation Plan](docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md) preserves and expands the original live-model Phase 1. The real-provider and human-session gate is **PLANNED / NOT YET PASSED** until outputs, provider/model identity, scenario results and relevant regression evidence are recorded.
+The active [Narrative Grounding Execution Plan V2](docs/NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) preserves and expands the original live-model Phase 1. The real-provider and human-session gate is **PLANNED / NOT YET PASSED** until outputs, provider/model identity, scenario results and relevant regression evidence are recorded.
 
 ## 5. Historical documents
 

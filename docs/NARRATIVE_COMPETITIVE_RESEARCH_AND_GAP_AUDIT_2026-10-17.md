@@ -2,7 +2,7 @@
 
 **Status:** CURRENT RESEARCH EVIDENCE — design input, not an implementation instruction  
 **Date:** 2026-10-17  
-**Owner plan:** `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md` (§10 and §15 consume this document)  
+**Owner plan:** [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) (the deferred `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md` §10 and §15 also cite this document)  
 **Code reviewed:** `main` at merge commit `ce3d3cb8` (merge of PR #76). Source-read audit only; nothing here is a live-model result.
 
 **Rule that still applies:** every proposal below must pass Phase 0 of the active plan and must be reproduced as a demonstrated gap before code changes. Do not create a parallel memory, plot, router or state authority. Extend the owners named in `docs/README.md`.
@@ -115,6 +115,7 @@ Evidence references are to the source tree at `ce3d3cb8`. "Verify" means the beh
 | Candidate review, one bounded repair, deterministic floor | `semanticNarrativeReview.ts`, `aiOrchestrator.ts` | Not described by any comparator |
 | Repetition and trope control with a prompt-side avoid list | `narrativeNoveltyEngine.ts`, N18 richness | Not described by any comparator |
 | Provider fallback chains including free routes, call policy and call budget | `server/data/orchestrator_config.json`, `aiCallPolicy.ts` | Cost-aware by design |
+| Forensic session recorder (capture): intent, situation, plan, prompts, attempts, review verdicts, provider provenance, state hashes and patches | `storySessionRecorder.ts`, `storySessionRecordingStore.ts` | Capture side of the evaluation story; replay is missing (F5) |
 | OOC channel with read/mutate tool boundary | `oocToolRegistry.ts` | Equivalent to the Franz OOC mode |
 | Per-turn meaningful-beat contract | `storyBeatDirector.ts` | Verified owner; do not rebuild |
 
@@ -138,8 +139,8 @@ There is no single player-visible ledger that merges them, and no way for a play
 **F4. `StoryDirectorService` looks orphaned and content-coupled.**
 It defines three trigger rules tied to specific demo content (a cipher, a refusal, "ruins echoes"). It is reachable through three REST endpoints and is exercised by tests, but no client code and no turn-pipeline caller was found. Phase 9's orphan audit should either wire it to the canonical owners or archive it.
 
-**F5. Evaluation is deterministic and advisory only; live validation is human-only and not yet passed.**
-Richness and novelty checks are heuristic. No LLM-judge layer and no recorded-session replay were found. Because live-model runs need credentials and a person, real model outputs cannot currently be re-run through the validators in CI.
+**F5. Evaluation is deterministic and advisory only; recordings cannot be replayed; live validation is human-only and not yet passed.**
+Richness and novelty checks are heuristic. `StorySessionRecorder` already captures each turn (intent, situation, plan, prompts, attempts, review verdicts, provider provenance, state hashes), but no replay path and no LLM-judge layer were found. Because live-model runs need credentials and a person, real model outputs cannot currently be re-run through the validators in CI.
 
 **F6. No player-facing recap found.**
 Search found recap handling only in unrelated code. Verify whether a "previously" view exists elsewhere before proposing one.
@@ -167,14 +168,16 @@ Search found recap handling only in unrelated code. Verify whether a "previously
 These use Dreamville's own strengths (canonical provenance, epistemic categories, seed-stable simulation). Each is a **proposal for an owner decision**, not scheduled work.
 
 1. **Evidence lens and deduction play.** Because every claim already has a category (canonical, player-known, inferred, unknown), the Story UI could offer "how do I know this?" chips and a contradiction board for rumours versus witnessed facts, with informant reliability. This turns the epistemic system into gameplay and makes grounding visible to players.
-2. **Recorded-session replay ("cassette" harness).** Record real-provider turns once during a human live session (provider, model, prompt hash, every candidate, review verdicts). Replay them through the review, repair and fallback pipeline in CI. This converts a one-off human result into a regression asset and addresses the BLOCKED problem without pretending mocks are live.
+2. **Replay of recorded sessions.** The recorder already captures what is needed; add a replay path that re-runs recorded candidates through the review, repair and fallback pipeline in CI. This converts a one-off human result into a regression asset and addresses the BLOCKED problem without pretending mocks are live.
 3. **Consequence visions.** The ChatRPG study found previews of what *would* happen were well liked. Dreamville can offer this as a clearly labelled, non-canonical "vision" (category 5), never committed, always bounded by the call budget.
 4. **World pressure clocks.** Surface faction or world clocks driven by the existing living-world simulation ("the guild's patience: 3/6") so stakes and pacing come from committed world events rather than narrator invention.
 5. **Player-owned goals.** Capture an aim the player states, confirm it with them, and store it in the objective ledger as distinct from world quests, so elliptical follow-ups and the narrator both anchor to it.
 
 ---
 
-## 6. Recommended slices (map to active-plan §15)
+## 6. Recommended slices (refined into X1–X9 in the V2 plan)
+
+The V2 plan splits and renames these (X1, X1b, X2, X3, X4, X5a/X5b, X6b/X6c, X8, X9) and fixes each one's phase. Use V2 for scheduling; this table records the original grouping.
 
 | Slice | Attaches to | Extends (do not duplicate) | Reproduce first |
 |---|---|---|---|
@@ -182,7 +185,7 @@ These use Dreamville's own strengths (canonical provenance, epistemic categories
 | X2 Pushback policy: choose among consequence, NPC influence, information; bare refusal only for rule-bound cases | Phase 6 | Existing `ActionResolution` verdicts and prompt contract | Scenario Q |
 | X3 Memory consolidation: periodic arc-level summary stored through the existing memory owner | Phase 3 | `MemoryOpportunityEngine`, N16 | Scenario S |
 | X4 Milestone/arc layer built from planned events with preconditions and effects, committed canonically | Phase 5 | `plannedEvents`, N17, StoryBeatDirector | Scenarios T, W |
-| X5 Hybrid evaluation: deterministic assertions plus optional judged dimensions; cassette replay | Phase 8 | Existing tests, N18 | Baseline report |
+| X5 Hybrid evaluation: deterministic assertions plus optional judged dimensions; replay of recorded sessions (capture already exists) | Phase 0 (coverage check), Phase 8 (replay) | `StorySessionRecorder`, existing tests, N18 | Baseline report |
 | X6 Orphan resolution for `StoryDirectorService` and mechanical thread titles | Phase 9 | Canonical event/thread owners | Phase 0 trace |
 
 ---

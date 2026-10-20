@@ -3,7 +3,7 @@
 
 **Status:** ACTIVE ARCHITECTURE / AUTHORITY INDEX  
 **Current document index:** `docs/README.md`  
-**Current cross-system narrative plan:** `docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`  
+**Current cross-system narrative plan:** `docs/NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`  
 **Reviewed for this reorganization:** 2026-10-15
 **Master Plan:** DreamBook_Master_Implementation_Plan_v3.pdf — **COMPLETE / FROZEN**
 **Operating mode:** SURGICAL FIXING
@@ -157,6 +157,6 @@ When two documents disagree:
 
 The frozen Master Plan v3 remains historical architectural baseline only. Current work queues and active-phase status are indexed in docs/README.md.
 
-**MASTER ROADMAP COMPLETE.** Current narrative grounding work is separately tracked in docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md.
+**MASTER ROADMAP COMPLETE.** Current narrative grounding work is separately tracked in docs/NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md.
 
 The surgical documents describe remaining fixes, consolidation and extensions rather than redefining Master Phases 0–15.

@@ -19,7 +19,7 @@ Use `docs/README.md` first, then the active subsystem owner document and the lat
 | Folder | Contains | Current source of truth |
 |---|---|---|
 | `superseded-plans/README_EXTERNAL_CLIENT_BOUNDARY_HISTORICAL.md` and `EXTERNAL_PROJECT_SPEC_CLIENT_ONLY_HISTORICAL.md` | Previous external-client-only repository identity/specification, superseded by the integrated-engine boundary in the root README and current project specification | Current root `README.md`, `EXTERNAL_PROJECT_SPEC.md`, and `docs/README.md` |
-| `plans/` | Old stand-alone Phase 1 and cross-cutting draft, the earlier broad 0–21 implementation spec, old model-intelligence runtime spec, and superseded handoff plans | `docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`, the current owner contracts listed in `docs/README.md`, and current code |
+| `plans/` | Old stand-alone Phase 1 and cross-cutting draft, the earlier broad 0–21 implementation spec, old model-intelligence runtime spec, and superseded handoff plans | `docs/NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`, the current owner contracts listed in `docs/README.md`, and current code |
 | `completed-plans/` | Plans whose implementation is verified or whose phase roadmap is complete | Current verification report and `docs/README.md` |
 | `completed-audits/` | Pre-implementation/source-only audits superseded by final runtime audits | Latest owner-specific final audit |
 | `phase-8-5/` | Repeated historical Phase 8.5 audit passes, pre-implementation audit, forced-movement audit, and initial Phase 8.6–8.12 audit | Current canonical owner/specs; do not continue from an old pass number |

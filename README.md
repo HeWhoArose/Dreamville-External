@@ -129,8 +129,8 @@ Read the [documentation index](docs/README.md). It identifies active plans,
 verified systems, partial work, and archives.
 
 For narrative grounding and information-seeking work, the current cross-system
-plan is the [Active Narrative Grounding & Live-Model Validation
-Plan](docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md). The
+plan is the [Narrative Grounding Execution Plan
+V2](docs/NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md). The
 StoryBeatDirector implementation is documented as verified in [its final
 audit](docs/STORY_BEAT_DIRECTOR_FINAL_AUDIT.md); do not recreate it.
 

@@ -1,6 +1,11 @@
 # Dreamville — Active Narrative Grounding & Live-Model Validation Plan
 
-**Status:** ACTIVE EXECUTION PLAN — Phase 1 live-model validation is **PLANNED / NOT YET PASSED**  
+> **DEFERRED — 2026-10-17. Execution of this program is deferred to [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md).**
+> V2 carries every phase of this plan forward with the same Phase 0–9 numbering, scenarios A–P, hard failure conditions, hard gates, status vocabulary and scope boundaries, and adds the research-driven slices (X1–X9), scenarios Q–X, new gates and owner decisions D1–D5.
+> From this date V2 owns phase status, gates, scope and sequencing. This file is retained as the historical record (CI evidence, PR triage, Phase 6 source findings, connection maps and rationale). **Where the two files differ, V2 wins.** Do not start new work from this file.
+> Phase 1 live-model validation remains **NOT YET PASSED**; deferral changes ownership of the plan, not the evidence.
+
+**Status:** DEFERRED TO `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` (historical record) — Phase 1 live-model validation is **PLANNED / NOT YET PASSED**  
 **Owner:** player-intent fidelity, evidence-grounded narration, living-world opportunity grounding, and narrative candidate/fallback validation  
 **Baseline reviewed:** `main` at `090b7d7b8c8b9c6ef47a0f643af3b15a303e1179` (2026-10-15)  
 **Revision:** 2026-10-17 — post-merge status block, completed research appendix (§10) and research-driven addendum (§15). No phase was renumbered.  
@@ -788,7 +793,7 @@ Evidence limits: commercial internals are not public, most academic results are 
 
 ## 12. Plan ownership, phase hand-offs and completion status
 
-This document owns **the narrative grounding/intent-fidelity work only**. It does not supersede the canonical owners for their domain.
+**Deferred to V2:** ownership of this work moved to `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` on 2026-10-17; this section is the historical ownership table. This document owned **the narrative grounding/intent-fidelity work only**. It does not supersede the canonical owners for their domain.
 
 | Concern / producer | Output contract | Actual consumer(s) | Failure/fallback owner | Current state and rule |
 |---|---|---|---|---|
@@ -839,7 +844,7 @@ The retired broad implementation specifications and completed phase plans are pr
 
 Source: [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md).
 
-This section extends the Phase 1 scenario matrix, the gates and the slice list. **It does not authorise implementation.** A slice may start only when (a) its failure is reproduced in a Phase 1 baseline run or a deterministic test on current code, and (b) it extends the named existing owner instead of adding a parallel authority.
+**Carried into [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) (§3, §5, §6, §7), which is authoritative; this section is kept as the earlier summary.** It extended the Phase 1 scenario matrix, the gates and the slice list. **It does not authorise implementation.** A slice may start only when (a) its failure is reproduced in a Phase 1 baseline run or a deterministic test on current code, and (b) it extends the named existing owner instead of adding a parallel authority.
 
 ### 15.1 Audit-confirmed starting facts
 
@@ -849,7 +854,7 @@ Source-read findings at `ce3d3cb8`; each still needs the Phase 0 trace and a Pha
 2. **The information goal is per-turn.** `intent.informationGoal` is consumed inside a turn; no cross-turn objective store was found.
 3. **No long-horizon structure.** `EphemeralNarrativePlan` expires after narration; no arc, pacing or foreshadowing structure was found.
 4. **`StoryDirectorService` appears orphaned and content-coupled.** Three triggers tied to demo content; reachable by REST endpoints and tests only; no client or turn-pipeline caller found.
-5. **No judged-evaluation layer and no recorded-session replay.** Live validation is human-only and Phase 1 has not passed.
+5. **No judged-evaluation layer and no replay of recorded sessions.** Capture already exists (`StorySessionRecorder`, schema 1.1.0, stored under `.dreambook/recordings`); replay through review, repair and fallback does not. Live validation is human-only and Phase 1 has not passed.
 6. **No player-facing recap found.** Confirm before proposing one.
 
 ### 15.2 Additional Phase 1 scenarios Q–X
@@ -897,7 +902,7 @@ A slice whose failure is not reproduced stays deferred. Each slice's change reco
 
 ### 15.5 Evaluation additions for Phase 8
 
-- **Cassette replay.** During a human live session, record per turn: provider, exact model, prompt hash, every candidate, review verdicts and the final text. Replay these through review, bounded repair and fallback in CI. A replay is **PASS — AUTOMATED (replayed live output)**; it is a sub-label of the existing automated status and never substitutes for **PASS — HUMAN LIVE MODEL**. Cassettes must be scrubbed of credentials and must keep the model identity.
+- **Replay of recorded sessions.** `StorySessionRecorder` already captures provider, exact model, prompt, every attempt, review verdicts and the final text per turn; verify coverage in Phase 0, then replay recordings through review, bounded repair and fallback in CI. A replay is **PASS — AUTOMATED (replayed live output)**; it is a sub-label of the existing automated status and never substitutes for **PASS — HUMAN LIVE MODEL**. Cassettes must be scrubbed of credentials and must keep the model identity.
 - **Hybrid evaluation.** Deterministic assertions run first. An optional judged layer on the cheapest configured route scores subjective dimensions (interest, voice, clarity). Judge disagreement is flagged for human review. Judged scores are advisory only.
 
 ### 15.6 Proposals that need an owner decision (not scheduled)

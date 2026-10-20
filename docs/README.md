@@ -24,7 +24,7 @@ When documents disagree, use this order:
 1. Current code and tests on the target branch, plus the most recent verified CI result.
 2. This index and the current project identity/authority boundary in the root `README.md`.
 3. The active owner specification for the subsystem being changed.
-4. The active cross-system plan `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md` for the narrative-grounding work covered there.
+4. The active cross-system plan `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` for the narrative-grounding work covered there.
 5. A current verification report for the exact code/commit being discussed.
 6. Historical audit records only as evidence of what was found at their recorded commit.
 
@@ -36,27 +36,32 @@ Current-main source trace for the live freeform narration pipeline, candidate re
 
 ## 2. Current active plan for narrative grounding
 
-### `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`
+### `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`
 
-This is the complete, active owner plan for:
-- the retained **Phase 1 live-model behavioural validation**;
-- preserving the player's information goal across follow-ups;
+This is the complete, active owner plan. It carries forward every phase of the earlier plan (same Phase 0–9 numbering) and adds the research-driven slices. It covers:
+- the retained **Phase 1 live-model behavioural validation**, now scenarios A–X;
+- preserving the player's information goal across follow-ups and showing a unified objective ledger;
 - finding real evidence for questions about work, contracts, quests, notices and other opportunities;
 - avoiding both invented populations and artificially empty worlds;
 - connecting eligible NPC encounters through canonical world systems;
+- story structure (milestones, stall handling, stakes), pushback policy, and memory consolidation;
 - semantic candidate review, bounded repair and safe fallback;
-- live-model, long-session, regression and final integration gates;
-- producer/consumer maps and human testing requirements.
+- replay of recorded sessions, live-model, long-session, regression and final integration gates;
+- producer/consumer maps, owner decisions D1–D5 and human testing requirements.
 
-**Phase 1 is not passed.** The plan specifies required scenarios, not completed results. Mock tests cannot satisfy the real-provider requirement.
+**Phase 1 is not passed.** The plan specifies required scenarios, not completed results. Mock tests and replays cannot satisfy the real-provider requirement.
+
+### `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md` (deferred)
+
+Deferred to V2 on 2026-10-17 and kept unchanged as the historical record (CI evidence, PR triage, Phase 6 source findings, connection maps). Where it differs from V2, V2 wins. Do not start new work from it.
 
 ### Exact wording for Phase 1
 
-Say “Phase 1 of `docs/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`” when referring to the live-model test gate. Do not say only “Phase 1”: older historical documents use that label for different work (CurrentSituation, StoryBeat contract, Master Plan phase work and other systems).
+Say “Phase 1 of `docs/NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`” when referring to the live-model test gate. Do not say only “Phase 1”: older historical documents use that label for different work (CurrentSituation, StoryBeat contract, Master Plan phase work and other systems).
 
 ## 3a. Narrative research and gap audit (2026-10-17)
 
-Read [Narrative Competitive Research & Gap Audit](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md) for how comparable AI game-master systems keep narration consistent and objective-driven, an evidence-tiered review of Dreamville against them, and the proposals that feed §10 and §15 of the active plan. It is an evidence input, not an implementation authority; every proposal still needs a reproduced failure first.
+Read [Narrative Competitive Research & Gap Audit](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md) for how comparable AI game-master systems keep narration consistent and objective-driven, an evidence-tiered review of Dreamville against them, and the proposals that feed the V2 plan. It is an evidence input, not an implementation authority; every proposal still needs a reproduced failure first.
 
 ## 3. Latest baseline audit (2026-10-15)
 

@@ -59,6 +59,10 @@ Deferred to V2 on 2026-10-17 and kept unchanged as the historical record (CI evi
 
 Say “Phase 1 of `docs/NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`” when referring to the live-model test gate. Do not say only “Phase 1”: older historical documents use that label for different work (CurrentSituation, StoryBeat contract, Master Plan phase work and other systems).
 
+## 3b. Phase 0 report (2026-10-18)
+
+Read [Phase 0 Baseline, Authority Lock and Instrumentation Report](NARRATIVE_PHASE0_BASELINE_AND_AUTHORITY_REPORT_2026-10-18.md) for the Phase 0 results of the V2 plan: what was verified, what was fixed in the session recorder and test hygiene, the objective/thread trace, the `StoryDirectorService` decision (D1), and what remains blocked. Phase 1 is still not run.
+
 ## 3a. Narrative research and gap audit (2026-10-17)
 
 Read [Narrative Competitive Research & Gap Audit](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md) for how comparable AI game-master systems keep narration consistent and objective-driven, an evidence-tiered review of Dreamville against them, and the proposals that feed the V2 plan. It is an evidence input, not an implementation authority; every proposal still needs a reproduced failure first.

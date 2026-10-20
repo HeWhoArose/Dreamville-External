@@ -1,6 +1,7 @@
 # Dreamville — Narrative Grounding Execution Plan V2
 
-**Status:** ACTIVE EXECUTION PLAN — Phase 1 live-model validation is **PLANNED / NOT YET PASSED** (V2 baseline run: **NOT RUN**)  
+**Status:** ACTIVE EXECUTION PLAN — **Phase 0: PASS — AUTOMATED (2026-10-18)**, one item BLOCKED (live-provider cost baseline); Phase 1 live-model validation is **PLANNED / NOT YET PASSED** (V2 baseline run: **NOT RUN**)  
+**Phase 0 report:** [`NARRATIVE_PHASE0_BASELINE_AND_AUTHORITY_REPORT_2026-10-18.md`](NARRATIVE_PHASE0_BASELINE_AND_AUTHORITY_REPORT_2026-10-18.md)  
 **Created:** 2026-10-17  
 **Baseline reviewed:** `main` at merge commit `ce3d3cb8` (merge of PR #76)  
 **Owner:** player-intent fidelity, evidence-grounded narration, objective and story-structure continuity, living-world opportunity grounding, narrative candidate/fallback validation, and live-model validation  
@@ -71,24 +72,25 @@ Source-read facts at `ce3d3cb8`. “Reuse” items are not to be rebuilt. “Gap
 | Ambient population and activity producer | `server/domain/worldActivityDirector.ts` |
 | **Forensic session recorder** (capture side) | `server/domain/storySessionRecorder.ts`, `server/services/storySessionRecordingStore.ts`, routes `/api/game/story-session/{export,start,stop,validate,summary}` |
 
-**Recorder facts that shape this plan.** The recorder (`DREAMVILLE_STORY_SESSION_RECORDING`, schema 1.1.0) already stores, per interaction: the canonical command or request, the player intent, current situation, narrative plan, research packet and audit, context audit, provider handoff, pacing, continuity and novelty state, the narration prompt and working context, the turn package, narrative and literary review, richness evaluation, state adjudication, telemetry and an attempts trail, plus before/after state hashes and lossless JSON patches. Recordings live under `.dreambook/recordings` (git-ignored). Freeform turns reach it through `canonicalCommandEngine` as `DIRECT_TURN`; the opening route writes `OPENING_SCENE`. **Capture exists; replay does not.**
+**Recorder facts that shape this plan (updated after Phase 0).** The recorder (`DREAMVILLE_STORY_SESSION_RECORDING`, schema **1.2.0**) stores per interaction the canonical command or request, before and after state hashes and lossless JSON patches, and, for a turn payload, the player intent, current situation, narrative plan, research packet and audit, context audit, provider handoff, pacing, continuity and novelty state, narration prompt, turn package, review and richness data, telemetry and an attempts trail. Recordings live under `.dreambook/recordings` (git-ignored). Phase 0 found and fixed two defects: before the fix, freeform `/api/game/action` turns were recorded as `DIRECT_TURN` **without** that turn payload, and a failed-narration turn after a successful one made export validation fail (an order-sensitive integrity hash). Both are fixed with regression tests. **Capture of freeform turns now exists; replay does not, and rejected candidate text is still not captured (G13).**
 
 ### 3.2 Gaps
 
 | ID | Gap | Status | Evidence |
 |---|---|---|---|
-| **G1** | No unified, player-visible objective ledger. Quests in the UI come only from authored `plannedEvents` (`GET /run-canonical-state`; predicate accepts `isQuest`/`quest`, a non-empty `objectives` array, or QUEST/MAIN_QUEST/SIDE_QUEST/STORY_QUEST categories). Five other objective-like records exist separately: `StoryThread`, `NarrativeOpenThreadRecord`, `CurrentSituation.OpenThread`, `SituationObjective` (reachable only through the Phase 8 simulation engine) and the per-turn plan `objective` | **Confirmed** | `gameRoutes.ts` (`questEvents`), `ChronicleView.tsx`, `src/types.ts`, `currentSituation.ts`, `situationEngine.ts`, `narrativeDirector.ts` |
+| **G1** | No unified, player-visible objective ledger. Quests in the UI come only from authored `plannedEvents` (`GET /run-canonical-state`; predicate accepts `isQuest`/`quest`, a non-empty `objectives` array, or QUEST/MAIN_QUEST/SIDE_QUEST/STORY_QUEST categories). Five other objective-like records exist separately: `StoryThread`, `NarrativeOpenThreadRecord`, `CurrentSituation.OpenThread`, `SituationObjective` (reachable only through the Phase 8 simulation engine) and the per-turn plan `objective` | **Confirmed**, and in practice: the seeded world has a HIGH-priority authored thread but an empty quest list (Phase 0 report §2.4) | `gameRoutes.ts` (`questEvents`), `ChronicleView.tsx`, `src/types.ts`, `currentSituation.ts`, `situationEngine.ts`, `narrativeDirector.ts` |
 | **G2** | `PlayerIntent.goal` and `informationGoal` are per-turn; no cross-turn continuation store | **Confirmed** | `playerIntentInterpreter.ts` |
 | **G3** | No long-horizon structure. `EphemeralNarrativePlan` and `StoryBeatContract` both have `expiresAfterNarration`; no `storyArc`, `plotThread` or `foreshadow` names exist in `server/` or `src/` | **Confirmed** | `narrativeDirector.ts`, `storyBeatDirector.ts` |
 | **G4** | No pushback or over-compliance policy; the review has no check for adopting an unsupported player assertion or for a bare refusal | **Confirmed** (review codes: UNSUPPORTED_CLAIM, SEMANTIC_MISMATCH, MISSING_MOVEMENT, UNSUPPORTED_STATE_PROPOSAL, UNAUTHORIZED_SPEECH, PLAYER_AGENCY, MISSING_OBSERVATION, MISSING_INFORMATION) | `semanticNarrativeReview.ts` |
 | **G5** | Retrieval exists but no consolidation of older material into arc-level summaries | **Confirmed** for consolidation; retrieval quality **To verify** (scenario S) | N16 audit, `memoryOpportunityEngine.ts` |
-| **G6** | Recordings cannot be replayed through review/repair/fallback; no judged evaluation layer | **Confirmed** | `storySessionRecorder.ts` has no replay path |
+| **G6** | Recordings cannot be replayed through review/repair/fallback; no judged evaluation layer. Capture defects found in Phase 0 are fixed | **Confirmed** (replay and judged layer absent) | `storySessionRecorder.ts` has no replay path; Phase 0 report §2.3 |
 | **G7** | `StoryDirectorService` has three demo-specific triggers (cipher, refusal, “ruins echoes”), is reachable only through REST endpoints and tests, and has no client or turn-pipeline caller | **Confirmed** (no caller found); disposition is decision D1 | `storyDirectorService.ts`, `gameRoutes.ts` |
-| **G8** | `EmergentNarrativeEngine` creates `EMERGENT_INVESTIGATION` threads titled mechanically (“Emergent Thread: … at …”); they reach `CurrentSituation` open threads and research | Reach **Confirmed**; effect on prose **To verify** | `emergentNarrativeEngine.ts`, `currentSituation.ts` |
+| **G8** | `EmergentNarrativeEngine` creates `EMERGENT_INVESTIGATION` threads titled mechanically (“Emergent Thread: … at …”); they reach `CurrentSituation` open threads and research | **Confirmed**: the raw title, including an internal location ID, reaches the narrator prompt as the story beat's continuity anchor; effect on prose **To verify** in Phase 1 | `emergentNarrativeEngine.ts`, `currentSituation.ts` |
 | **G9** | Non-combat stakes and fail-forward persistence are not demonstrated | **To verify** (scenario T) | — |
 | **G10** | No stall or pacing handling when an objective sits open through quiet turns | **To verify** (scenario W) | — |
 | **G11** | No player-facing recap or “previously” view found | **To verify** | — |
-| **G12** | Repository hygiene: generated assets were tracked, and tests rewrite tracked files (`artifacts/*.log`, `data/workstation_ledger.json`), so a normal test run dirties the tree | **Confirmed** | Git history and test runs |
+| **G12** | Repository hygiene: generated assets were tracked, and tests rewrote tracked files (`artifacts/*.log`, `data/workstation_ledger.json`) | **Closed in Phase 0**: a full test run now leaves the tree clean | Phase 0 report §2.7 |
+| **G13** | Rejected candidate text is not recorded (only the rejection reason). Replay needs it, and it must stay out of the client-facing `narrativeError` | **Confirmed** (found in Phase 0) | `generateNarrativeOnly` attempts trail; Phase 0 report §2.3 |
 
 ---
 
@@ -116,7 +118,7 @@ Phase numbers are local to this program, as before. They do not renumber the Dee
 
 | Phase | Purpose | New work in V2 | Exit gate | Status |
 |---|---|---|---|---|
-| **0** | Baseline, authority lock, instrumentation | X5a recorder coverage; P0-H hygiene; objective, thread and director traces; CI and PR check; cost baseline; decision D1 recorded | Authority and call graph traced; baseline recorded honestly | NOT RUN |
+| **0** | Baseline, authority lock, instrumentation | X5a recorder coverage; P0-H hygiene; objective, thread and director traces; CI and PR check; cost baseline; decision D1 recorded | Authority and call graph traced; baseline recorded honestly | **PASS — AUTOMATED** (2026-10-18); live cost baseline BLOCKED |
 | **1** | Live-model behavioural baseline **[HUMAN LIVE-SESSION REQUIRED]** | Scenarios Q–X; every scenario tied to a recording | Baseline report with per-scenario PASS/FAIL/BLOCKED | NOT RUN |
 | **2** | Intent and objective continuity | **X1** objective ledger projection; **X1b** bounded information-goal continuation; D3 player-owned goals | G, M, R pass; ledger parity | NOT STARTED |
 | **3** | Evidence and information retrieval | **X3** memory consolidation; stable evidence IDs for D2 | S pass; evidence gates | NOT STARTED |
@@ -131,7 +133,7 @@ Phase numbers are local to this program, as before. They do not renumber the Dee
 
 | Slice | Phase | Closes | One line |
 |---|---|---|---|
-| X5a | 0 | G6 (capture side), G12 partly | Verify and, only if missing, extend recorder coverage; behaviour-neutral |
+| X5a | 0 | G6 (capture side), G12 | **Done**: freeform turns now record full forensics; integrity bug fixed; G13 (rejected candidate text) carried to X5b |
 | P0-H | 0 | G12 | Hygiene: ignore rules, untracked generated assets, tests stop dirtying tracked files |
 | X1 | 2 | G1 | Objective ledger as a read-only projection with a visible current objective |
 | X1b | 2 | G2 | Bounded, expiring information-goal continuation |
@@ -183,6 +185,8 @@ Each phase lists carried tasks (from the deferred plan), new tasks or slices, te
 **Tests:** recorder tests extended for any new field; fresh-clone verification for P0-H.
 
 **Exit criteria:** authority boundary documented; baseline recorded honestly; runtime call graph traced; CI result for `main` recorded; hygiene complete; recorder coverage confirmed; maps for G1/G2/G8 and the director trace delivered; decision D1 recorded; no planned subsystem duplicates an existing authority.
+
+**Phase 0 result (2026-10-18):** **PASS — AUTOMATED**, with the live-provider cost and latency baseline **BLOCKED** (needs credentials). Full detail, evidence and rollback are in [`NARRATIVE_PHASE0_BASELINE_AND_AUTHORITY_REPORT_2026-10-18.md`](NARRATIVE_PHASE0_BASELINE_AND_AUTHORITY_REPORT_2026-10-18.md). Highlights: the live narration path is fail-closed at source; the recorder gained a forensic payload for freeform turns and a key-order-independent integrity hash; routine test runs no longer dirty the tree; the objective and thread trace confirmed G1 and G8 in practice; decision D1 was made (option 1). Carried tasks 4, 6 and 7 rely on the 2026-10-15 trace and are re-verified in the Phase 2 design.
 
 ---
 
@@ -438,7 +442,7 @@ Phase 7 cannot be PASS while a provider-dependent case is unexecuted. It may be 
 
 | ID | Decision | Recommendation | Needed before | Constraint |
 |---|---|---|---|---|
-| **D1** | What happens to `StoryDirectorService` (three demo-specific triggers, REST-only reachability) | Decide after the Phase 0 trace. Prefer folding any useful trigger into the milestone layer (X4) as data, and archiving the hard-coded registry | Phase 5 | No parallel plot authority |
+| **D1** | What happens to `StoryDirectorService` (three demo-specific triggers, REST-only reachability) | **DECIDED 2026-10-18 — option 1, fold and archive.** The Phase 0 trace found no seeded data for its triggers, so nothing needs porting; re-express the three ideas as milestone fixtures in Phase 5 if useful, and archive the service, its three endpoints and its tests in Phase 9 (X6c), updating `phase3.command-routing-audit` and `ch16_behavioral_verification` | Phase 5 (satisfied) | No parallel plot authority |
 | **D2** | Evidence lens and deduction play (“how do I know this?” chips; rumour versus witnessed contradiction board) | Valuable and unique to this architecture, but UI work. Keep as backlog after Phase 8 unless prioritised | After Phase 8 | Read canonical evidence only |
 | **D3** | Player-owned goals | Recommended: lets elliptical follow-ups and the narrator anchor to the player’s own aim | Phase 2 design freeze | Must pass the canonical command path |
 | **D4** | Surface world and faction clocks as player-visible pressure | Recommended after X1: gives stakes and pacing from committed events | Phase 4 exit | Show only player-known clocks; read-only |
@@ -582,7 +586,7 @@ Update this plan only with evidence. When a phase or slice changes status, recor
 
 | Item | Status | Evidence / date |
 |---|---|---|
-| Phase 0 | NOT RUN | — |
+| Phase 0 | **PASS — AUTOMATED** (live cost baseline BLOCKED) | Phase 0 report, 2026-10-18 |
 | Phase 1 (A–X) | NOT RUN | — |
 | Phase 2 (X1, X1b) | NOT STARTED | — |
 | Phase 3 (X3) | NOT STARTED | — |
@@ -592,6 +596,7 @@ Update this plan only with evidence. When a phase or slice changes status, recor
 | Phase 7 | NOT STARTED | — |
 | Phase 8 (X5b) | NOT STARTED | — |
 | Phase 9 (X6c) | NOT STARTED | — |
-| Decisions D1–D5 | OPEN | — |
+| Decision D1 | **DECIDED** — option 1, fold and archive | Phase 0 report §2.5, 2026-10-18 |
+| Decisions D2–D5 | OPEN | — |
 
 Superseded and completed plans live under `docs/outdated/` for traceability and are not implementation instructions. `docs/README.md` and this file identify current work.

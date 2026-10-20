@@ -1,6 +1,6 @@
 {
-  "name": "DreamBook",
-  "description": "DreamBook: Personal AI Story Engine — An immersive, persistent world simulation and interactive storytelling experience.",
+  "name": "Dreamville",
+  "description": "Dreamville: Personal AI Story Engine — An immersive, persistent world simulation and interactive storytelling experience.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

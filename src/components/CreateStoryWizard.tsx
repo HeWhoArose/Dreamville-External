@@ -354,10 +354,10 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
                     <span className="text-[11px] px-2 py-0.5 rounded-md bg-stone-900/80 border border-purple-500/30 text-purple-300 font-medium">
                       {synthesizedWorld.generationStatus || (
                         synthesizedWorld.provenance?.generationSource === 'AI_PRIMARY'
-                          ? 'Generated with DreamBook AI'
+                          ? 'Generated with Dreamville AI'
                           : synthesizedWorld.provenance?.generationSource === 'AI_FALLBACK'
                           ? 'Primary AI unavailable · Generated with fallback AI'
-                          : 'AI unavailable · DreamBook used its offline world generator'
+                          : 'AI unavailable · Dreamville used its offline world generator'
                       )}
                     </span>
                   </div>

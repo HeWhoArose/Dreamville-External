@@ -1541,7 +1541,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
               <div key={`ooc-${index}`} className={entry.role === 'player' ? 'text-right' : 'text-left'}>
                 <div className={`inline-block max-w-[90%] rounded-2xl px-3 py-2 text-xs leading-5 ${entry.role === 'player' ? 'bg-sky-300/10 text-sky-100' : 'bg-white/[0.04] text-stone-300'}`}>
                   <div className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.16em] opacity-50">
-                    {entry.role === 'player' ? 'OOC' : 'DreamBook OOC'}
+                    {entry.role === 'player' ? 'OOC' : 'Dreamville OOC'}
                   </div>
                   {entry.text}
                 </div>

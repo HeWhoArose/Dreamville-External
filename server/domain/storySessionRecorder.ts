@@ -137,15 +137,26 @@ function canonicalStringify(value: unknown): string | undefined {
 	const withToJson = value as { toJSON?: () => unknown };
 	if (typeof withToJson.toJSON === 'function') return canonicalStringify(withToJson.toJSON());
 	if (Array.isArray(value)) {
-		return '[' + value.map((item) => canonicalStringify(item) ?? 'null').join(',') + ']';
+		let out = '[';
+		for (let i = 0; i < value.length; i += 1) {
+			if (i > 0) out += ',';
+			const item = value[i];
+			// Primitives are the bulk of any snapshot; skip the recursive call for them.
+			out += item !== null && typeof item === 'object' ? (canonicalStringify(item) ?? 'null') : (JSON.stringify(item) ?? 'null');
+		}
+		return out + ']';
 	}
 	const record = value as Record<string, unknown>;
-	const parts: string[] = [];
+	let out = '{';
+	let first = true;
 	for (const key of Object.keys(record).sort()) {
-		const serialized = canonicalStringify(record[key]);
-		if (serialized !== undefined) parts.push(JSON.stringify(key) + ':' + serialized);
+		const child = record[key];
+		const serialized = child !== null && typeof child === 'object' ? canonicalStringify(child) : JSON.stringify(child);
+		if (serialized === undefined) continue; // undefined, functions and symbols are omitted, as in JSON.stringify
+		out += (first ? '' : ',') + JSON.stringify(key) + ':' + serialized;
+		first = false;
 	}
-	return '{' + parts.join(',') + '}';
+	return out + '}';
 }
 
 function canonicalHash(value: unknown): string {
@@ -454,6 +465,8 @@ export class StorySessionRecorder {
 		const before = clone(params.stateBefore);
 		const after = clone(params.stateAfter);
 		const statePatch = diff(previousState, after);
+		// `before` is a clone of params.stateBefore, so its hash is the one already verified above.
+		const afterHash = hash(after);
 		const interaction: StorySessionInteraction = {
 			sequence,
 			interactionId: crypto.randomUUID(),
@@ -470,13 +483,13 @@ export class StorySessionRecorder {
 			...(params.error ? { error: params.error } : {}),
 			...(params.turn ? { turn: clone(params.turn) } : {}),
 			...(params.canonicalEvent !== undefined ? { canonicalEvent: clone(params.canonicalEvent) } : {}),
-			stateBeforeHash: hash(before),
-			stateAfterHash: hash(after),
+			stateBeforeHash: suppliedBeforeHash,
+			stateAfterHash: afterHash,
 			statePatch,
 			...(params.mutationPaths ? { mutationPaths: [...params.mutationPaths] } : {}),
 		};
 		recording.interactions.push(interaction);
-		recording.finalStateHash = hash(after);
+		recording.finalStateHash = afterHash;
 		reconstructedRecordingTails.set(recording, {
 			state: clone(after),
 			interactionCount: recording.interactions.length,

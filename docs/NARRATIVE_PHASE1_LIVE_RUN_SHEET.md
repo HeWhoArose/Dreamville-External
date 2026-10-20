@@ -44,7 +44,7 @@ The names in the plan (a trench, an arena, a viewing box, a guild board) come fr
 | Something to throw or use | a dagger, a stone, a tool |
 | A notice board, job giver or "ask around" option | board, contract broker, bartender |
 
-Do not spend time matching names. If your world lacks something, skip that scenario and tell me.
+Do not spend time matching names. If your world lacks something, record that scenario as **BLOCKED** and tell me.
 
 ---
 

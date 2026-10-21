@@ -102,6 +102,9 @@ export interface AssembledOpeningContext {
       population?: CurrentSituation['sceneEvidence']['occupancy'];
       visibleEntities?: NearbyEntityContext[];
       visibleEvents?: VisibleEventContext[];
+      sceneObjects?: CurrentSituation['sceneObjects'];
+      environment?: CurrentSituation['sceneEvidence']['environment'];
+      ambientActivity?: string;
     };
     time: { cycle: number; period: string; era: string; formattedHeader: string };
     knowledge: string[];
@@ -118,6 +121,13 @@ function universeViewerId(repo: WorldRepository, storyId: string, fallbackActorI
   const universe = repo.getUniverseForStory(storyId);
   return universe?.playerIdentity?.universeActorId || fallbackActorId;
 }
+
+/**
+ * Budget used by the real opening-scene path. It must stay large enough to fit
+ * the canonical scene-grounding block (occupancy, visible occupants, scene
+ * objects, environment) alongside the protagonist and world identity blocks.
+ */
+export const OPENING_CONTEXT_HARD_TOKEN_BUDGET = 1400;
 
 export class WorkingContextEngine {
   /**
@@ -343,27 +353,11 @@ export class WorkingContextEngine {
         : `${currentAssembledText}\n\n${formattedChunk}`;
       const prospectiveTokens = WorkingContextEngine.estimateTokens(prospectiveText);
 
-      // Reserve enough room for the smallest protected B2 block so a large set of
-      // critical policy/context prose cannot consume the entire live-turn budget.
-      const lowerProtectedReservation =
-        bandRank === priorityOrder.B1_CRITICAL
-          ? (protectedMinimumByLowerBand.B2_IMMEDIATE || 0)
-          : 0;
-      if (
-        lowerProtectedReservation > 0 &&
-        bandRank === priorityOrder.B1_CRITICAL &&
-        prospectiveTokens + lowerProtectedReservation > hardTokenBudget &&
-        included.some((item) => item.band === 'B1_CRITICAL') &&
-        chunk.id !== 'b1_current_situation'
-      ) {
-        const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
-        idle.push(idleChunk);
-        evicted.push(`${chunk.label} (${chunk.band})`);
-        evictionReasons[chunk.label] = 'Deferred to preserve a protected immediate-turn context block within the hard budget.';
-        continue;
-      }
-
-      // Caller-declared tokens + framing overhead accounting
+      // Caller-declared tokens + framing overhead accounting. This must be
+      // computed before the reservation check below: admission is decided on
+      // `effectiveTokens`, so reserving against the cheaper `prospectiveTokens`
+      // measurement let an extra B1 block consume the room that had been kept
+      // for the protected B2 immediate-turn blocks.
       const headerTokens = WorkingContextEngine.estimateTokens(chunkHeader);
       const sepTokens = included.length > 0 ? 1 : 0;
       const declaredWithFraming =
@@ -373,6 +367,26 @@ export class WorkingContextEngine {
         sepTokens;
 
       const effectiveTokens = Math.max(prospectiveTokens, declaredWithFraming);
+
+      // Reserve enough room for the smallest protected B2 block so a large set of
+      // critical policy/context prose cannot consume the entire live-turn budget.
+      const lowerProtectedReservation =
+        bandRank === priorityOrder.B1_CRITICAL
+          ? (protectedMinimumByLowerBand.B2_IMMEDIATE || 0)
+          : 0;
+      if (
+        lowerProtectedReservation > 0 &&
+        bandRank === priorityOrder.B1_CRITICAL &&
+        effectiveTokens + lowerProtectedReservation > hardTokenBudget &&
+        included.some((item) => item.band === 'B1_CRITICAL') &&
+        chunk.id !== 'b1_current_situation'
+      ) {
+        const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
+        idle.push(idleChunk);
+        evicted.push(`${chunk.label} (${chunk.band})`);
+        evictionReasons[chunk.label] = 'Deferred to preserve a protected immediate-turn context block within the hard budget.';
+        continue;
+      }
 
       if (effectiveTokens <= hardTokenBudget) {
         included.push({ ...chunk, blockStatus: 'ACTIVE' });
@@ -1375,9 +1389,12 @@ export class WorkingContextEngine {
       .filter((event) => !event.locationId || event.locationId === startingLocId)
       .slice(0, 8);
     const openingPopulation = openingSituation.sceneEvidence.occupancy;
+    const openingSceneObjects = (openingSituation.sceneObjects || []).filter((object) => object.visibleToPlayer).slice(0, 16);
+    const openingEnvironment = openingSituation.sceneEvidence.environment;
+    const openingAmbientActivity = openingSituation.sceneEvidence.ambientActivity;
     const visiblePopulationText = openingVisibleEntities.length
       ? openingVisibleEntities.map((entity) =>
-          `- ${entity.name}${entity.role ? ` (role: ${entity.role})` : ''}${entity.currentActivity ? `: ${entity.currentActivity}` : ''}`
+          `- ${entity.displayName || entity.name}${entity.role ? ` (role: ${entity.role})` : ''}${entity.currentActivity ? `: ${entity.currentActivity}` : ''}`
         ).join('\n')
       : 'No visible occupants are established by the current canonical entity projection.';
     const visibleActivityText = openingVisibleEvents.length
@@ -1489,7 +1506,17 @@ export class WorkingContextEngine {
           'VISIBLE CANONICAL ACTIVITY EVENTS:',
           visibleActivityText,
           'Presence rule: UNKNOWN occupancy does not mean abandoned or empty. Use the listed visible entities and events; do not claim no one exists unless the canonical state supports that.',
-        ].join('\n'),
+          'CANONICAL VISIBLE SCENE OBJECTS (the only discrete props the opening may treat as present):',
+          openingSceneObjects.length
+            ? openingSceneObjects.map((object) => `${object.name} [${object.kind}; interactable=${object.interactable}${object.description ? '; ' + object.description : ''}]`).join('; ')
+            : 'None explicitly registered.',
+          'CANONICAL ENVIRONMENT FEATURES: ' + ((openingEnvironment?.features || []).join('; ') || 'None explicitly registered.'),
+          openingEnvironment?.water?.present
+            ? 'CANONICAL WATER: present' + (openingEnvironment.water.drainage ? '; drainage established' : '') + (openingEnvironment.water.description ? '; ' + openingEnvironment.water.description : '')
+            : '',
+          openingAmbientActivity ? 'CANONICAL AGGREGATE AMBIENT ACTIVITY: ' + openingAmbientActivity : '',
+          'Scene-grounding rule: location prose does not create discrete objects. Do not invent props, rooms, or environmental features beyond this list.',
+        ].filter(Boolean).join('\n'),
         estimatedTokens: WorkingContextEngine.estimateTokens(
           visiblePopulationText + visibleActivityText + String(openingPopulation.explanation || ''),
         ),
@@ -1601,6 +1628,9 @@ export class WorkingContextEngine {
           population: openingPopulation,
           visibleEntities: openingVisibleEntities,
           visibleEvents: openingVisibleEvents,
+          sceneObjects: openingSceneObjects,
+          environment: openingEnvironment,
+          ambientActivity: openingAmbientActivity,
         },
         time: {
           cycle: timestamp.year,

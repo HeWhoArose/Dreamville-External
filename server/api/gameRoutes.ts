@@ -8,7 +8,7 @@ import { combatPlayerActionService } from '../domain/combatPlayerActionService';
 import { combatTacticsService } from '../domain/combatTacticsService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
-import { WorkingContextEngine } from '../domain/workingContextEngine';
+import { WorkingContextEngine, OPENING_CONTEXT_HARD_TOKEN_BUDGET } from '../domain/workingContextEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { NarrativeResearchPipeline } from '../domain/narrativeResearchPipeline';
@@ -8945,7 +8945,10 @@ gameRouter.get('/story-runs/:storyId/opening/context', (req: Request, res: Respo
       return res.status(404).json({ error: `StoryRun with ID "${storyId}" not found.` });
     }
 
-    const context = WorkingContextEngine.assembleOpeningContext({ storyId });
+    const context = WorkingContextEngine.assembleOpeningContext({
+      storyId,
+      hardTokenBudget: OPENING_CONTEXT_HARD_TOKEN_BUDGET,
+    });
     return res.json({ success: true, storyId, context });
   } catch (error: any) {
     return res.status(500).json({ error: error?.message || 'Failed to assemble opening context.' });

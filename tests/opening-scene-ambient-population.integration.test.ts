@@ -175,14 +175,33 @@ test('opening scene seeds and projects canonical ambient people before generatin
   );
   assert.ok(totalCanonicalPeople.length >= 2, 'the location should expose at least two canonical non-player occupants rather than counting the protagonist as local population');
   assert.ok(people.every((person: any) => person.worldState.presence === 'present' && person.worldState.isAlive));
-  assert.ok(people.every((person: any) => opening.narrativeText.includes(person.name)), 'the final opening should carry actual visible occupants, including on deterministic quality fallback');
+  // Ambient residents are canonical but unidentified: the opening must carry them
+  // by player-facing role label, never by a name the player has not learned.
+  for (const person of people as any[]) {
+    const role = String(person.classification.role);
+    assert.ok(
+      opening.narrativeText.toLowerCase().includes(role.toLowerCase()),
+      `the final opening should carry the role label for a canonical resident (${role}), including on deterministic quality fallback`,
+    );
+    assert.ok(
+      !opening.narrativeText.includes(person.name),
+      `the opening must not expose the unlearned canonical name ${person.name}`,
+    );
+  }
 
   const generation = rig.prompts.find((call) => call.task === 'narrative.generate');
   assert.ok(generation, 'opening generation should have been called');
   assert.match(generation!.prompt, /STARTING_LOCATION_POPULATION_AND_VISIBLE_ACTIVITY/);
   for (const person of people as any[]) {
-    assert.ok(generation!.prompt.includes(person.name), `opening prompt should carry visible entity ${person.name}`);
+    assert.ok(
+      generation!.prompt.toLowerCase().includes(String(person.classification.role).toLowerCase()),
+      `opening prompt should carry visible entity role ${person.classification.role}`,
+    );
     assert.ok(generation!.prompt.includes(person.worldState.currentActivity), `opening prompt should carry the canonical activity for ${person.name}`);
+    assert.ok(
+      !generation!.prompt.includes(person.name),
+      `opening prompt must not expose the unlearned canonical name ${person.name}`,
+    );
   }
 
   const persistedRun = rig.repository.getStoryRun(storyId);
@@ -483,7 +502,16 @@ test('opening population and opening scene survive repository reload without dup
         firstPeople.map((card: any) => card.id).sort(),
         'forcing an opening regeneration must not create duplicate ambient residents',
       );
-      assert.ok(firstPeople.every((person: any) => regenerated.narrativeText.includes(person.name)), 'regenerated prose should use the reloaded canonical residents');
+      assert.ok(
+        firstPeople.every((person: any) =>
+          regenerated.narrativeText.toLowerCase().includes(String(person.classification.role).toLowerCase()),
+        ),
+        'regenerated prose should use the reloaded canonical residents',
+      );
+      assert.ok(
+        firstPeople.every((person: any) => !regenerated.narrativeText.includes(person.name)),
+        'regenerated prose must not expose unlearned canonical names',
+      );
     } finally {
       (orchestrator as any).executeTaskGeneration = originalExecute;
     }

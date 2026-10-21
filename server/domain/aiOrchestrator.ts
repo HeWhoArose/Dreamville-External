@@ -6839,11 +6839,14 @@ export class MultiModelOrchestrator {
           return { valid: false, errorReason: 'audioCues must be an array.' };
         }
         for (const a of parsed.audioCues) {
-          if (typeof a === 'string') audioCues.push(a);
+          if (typeof a === 'string' && a.trim()) audioCues.push(a.trim());
         }
       }
 
-      // 7. Visual cues validation
+      // 7. Visual cues validation.
+      // Cues are optional presentation metadata. A malformed cue item must not
+      // discard an otherwise valid narrative turn (real providers return mixed
+      // shapes); normalize what is usable and drop the rest.
       const visualCues: (string | { prompt: string })[] = [];
       if (parsed.visualCues) {
         if (!Array.isArray(parsed.visualCues)) {
@@ -6852,10 +6855,15 @@ export class MultiModelOrchestrator {
         for (const v of parsed.visualCues) {
           if (typeof v === 'string' && v.trim()) {
             visualCues.push(v.trim());
-          } else if (v && typeof v === 'object' && typeof v.prompt === 'string' && v.prompt.trim()) {
-            visualCues.push({ prompt: v.prompt.trim() });
-          } else {
-            return { valid: false, errorReason: 'Visual cue items must be strings or { prompt: string } objects.' };
+          } else if (v && typeof v === 'object') {
+            const prompt = typeof v.prompt === 'string'
+              ? v.prompt
+              : typeof v.text === 'string'
+                ? v.text
+                : typeof v.description === 'string'
+                  ? v.description
+                  : '';
+            if (prompt.trim()) visualCues.push({ prompt: prompt.trim() });
           }
         }
       }

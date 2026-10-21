@@ -1,6 +1,7 @@
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { EntityCard, EntityKind } from './entityCard';
 import { deterministicId, formatCanonicalTimestamp, hashStringToSeed } from './deterministicRng';
+import { inferLocationArchetype, isPublicArchetype, normalizeLocationArchetype, type LocationArchetype } from './locationArchetypes';
 
 export interface WorldActivityEvent {
 	id: string;
@@ -33,8 +34,43 @@ export class WorldActivityDirector {
 		{ name: 'Oren Vale', kind: 'NPC' as EntityKind, role: 'messenger', activity: 'asking directions while carrying a folded dispatch', motivations: ['deliver an important message', 'find the quickest route'], traits: ['hurried', 'polite'] },
 	];
 
-	private static locationSupportsPublicActivity(name: string, description: string): boolean {
+	private static locationSupportsPublicActivity(name: string, description: string, archetype?: LocationArchetype): boolean {
+		const resolved = normalizeLocationArchetype(archetype) || inferLocationArchetype({ name, description });
+		if (isPublicArchetype(resolved)) return true;
+		// Compatibility fallback for legacy worlds that predate structured archetypes.
 		return /citadel|market|bazaar|inn|tavern|guild|town|city|village|settlement|harbour|harbor|station|plaza|square|academy|temple district|capital|alley/i.test(name + ' ' + description);
+	}
+
+	/**
+	 * Deterministic location-specific names for ordinary public occupants.
+	 * A small fixed roster reused in every public place made unrelated crowds
+	 * look like the same people following the player; generate stable identities
+	 * from the story/location seed instead.
+	 */
+	private static genericPeople(storyId: string, locationId: string, locationName: string, count: number) {
+		const firstNames = ['Aris', 'Bela', 'Corin', 'Dara', 'Edrin', 'Faye', 'Galen', 'Hale', 'Ilyse', 'Joren', 'Kara', 'Lian', 'Mara', 'Nadin', 'Orin', 'Pella', 'Quin', 'Rhea', 'Soren', 'Talia', 'Ulric', 'Vesna', 'Wren', 'Yara'];
+		const lastNames = ['Alder', 'Brame', 'Calder', 'Dune', 'Ellery', 'Fenn', 'Garrow', 'Holt', 'Ivara', 'Joss', 'Kell', 'Larkin', 'Morrow', 'Nyst', 'Orrell', 'Pike', 'Quarry', 'Rook', 'Sable', 'Thane', 'Ulmar', 'Voss', 'Whit', 'Yarrow'];
+		const roles = [
+			{ role: 'local resident', activity: 'going about ordinary daily business', motivations: ['finish daily errands', 'keep informed about local affairs'] },
+			{ role: 'worker', activity: 'carrying supplies on the way to a job', motivations: ['finish a work shift', 'earn a fair day\'s wage'] },
+			{ role: 'traveller', activity: 'checking directions and watching the crowd', motivations: ['reach the next destination', 'learn local news'] },
+			{ role: 'courier', activity: 'hurrying between deliveries with a sealed packet', motivations: ['deliver on time', 'avoid a missed deadline'] },
+		];
+		const people = [];
+		for (let index = 0; index < count; index++) {
+			const slot = hashStringToSeed(storyId + '|' + locationId + '|generic|' + index);
+			const role = roles[slot % roles.length];
+			const name = firstNames[(slot >>> 8) % firstNames.length] + ' ' + lastNames[(slot >>> 16) % lastNames.length];
+			people.push({
+				name,
+				kind: 'NPC' as EntityKind,
+				role: role.role,
+				activity: role.activity,
+				motivations: role.motivations,
+				traits: ['ordinary', 'grounded'],
+			});
+		}
+		return people;
 	}
 
 	private static peopleForLocation(storyId: string, locationId: string, name: string, description: string) {
@@ -193,15 +229,31 @@ export class WorldActivityDirector {
 		if (population?.status === 'ABANDONED' || population?.status === 'RESTRICTED') return [];
 		if (population?.expectedPopulation === 'NONE') return [];
 
-		const publicPlace = this.locationSupportsPublicActivity(location.name, location.description || '');
+		// Access-controlled locations never receive improvised ambient occupants,
+		// even when their status is UNKNOWN. A legitimate world event must change
+		// the canonical access policy before ordinary people can appear.
+		if (population?.accessControlled === true) return [];
+
+		const publicPlace = this.locationSupportsPublicActivity(location.name, location.description || '', location.archetype);
 		const people = this.peopleForLocation(storyId, locationId, location.name, location.description || '');
 		const explicitlyInhabited = population?.status === 'INHABITED';
 		if (!explicitlyInhabited && !publicPlace) return [];
 
+		// The protagonist is not part of the location's ambient occupancy. Counting
+		// the viewer as an existing occupant made a one-person public street appear
+		// already populated and suppressed seeding entirely (and let daily-activity
+		// refresh rewrite the player's own activity).
+		const viewer = typeof (repository as any).getPlayerLifecycle === 'function'
+			? repository.getPlayerLifecycle(storyId)
+			: undefined;
+		const viewerActorId = viewer?.actorId;
+		const viewerName = viewer?.name;
 		const existing = repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card) =>
 			card.worldState.locationId === locationId &&
 			card.worldState.isAlive &&
-			['NPC', 'MERCHANT', 'CHARACTER', 'FACTION_MEMBER'].includes(card.kind)
+			['NPC', 'MERCHANT', 'CHARACTER', 'FACTION_MEMBER'].includes(card.kind) &&
+			!(viewerActorId && card.id === viewerActorId) &&
+			!(viewerName && card.kind === 'CHARACTER' && card.name === viewerName)
 		);
 		const existingIds = new Set(existing.map((card) => card.id));
 		let activitiesChanged = this.refreshDailyActivity(repository, storyId, locationId, existing);
@@ -223,8 +275,16 @@ export class WorldActivityDirector {
 		}
 
 		const created: EntityCard[] = [];
-		for (let index = 0; index < people.length && existing.length + created.length < desiredCount; index++) {
-			const person = people[index];
+		// Generic public places use location-seeded ordinary residents rather than
+		// the small named roster that belongs to specific archetypes.
+		const locationArchetype = normalizeLocationArchetype(location.archetype) || inferLocationArchetype(location);
+		const archetypeSpecificPlace = ['GUILD_HALL', 'INN', 'MARKET', 'ALLEY'].includes(locationArchetype)
+			|| /guild|inn|tavern|market|bazaar|alley/i.test((location.name + ' ' + (location.description || '')).toLowerCase());
+		const roster = !archetypeSpecificPlace
+			? this.genericPeople(storyId, locationId, location.name, Math.max(people.length, desiredCount))
+			: people;
+		for (let index = 0; index < roster.length && existing.length + created.length < desiredCount; index++) {
+			const person = roster[index];
 			const id = deterministicId('ambient_npc', storyId, locationId, person.role, person.name);
 			if (existingIds.has(id) || repository.getEntityCard(storyId, id)) continue;
 			const card = repository.saveEntityCard(storyId, {
@@ -357,6 +417,11 @@ export class WorldActivityDirector {
 			triggerActionId: actionId,
 		};
 		repository.appendCanonicalCommandEvent(storyId, event);
+		// The NPC has just spoken to the player, so their canonical name becomes
+		// legitimately learned knowledge for this viewer. This is the only reason
+		// the committed interaction summary may use the name.
+		const viewerActorId = repository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+		repository.grantEntityIdentityKnowledge(storyId, viewerActorId, entity.id, entity.name, 'told');
 		return {
 			id: eventId,
 			type: 'NPC_INITIATED_INTERACTION',

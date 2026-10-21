@@ -32,6 +32,7 @@ import { narrativeStateBroker, type ItemUseResolution } from '../domain/narrativ
 import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
+import { SceneInteractionAuthority, resolveGroundedObservation } from '../domain/sceneInteractionAuthority';
 import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { PlayerStateQueryResolver } from '../domain/playerStateQueryResolver';
@@ -411,6 +412,14 @@ export class ServerMockAuthority {
           accessible: node.accessible,
           ambientSensory: node.ambientSensory,
           discovered: true,
+          // Structured canonical scene data for the client projection. Concealed
+          // objects stay hidden; only what the player can perceive is exposed.
+          ...(node.archetype ? { archetype: node.archetype } : {}),
+          ...(Array.isArray(node.sceneObjects)
+            ? { sceneObjects: JSON.parse(JSON.stringify(node.sceneObjects.filter((object) => object.visible !== false))) }
+            : {}),
+          ...(node.population ? { population: JSON.parse(JSON.stringify(node.population)) } : {}),
+          ...(node.environment ? { environment: JSON.parse(JSON.stringify(node.environment)) } : {}),
         };
       } else if (targetStoryId !== 'default_story') {
         // Preserve a useful small-map presentation using non-revealing 'unknown territory'
@@ -613,6 +622,10 @@ export class ServerMockAuthority {
         accessible: node.accessible,
         ambientSensory: node.ambientSensory,
         discovered: node.discovered,
+        ...(node.archetype ? { archetype: node.archetype } : {}),
+        ...(Array.isArray(node.sceneObjects) ? { sceneObjects: JSON.parse(JSON.stringify(node.sceneObjects)) } : {}),
+        ...(node.population ? { population: JSON.parse(JSON.stringify(node.population)) } : {}),
+        ...(node.environment ? { environment: JSON.parse(JSON.stringify(node.environment)) } : {}),
       };
     }
     return locs;
@@ -881,13 +894,54 @@ export class ServerMockAuthority {
     // The director is deterministic and idempotent: abandoned/restricted places are never populated.
     WorldActivityDirector.ensureAmbientPopulation(worldRepository, targetStoryId, currentLocationId || '');
 
-    const resolutionSituation = CurrentSituationBuilder.build({
+    // Resolve explicit search/pickup intent against the canonical scene before
+    // scene projection or narration. Searching never picks an object up; pickup
+    // commits inventory/geography mutations through their owning authorities.
+    const sceneResolution = SceneInteractionAuthority.resolve({
+      repository: worldRepository,
+      storyId: targetStoryId,
+      actorId,
+      actionText: String(freeformText),
+      locationId: currentLocationId || '',
+    });
+    if (sceneResolution.committed) {
+      const sceneRun = worldRepository.getStoryRun(targetStoryId);
+      if (sceneRun) worldRepository.saveStoryRun(sceneRun);
+    }
+
+    let resolutionSituation = CurrentSituationBuilder.build({
       storyId: targetStoryId,
       playerAction: String(freeformText),
       viewerActorId: actorId,
       worldRepo: worldRepository,
     });
-    const resolutionIntent = PlayerIntentInterpreter.deterministic(String(freeformText), resolutionSituation);
+    let resolutionIntent = PlayerIntentInterpreter.deterministic(String(freeformText), resolutionSituation);
+
+    // Identity disclosure is a knowledge mutation, not a narration convenience.
+    // A direct request for someone's name can legitimately establish it, but only
+    // for an entity actually present in the canonical scene.
+    if (/\b(?:your name|who are you|what are you called|introduce yourself|introduction)\b/i.test(String(freeformText))) {
+      let granted = false;
+      for (const target of resolutionIntent.explicitTargets) {
+        const entity = resolutionSituation.nearbyEntities.find((candidate) => candidate.id === target.id);
+        if (!entity || entity.kind === 'PLAYER' || entity.identityKnown) continue;
+        const card = worldRepository.getEntityCard(targetStoryId, entity.id);
+        if (card && worldRepository.grantEntityIdentityKnowledge(targetStoryId, actorId, entity.id, card.name, 'told')) {
+          granted = true;
+        }
+      }
+      if (granted) {
+        resolutionSituation = CurrentSituationBuilder.build({
+          storyId: targetStoryId,
+          playerAction: String(freeformText),
+          viewerActorId: actorId,
+          worldRepo: worldRepository,
+        });
+        resolutionIntent = PlayerIntentInterpreter.deterministic(String(freeformText), resolutionSituation);
+      }
+    }
+
+    const groundedObservation = resolveGroundedObservation(resolutionSituation, String(freeformText));
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
     // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
     const sceneText = [
@@ -937,6 +991,12 @@ export class ServerMockAuthority {
     let committedOutcome = itemUseBlocked
       ? 'The requested item is not available in the actor inventory. Do not narrate the item as if it was used.'
       : '';
+    if (sceneResolution.attempted && sceneResolution.feedback) {
+      committedOutcome = [committedOutcome, sceneResolution.feedback].filter(Boolean).join(' ');
+    }
+    if (groundedObservation.relevant && groundedObservation.text) {
+      committedOutcome = [committedOutcome, groundedObservation.text].filter(Boolean).join(' ');
+    }
     if (storyCheck) {
       const testLabel = storyCheck.testType === 'SAVING_THROW'
         ? storyCheck.ability + ' saving throw'
@@ -1055,6 +1115,20 @@ export class ServerMockAuthority {
         canonicalEventId: canonicalEventForResolution?.eventId,
       },
     };
+
+    if (sceneResolution.attempted) {
+      actionResolution.actualEffect += ' ' + (sceneResolution.feedback || 'The canonical scene resolved the interaction.');
+      if (sceneResolution.feedback) actionResolution.playerVisibleConsequences.push(sceneResolution.feedback);
+      actionResolution.canonicalStateChanges.push(...sceneResolution.canonicalStateChanges);
+      actionResolution.evidenceIds.push(...sceneResolution.evidence.slice(0, 6));
+      if (sceneResolution.errorReason) actionResolution.uncertainty.push(sceneResolution.errorReason);
+    }
+    if (groundedObservation.relevant && groundedObservation.text) {
+      actionResolution.actualEffect += ' Grounded observation: ' + groundedObservation.text;
+      actionResolution.playerVisibleConsequences.push(groundedObservation.text);
+      actionResolution.evidenceIds.push(...groundedObservation.evidence.slice(0, 6));
+      if (groundedObservation.limitation) actionResolution.uncertainty.push(groundedObservation.limitation);
+    }
 
     let itemUseResult: ReturnType<typeof narrativeStateBroker.commitItemUse> | undefined;
     if (itemUseResolution.requested && itemUseResolution.found && (!storyCheck || storyCheck.success)) {
@@ -1489,7 +1563,20 @@ export class ServerMockAuthority {
             'PLAYER ACTION: ' + String(freeformText),
             'CANONICAL ACTION RESOLUTION: ' + JSON.stringify(actionResolution),
             'COMMITTED OUTCOME: ' + committedOutcome,
-            'CURRENT SITUATION: ' + JSON.stringify(resolutionSituation),
+            'CURRENT SITUATION: ' + JSON.stringify({
+              ...resolutionSituation,
+              nearbyEntities: resolutionSituation.nearbyEntities.map((entity) => ({
+                ...entity,
+                name: entity.displayName || entity.name,
+              })),
+              sceneEvidence: {
+                ...resolutionSituation.sceneEvidence,
+                entities: resolutionSituation.sceneEvidence.entities.map((entity) => ({
+                  ...entity,
+                  name: entity.displayName || entity.name,
+                })),
+              },
+            }),
             '',
             'QUALITY REVIEW: richness=' + firstReview.richness.decision + ' score=' + firstReview.richness.overallScore.toFixed(2),
             ...firstReview.richness.issues.slice(0, 8).map(issue => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),

@@ -10,6 +10,7 @@ import {
 } from '../domain/types';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { HistoricalEvidence } from '../domain/historicalEvidence';
+import { WorldActivityDirector } from '../domain/worldActivityDirector';
 
 export class WorldSimulationService {
   constructor(private worldRepo: WorldRepository) {}
@@ -225,6 +226,23 @@ export class WorldSimulationService {
       playerLocationId: playerLoc,
       geography,
     });
+
+    // LivingWorldSimulation owns scheduled movement/activity. Scene projection
+    // reads EntityCards / NPC lifecycles, so the committed schedule result must
+    // be written back to those authorities before narration can observe it.
+    const livingProjectionChanged = this.syncLivingWorldNpcProjection(
+      storyId,
+      livingSummary,
+      livingSim,
+      updatedClockState.timestamp.totalElapsedSeconds,
+    );
+    // Refresh ordinary local routines and presence for the player's location.
+    // The director is idempotent; this only updates existing ambient cards.
+    const refreshedPopulation = WorldActivityDirector.ensureAmbientPopulation(this.worldRepo, storyId, playerLoc);
+    if (livingProjectionChanged || refreshedPopulation.length > 0) {
+      const projectedRun = this.worldRepo.getStoryRun(storyId);
+      if (projectedRun) this.worldRepo.saveStoryRun(projectedRun);
+    }
 
     // Condition authority advances with canonical world time. This covers persistent
     // poisons, regeneration, curses, self-burning and other non-combat effects.
@@ -538,6 +556,60 @@ export class WorldSimulationService {
       livingWorldSummary: livingSummary,
       worldMomentum,
     };
+  }
+
+  /**
+   * Write scheduled NPC movement/activity back into canonical scene authorities.
+   *
+   * Schedules remain owned by LivingWorldSimulation; entity cards and NPC
+   * lifecycles are projections that perception reads. Keeping both in sync is
+   * what makes time-dependent activity visible without a second population
+   * manager. Idempotent by construction: the same committed profile produces the
+   * same card state.
+   */
+  private syncLivingWorldNpcProjection(
+    storyId: string,
+    summary: import('../domain/livingWorldSimulation').LivingWorldSimulationSummary,
+    livingSim: ReturnType<WorldRepository['getLivingWorldSimulation']>,
+    currentElapsedSeconds: number,
+  ): boolean {
+    let changed = false;
+    const movementByNpc = new Map(summary.npcMovements.map((movement) => [movement.npcId, movement]));
+    const profiles = livingSim.getAllNpcSchedules();
+    for (const profile of profiles) {
+      const movement = movementByNpc.get(profile.npcId);
+      const locationId = movement?.toLocationId || profile.currentLocationId;
+      const activity = profile.currentActivity || movement?.activity || 'idle';
+      const card = this.worldRepo.getEntityCard(storyId, profile.npcId);
+      if (card) {
+        const presence = card.worldState?.presence === 'absent' ? 'absent' : 'present';
+        if (
+          card.worldState?.locationId !== locationId ||
+          card.worldState?.currentActivity !== activity
+        ) {
+          this.worldRepo.saveEntityCard(storyId, {
+            ...card,
+            worldState: {
+              ...card.worldState,
+              locationId,
+              currentActivity: activity,
+              presence,
+            },
+          });
+          changed = true;
+        }
+      }
+      const lifecycle = this.worldRepo.getNpcLifecycle(storyId, profile.npcId);
+      if (lifecycle && (lifecycle.locationId !== locationId || lifecycle.currentActivity !== activity)) {
+        this.worldRepo.updateNpcLifecycle(storyId, lifecycle.copyWith({
+          locationId,
+          currentActivity: activity,
+          lastUpdatedTime: currentElapsedSeconds,
+        }));
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   /**

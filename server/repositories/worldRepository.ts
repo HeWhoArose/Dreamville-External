@@ -1,5 +1,6 @@
 import {
   KnowledgeFact,
+  KnowledgeSourceType,
   TravelJourney,
   WorldTimestamp,
 } from '../domain/types';
@@ -78,6 +79,15 @@ export interface WorldRepository {
   getKnowledgeFacts(storyId: string): KnowledgeFact[];
   getAuthorizedKnowledgeFacts(storyId: string, viewerActorId?: string): KnowledgeFact[];
   addKnowledgeFact(storyId: string, fact: KnowledgeFact): void;
+  /** Identity knowledge is separate from mere co-location/visibility. */
+  isEntityIdentityKnown(storyId: string, viewerActorId: string, targetId: string, targetName?: string): boolean;
+  grantEntityIdentityKnowledge(
+    storyId: string,
+    viewerActorId: string,
+    targetId: string,
+    targetName: string,
+    source?: KnowledgeSourceType,
+  ): KnowledgeFact | null;
   getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine;
   getInventoryEngine(storyId: string): InventoryItemEngine;
   getCapabilityEngine(storyId: string): CapabilityEngine;
@@ -468,7 +478,14 @@ export class InMemoryWorldRepository implements WorldRepository {
       }
     }
 
-    this.geographies.set('default_story', new GeographyGraph(true));
+    // Only create the starter topography when the story has no geography. The
+    // persisted runtime geography was imported above; replacing it here silently
+    // discarded every canonical scene mutation (searched/discovered/picked-up
+    // objects) for the default story on each restart, so a picked-up item
+    // reappeared in the scene while remaining in the inventory.
+    if (!this.geographies.has('default_story')) {
+      this.geographies.set('default_story', new GeographyGraph(true));
+    }
     this.seedDefaultTemplates();
     this.seedDefaultStory('default_story');
 
@@ -745,7 +762,17 @@ export class InMemoryWorldRepository implements WorldRepository {
             provenance: (isObj && nodeItem.provenance) || 'authored',
             // Preserve the authored occupancy contract so ambient seeding respects restricted/abandoned/NONE locations.
             population: isObj && nodeItem.population && typeof nodeItem.population === 'object'
-              ? { ...nodeItem.population }
+              ? JSON.parse(JSON.stringify(nodeItem.population))
+              : undefined,
+            // Structured location identity and environment must survive the
+            // WorldTemplate -> StoryRun boundary; ambient population policy and
+            // perception/review read them as canonical evidence.
+            archetype: isObj && nodeItem.archetype ? String(nodeItem.archetype).toUpperCase() : undefined,
+            environment: isObj && nodeItem.environment && typeof nodeItem.environment === 'object'
+              ? JSON.parse(JSON.stringify(nodeItem.environment))
+              : undefined,
+            tags: isObj && Array.isArray(nodeItem.tags)
+              ? nodeItem.tags.map((tag: unknown) => String(tag)).filter(Boolean)
               : undefined,
           };
           registeredNodes.push(locNode);
@@ -811,11 +838,21 @@ export class InMemoryWorldRepository implements WorldRepository {
           name: char.startingLocation?.name || world.setting || `${world.title} Capital`,
           regionId: char.startingLocation?.region || world.title,
           description: char.startingLocation?.description || world.description || `Starting area in ${world.title}.`,
-          coordinates: { x: 50, y: 50 },
-          accessible: true,
+          coordinates: char.startingLocation?.coordinates || { x: 50, y: 50 },
+          accessible: char.startingLocation?.accessible !== undefined ? Boolean(char.startingLocation.accessible) : true,
           discovered: true,
-          ambientSensory: `Visual: First light over ${world.title}. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.`,
+          ambientSensory: char.startingLocation?.ambientSensory || `Visual: First light over ${world.title}. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.`,
           provenance: 'generated' as const,
+          ...(char.startingLocation?.population && typeof char.startingLocation.population === 'object'
+            ? { population: JSON.parse(JSON.stringify(char.startingLocation.population)) }
+            : {}),
+          ...(Array.isArray(char.startingLocation?.sceneObjects)
+            ? { sceneObjects: JSON.parse(JSON.stringify(char.startingLocation.sceneObjects)) }
+            : {}),
+          ...(char.startingLocation?.environment && typeof char.startingLocation.environment === 'object'
+            ? { environment: JSON.parse(JSON.stringify(char.startingLocation.environment)) }
+            : {}),
+          ...(char.startingLocation?.archetype ? { archetype: String(char.startingLocation.archetype).toUpperCase() } : {}),
         };
         geographyGraph.addNode(startNode as any);
         registeredNodes.push(startNode);
@@ -1481,6 +1518,30 @@ export class InMemoryWorldRepository implements WorldRepository {
         discovered: true,
         ambientSensory: 'Visual: bronze astral rings and prism light. Sounds: low mechanical hum. Scent: warm metal and dust. Tactile: cool stone.',
         provenance: 'authored',
+        // Authored starters carry the same structured contract as generated
+        // worlds: prose alone leaves the first scene with no discoverable
+        // objects and nothing for perception or review to ground against.
+        archetype: 'WORKPLACE',
+        tags: ['orrery', 'astronomical', 'archive', 'citadel'],
+        sceneObjects: [
+          { id: 'obj_orrery_astral_armature', name: 'bronze astral armature', kind: 'STRUCTURE', description: 'A concentric bronze ring assembly, currently motionless.', visible: true, interactable: true, tags: ['armature', 'ring', 'mechanism'], properties: { fixed: true } },
+          { id: 'obj_orrery_prism_ring', name: 'resonant prism ring', kind: 'ENVIRONMENTAL_FEATURE', description: 'A faceted prism ring set into the floor, humming faintly.', visible: true, interactable: false, tags: ['prism', 'ring', 'light'], properties: { fixed: true } },
+          { id: 'obj_orrery_inspection_ledger', name: 'worn inspection ledger', kind: 'ITEM', description: "A technician's log of prism-ring harmonics and micro-fractures.", visible: true, interactable: true, tags: ['ledger', 'log', 'record', 'book'], properties: { takeable: true, itemCategory: 'Document' } },
+          { id: 'obj_orrery_catwalk', name: 'stone inspection catwalk', kind: 'STRUCTURE', description: 'A narrow catwalk circling the inner armature.', visible: true, interactable: false, tags: ['catwalk', 'walkway'], properties: { fixed: true } },
+        ],
+        environment: {
+          terrain: 'Stone',
+          lighting: 'DIM',
+          weatherExposure: 'SHELTERED',
+          features: ['bronze astral armature', 'resonant prism ring', 'stone inspection catwalk'],
+          ambientActivity: 'Archive technicians move between the armature and the inspection catwalk.',
+        },
+        population: {
+          status: 'INHABITED',
+          expectedPopulation: 'SPARSE',
+          explanation: 'A staffed astronomical chamber inside the citadel archive.',
+          provenance: 'AUTHORED',
+        },
       } as any);
       defaultGeography.addNode({
         id: 'loc_lantern_vault',
@@ -1492,6 +1553,26 @@ export class InMemoryWorldRepository implements WorldRepository {
         discovered: false,
         ambientSensory: 'Visual: sealed lantern alcoves. Sounds: distant patrol steps. Scent: oil and old stone. Tactile: cold masonry.',
         provenance: 'authored',
+        archetype: 'RESTRICTED_SITE',
+        tags: ['vault', 'restricted', 'archive'],
+        sceneObjects: [
+          { id: 'obj_vault_lantern_alcove', name: 'sealed lantern alcove', kind: 'STRUCTURE', description: 'A recessed alcove behind a lantern grille, sealed with a wax stamp.', visible: true, interactable: true, tags: ['alcove', 'lantern', 'seal'], properties: { fixed: true, locked: true, keyTag: 'vault_seal' } },
+          { id: 'obj_vault_warden_desk', name: "warden's duty desk", kind: 'STRUCTURE', description: 'A narrow desk holding the vault access register.', visible: true, interactable: true, tags: ['desk', 'register', 'access'], properties: { fixed: true } },
+          { id: 'obj_vault_access_register', name: 'vault access register', kind: 'ITEM', description: 'A ledger recording who entered the vault and when.', visible: true, interactable: true, tags: ['register', 'ledger', 'record'], properties: { takeable: true, itemCategory: 'Document' } },
+        ],
+        environment: {
+          terrain: 'Stone',
+          lighting: 'DARK',
+          weatherExposure: 'SHELTERED',
+          features: ['sealed lantern alcove', "warden's duty desk"],
+        },
+        population: {
+          status: 'RESTRICTED',
+          expectedPopulation: 'NONE',
+          accessControlled: true,
+          explanation: 'Guarded archive vault; entry requires authorization.',
+          provenance: 'AUTHORED',
+        },
       } as any);
       defaultGeography.addEdge({
         id: 'edge_orrery_lantern_vault',
@@ -1833,6 +1914,67 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (!existing.some((f) => f.id === fact.id)) {
       this.knowledgeBases.set(storyId, [fact, ...existing]);
     }
+  }
+
+  /**
+   * Whether the viewer has legitimately learned a target's canonical name.
+   *
+   * Being co-located, visible, in combat, or otherwise epistemically "known" is
+   * not identity knowledge. Only an explicit identity fact (introduction,
+   * document, reliable conversation) establishes the name.
+   */
+  public isEntityIdentityKnown(
+    storyId: string,
+    viewerActorId: string,
+    targetId: string,
+    targetName?: string,
+  ): boolean {
+    if (viewerActorId === targetId) return true;
+    const name = String(targetName || '').trim().toLowerCase();
+    return this.getKnowledgeFacts(storyId).some((fact) => {
+      const subjectMatches = fact.subjectEntityId === targetId
+        || (Boolean(name) && String(fact.objectValue || '').trim().toLowerCase() === name);
+      if (!subjectMatches) return false;
+      const predicate = String(fact.predicate || '').toLowerCase();
+      if (!/^(?:identity|name|known_name|introduced|introduction)$/.test(predicate)) return false;
+      // Private/faction facts only count when explicitly authorized for this viewer.
+      if (fact.secretLevel !== 'public') {
+        return this.getAuthorizedKnowledgeFacts(storyId, viewerActorId).some((authorized) => authorized.id === fact.id);
+      }
+      return true;
+    });
+  }
+
+  /**
+   * Commit an in-world disclosure of identity. Idempotent per viewer/target.
+   */
+  public grantEntityIdentityKnowledge(
+    storyId: string,
+    viewerActorId: string,
+    targetId: string,
+    targetName: string,
+    source: KnowledgeSourceType = 'told',
+  ): KnowledgeFact | null {
+    const name = String(targetName || '').trim();
+    if (!viewerActorId || !targetId || !name) return null;
+    const factId = deterministicId('identity_fact', storyId, viewerActorId, targetId);
+    const existing = this.getKnowledgeFacts(storyId).find((fact) => fact.id === factId);
+    if (existing) return existing;
+    const timestamp = this.getWorldClock(storyId).getTimestamp();
+    const fact: KnowledgeFact = {
+      id: factId,
+      subjectEntityId: targetId,
+      predicate: 'identity',
+      objectValue: name,
+      sourceType: source,
+      acquiredAtTimestamp: timestamp,
+      confidence: source === 'rumor' ? 0.6 : 1.0,
+      secretLevel: 'public',
+      scope: 'exact',
+      provenanceSummary: `Identity disclosed to ${viewerActorId} through ${source}.`,
+    };
+    this.addKnowledgeFact(storyId, fact);
+    return fact;
   }
 
   public getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine {

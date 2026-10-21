@@ -3,6 +3,8 @@
  * Sourced directly from DreamBook v10.8 (v4.0 World Geography & Time, v5.0 Epistemics, v10.8 Decision 1)
  */
 
+import type { LocationArchetype, LocationEnvironmentProfile } from './locationArchetypes';
+
 export type DayPhase = 'Dawn' | 'Morning' | 'Afternoon' | 'Dusk' | 'Night' | 'Predawn';
 
 export type Season = 'Spring' | 'Summer' | 'Autumn' | 'Winter';
@@ -34,7 +36,6 @@ export interface GeographicCoordinates {
   y: number;
   elevation?: number;
 }
-
 
 export type GeographyProvenance = 'authored' | 'source/reference' | 'generated' | 'imported' | 'hybrid';
 
@@ -79,6 +80,12 @@ export interface LocationNode {
   sceneObjects?: LocationSceneObject[];
   /** Missing occupancy is UNKNOWN, never evidence that the location is abandoned. */
   population?: LocationPopulationProfile;
+  /** Structured world-authoring identity. Not derived from narration. */
+  archetype?: LocationArchetype;
+  /** Structured environmental facts (features, water, exposure) for perception. */
+  environment?: LocationEnvironmentProfile;
+  /** Authoring tags used by world generation and legacy archetype migration. */
+  tags?: string[];
 }
 
 export interface RouteEdge {

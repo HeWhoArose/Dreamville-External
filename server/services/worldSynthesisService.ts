@@ -4,6 +4,7 @@ import { worldRepository } from '../repositories/worldRepository';
 import { WorldTemplate, WorldSynthesisInput } from '../../src/types';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
+import { expandLocationStructure, normalizeLocationArchetype } from '../domain/locationArchetypes';
 
 export interface StructuredWorldRule {
   ruleId: string;
@@ -170,6 +171,10 @@ CRITICAL INSTRUCTIONS FOR PLANNED WORLD EVENTS:
 - RESTRICTED means access controls and schedules may limit who can be present or perceived.
 - ABANDONED requires a concrete in-world explanation (evacuation, collapse, lockdown, etc.); it must not be used as a synonym for "no NPC was generated".
 - Populate the world's geography with varied, plausible population states and include encounterProfileId only when an encounter design is supported by the world.
+- Every location MUST declare a structured "archetype" (CITADEL, URBAN_DISTRICT, RESIDENTIAL_STREET, MARKET, INN, GUILD_HALL, TEMPLE, HARBOR, ALLEY, PARK, SEWER, WORKPLACE, RESTRICTED_SITE, ABANDONED_SITE, WILDERNESS, or GENERIC).
+- Every location MUST include 2-6 canonical "sceneObjects" (discrete props/features). These are the only location-level props the narrator may treat as present. Do not list decorative prose as objects.
+- Every location SHOULD include a structured "environment" with features, lighting, weatherExposure, and water only when the world establishes it.
+- Do not invent water, weather, crowds, or abandonment to satisfy these fields. Represent uncertainty explicitly.
 
 The JSON schema must strictly be:
 {
@@ -189,6 +194,26 @@ The JSON schema must strictly be:
         "description": "Atmospheric description of location.",
         "coordinates": {"x": number, "y": number},
         "ambientSensory": "Visual: ... Auditory: ...",
+        "archetype": "CITADEL" | "URBAN_DISTRICT" | "RESIDENTIAL_STREET" | "MARKET" | "INN" | "GUILD_HALL" | "TEMPLE" | "HARBOR" | "ALLEY" | "PARK" | "SEWER" | "WORKPLACE" | "RESTRICTED_SITE" | "ABANDONED_SITE" | "WILDERNESS" | "GENERIC",
+        "sceneObjects": [
+          {
+            "id": "obj_xxx",
+            "name": "Canonical prop or environmental feature name",
+            "kind": "ITEM" | "ENVIRONMENTAL_FEATURE" | "STRUCTURE" | "INTERACTABLE" | "HAZARD" | "OTHER",
+            "description": "What it physically is",
+            "visible": boolean,
+            "interactable": boolean,
+            "tags": ["string"],
+            "properties": {}
+          }
+        ],
+        "environment": {
+          "terrain": "string",
+          "lighting": "DAYLIT" | "DIM" | "DARK" | "NATURAL",
+          "weatherExposure": "SHELTERED" | "PARTIAL" | "EXPOSED",
+          "features": ["string"],
+          "water": { "present": boolean, "drainage": boolean, "description": "string" }
+        },
         "population": {
           "status": "INHABITED" | "RESTRICTED" | "ABANDONED" | "UNKNOWN",
           "expectedPopulation": "NONE" | "SPARSE" | "MODERATE" | "DENSE" | "VARIABLE",
@@ -418,7 +443,11 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
             era = input.defaultEra || parsed.era || era;
             setting = input.setting || parsed.setting || setting;
 
-            locations = parsed.geography?.locations || parsed.locations || [];
+            locations = this.normalizeSynthesizedLocations(
+              parsed.geography?.locations || parsed.locations || [],
+              setting || parsed.setting || input.setting || '',
+              timestamp,
+            );
             factions = parsed.factions || [];
             characters = parsed.characters || [];
             capabilities = parsed.capabilities || [];
@@ -475,16 +504,31 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       if (!setting) setting = input.setting || title || 'The Central Expanse';
     }
 
-    // Handle user-supplied geography overrides if provided
+    // Handle caller-authored geography overrides if provided. Authored fields are
+    // preserved verbatim (including structured scene objects, environment, and
+    // occupancy); only missing identity/coordinates receive compatible defaults.
     if (input.geography && (Array.isArray(input.geography.locations) || Array.isArray(input.geography.majorLocations))) {
       const rawLocs = input.geography.locations || input.geography.majorLocations || [];
-      locations = rawLocs.map((l: any, idx: number) => ({
-        id: l.id || `loc_${timestamp}_${idx}`,
-        name: l.name || l.title || `Location ${idx + 1}`,
-        description: l.description || `Location in ${setting}`,
-        coordinates: l.coordinates || { x: 40 + idx * 20, y: 50 },
-        ambientSensory: l.ambientSensory || `Visual: ${l.name || 'Location'}.`,
-      }));
+      locations = rawLocs.map((l: any, idx: number) => {
+        const locationId = String(l?.id || `loc_${timestamp}_${idx}`);
+        const archetype = normalizeLocationArchetype(l?.archetype) || undefined;
+        return {
+          ...(l && typeof l === 'object' ? l : {}),
+          id: locationId,
+          name: l?.name || l?.title || `Location ${idx + 1}`,
+          description: l?.description || `Location in ${setting}`,
+          coordinates: l?.coordinates || { x: 40 + idx * 20, y: 50 },
+          ambientSensory: l?.ambientSensory || `Visual: ${l?.name || 'Location'}.`,
+          provenance: l?.provenance || 'authored',
+          ...(archetype ? { archetype } : {}),
+          // No generated defaults for authored geography: the caller's intent is
+          // authoritative and missing data must stay missing rather than be
+          // mistaken for authored emptiness or abundance.
+          ...(Array.isArray(l?.sceneObjects) ? { sceneObjects: JSON.parse(JSON.stringify(l.sceneObjects)) } : {}),
+          ...(l?.population && typeof l.population === 'object' ? { population: JSON.parse(JSON.stringify(l.population)) } : {}),
+          ...(l?.environment && typeof l.environment === 'object' ? { environment: JSON.parse(JSON.stringify(l.environment)) } : {}),
+        };
+      });
     }
 
     // Player-friendly generation status
@@ -505,12 +549,24 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       generationSeed,
     };
 
-    // Ensure preview geography nodes for UI compatibility
-    const nodes = locations.map(loc => ({
+    // Preview geography nodes are also the persistence source consumed by
+    // createStoryRunFromConfirmedCharacter. They must carry the same structured
+    // canonical fields as the full locations; otherwise the runtime scene loses
+    // authored scene objects, environment, and occupancy at the world boundary.
+    const nodes = locations.map((loc: any) => ({
       id: loc.id,
       name: loc.name,
       description: loc.description,
-      regionId: setting || title
+      regionId: loc.regionId || loc.region || setting || title,
+      coordinates: loc.coordinates,
+      ambientSensory: loc.ambientSensory,
+      accessible: loc.accessible !== undefined ? Boolean(loc.accessible) : true,
+      provenance: loc.provenance || 'generated',
+      ...(loc.archetype ? { archetype: loc.archetype } : {}),
+      ...(Array.isArray(loc.sceneObjects) ? { sceneObjects: JSON.parse(JSON.stringify(loc.sceneObjects)) } : {}),
+      ...(loc.population && typeof loc.population === 'object' ? { population: JSON.parse(JSON.stringify(loc.population)) } : {}),
+      ...(loc.environment && typeof loc.environment === 'object' ? { environment: JSON.parse(JSON.stringify(loc.environment)) } : {}),
+      ...(Array.isArray(loc.tags) ? { tags: [...loc.tags] } : {}),
     }));
 
     // Enforce 5 to 10 events with full causal validation and repair
@@ -664,6 +720,43 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
   }
 
   /**
+   * Normalize AI-generated locations into the canonical structured location
+   * contract. Preserves every supported authored field and only fills gaps that
+   * generation is authorized to establish.
+   */
+  public normalizeSynthesizedLocations(
+    rawLocations: any[],
+    setting: string,
+    timestamp: string,
+  ): any[] {
+    if (!Array.isArray(rawLocations)) return [];
+    const seen = new Set<string>();
+    return rawLocations
+      .filter((raw) => raw && typeof raw === 'object')
+      .map((raw, idx) => {
+        const baseId = String(raw.id || raw.locationId || `loc_${timestamp}_${idx}`);
+        const id = seen.has(baseId) ? `${baseId}_${idx}` : baseId;
+        seen.add(id);
+        const name = String(raw.name || raw.title || `Location ${idx + 1}`);
+        const structured = expandLocationStructure(raw, { locationId: id, generateDefaults: true });
+        return {
+          ...JSON.parse(JSON.stringify(raw)),
+          id,
+          name,
+          regionId: raw.regionId || raw.region || setting || 'Region Unestablished',
+          description: String(raw.description || `A location in ${setting || 'the world'}.`),
+          coordinates: raw.coordinates && typeof raw.coordinates === 'object'
+            ? raw.coordinates
+            : { x: 40 + (idx % 5) * 12, y: 45 + Math.floor(idx / 5) * 12 },
+          ambientSensory: String(raw.ambientSensory || `Visual: ${name}. Sounds: Ordinary ambient sound. Scent: Unremarkable. Tactile: Stable footing.`),
+          accessible: raw.accessible !== undefined ? Boolean(raw.accessible) : true,
+          provenance: raw.provenance || 'generated',
+          ...structured,
+        };
+      });
+  }
+
+  /**
    * Deterministic, premise-faithful procedural world builder.
    * Derives all world entities, locations, factions, and rules from the premise and seed.
    */
@@ -729,30 +822,45 @@ As regional tensions rise, rival factions maneuver for influence over critical r
     const primaryKey = primary.toLowerCase().replace(/[^a-z0-9]/g, '_');
     const secondaryKey = secondary.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-    // Locations
+    // Locations. Deterministic generation is still world generation: it
+    // establishes structured archetypes, scene objects, environment, and
+    // occupancy so provider failure cannot leave the player with empty set
+    // dressing that the narrator cannot accurately describe.
     const locations = [
       {
         id: `loc_1_${primaryKey}`,
         name: `The ${primary} ${pickOne(rng, ['Citadel', 'Nexus', 'Sanctuary', 'Spire', 'Heartland', 'Keep'])}`,
         description: `The central seat of power and epicenter of ${primary.toLowerCase()} phenomena in ${setting}.`,
         coordinates: { x: 45, y: 50 },
-        ambientSensory: `Visual: Formations of ${primary.toLowerCase()} under ambient illumination. Auditory: Low continuous humming resonating across corridors.`
+        ambientSensory: `Visual: Formations of ${primary.toLowerCase()} under ambient illumination. Auditory: Low continuous humming resonating across corridors.`,
+        archetype: 'CITADEL' as const,
+        provenance: 'generated' as const,
       },
       {
         id: `loc_2_${secondaryKey}`,
         name: `${secondary} ${pickOne(rng, ['Outpost', 'Watch', 'Terrace', 'Ridge', 'Quarry', 'Crossing'])}`,
         description: `A fortified regional station monitoring the volatile perimeter of ${setting}.`,
         coordinates: { x: 75, y: 35 },
-        ambientSensory: `Visual: Weathered observation parapets overlooking uncharted zones. Auditory: Shifting winds and distant seismic echoes.`
+        ambientSensory: `Visual: Weathered observation parapets overlooking uncharted zones. Auditory: Shifting winds and distant seismic echoes.`,
+        archetype: 'WORKPLACE' as const,
+        provenance: 'generated' as const,
       },
       {
         id: `loc_3_depths`,
         name: `The ${pickOne(rng, ['Sunken', 'Whispering', 'Shattered', 'Veiled', 'Silent', 'Hallowed'])} ${pickOne(rng, ['Hollows', 'Glade', 'Chasm', 'Vault', 'Canyon', 'Ruins'])}`,
         description: `An isolated anomaly zone where deep secrets and concentrated ${primary.toLowerCase()} energies remain hidden.`,
         coordinates: { x: 25, y: 70 },
-        ambientSensory: `Visual: Dense atmospheric haze reflecting shimmering luminescence. Auditory: Faint intermittent resonance in the still air.`
+        ambientSensory: `Visual: Dense atmospheric haze reflecting shimmering luminescence. Auditory: Faint intermittent resonance in the still air.`,
+        archetype: 'WILDERNESS' as const,
+        provenance: 'generated' as const,
       }
-    ];
+    ].map((location) => ({
+      ...location,
+      ...expandLocationStructure(location, {
+        locationId: location.id,
+        generateDefaults: true,
+      }),
+    }));
 
     // Factions
     const factions = [

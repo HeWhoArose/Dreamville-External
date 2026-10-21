@@ -1,4 +1,4 @@
-import { LocationNode, RouteEdge, TerrainType, TravelMode } from './types';
+import { LocationNode, LocationSceneObject, RouteEdge, TerrainType, TravelMode } from './types';
 
 export const TERRAIN_TIME_MODIFIERS: Record<TerrainType, number> = {
   Road: 1.0,
@@ -41,7 +41,9 @@ export class GeographyGraph {
   }
 
   public addNode(node: LocationNode): void {
-    this.nodes.set(node.id, { ...node });
+    // Deep-copy nested canonical fields so callers cannot mutate stored world
+    // state through a shared sceneObjects/population/environment reference.
+    this.nodes.set(node.id, JSON.parse(JSON.stringify(node)));
     if (!this.adjacency.has(node.id)) {
       this.adjacency.set(node.id, []);
     }
@@ -49,7 +51,60 @@ export class GeographyGraph {
 
   public getNode(id: string): LocationNode | undefined {
     const node = this.nodes.get(id);
-    return node ? { ...node } : undefined;
+    return node ? JSON.parse(JSON.stringify(node)) : undefined;
+  }
+
+  /**
+   * Canonical scene-object mutation owned by GeographyGraph.
+   * Discovery/pickup resolve through this method; narration never edits it.
+   */
+  public addSceneObject(
+    locationId: string,
+    object: LocationSceneObject,
+  ): { success: boolean; errorReason?: string; object?: LocationSceneObject } {
+    const node = this.nodes.get(locationId);
+    if (!node) return { success: false, errorReason: `Geography node '${locationId}' not found.` };
+    if (!object || !object.id || !object.name) {
+      return { success: false, errorReason: 'A scene object requires an id and name.' };
+    }
+    const sceneObjects = Array.isArray(node.sceneObjects) ? node.sceneObjects : [];
+    if (sceneObjects.some((candidate) => candidate.id === object.id)) {
+      return { success: false, errorReason: `Scene object '${object.id}' already exists at '${locationId}'.` };
+    }
+    node.sceneObjects = [...sceneObjects, JSON.parse(JSON.stringify(object))];
+    return { success: true, object: JSON.parse(JSON.stringify(object)) };
+  }
+
+  public removeSceneObject(
+    locationId: string,
+    objectId: string,
+  ): { success: boolean; errorReason?: string; object?: LocationSceneObject } {
+    const node = this.nodes.get(locationId);
+    if (!node) return { success: false, errorReason: `Geography node '${locationId}' not found.` };
+    const sceneObjects = Array.isArray(node.sceneObjects) ? node.sceneObjects : [];
+    const index = sceneObjects.findIndex((candidate) => candidate.id === objectId);
+    if (index < 0) return { success: false, errorReason: `Scene object '${objectId}' not found at '${locationId}'.` };
+    const [removed] = sceneObjects.splice(index, 1);
+    node.sceneObjects = sceneObjects;
+    return { success: true, object: JSON.parse(JSON.stringify(removed)) };
+  }
+
+  public patchSceneObject(
+    locationId: string,
+    objectId: string,
+    patch: Partial<Pick<LocationSceneObject, 'visible' | 'interactable' | 'description' | 'name' | 'properties' | 'tags'>>,
+  ): { success: boolean; errorReason?: string; object?: LocationSceneObject } {
+    const node = this.nodes.get(locationId);
+    if (!node) return { success: false, errorReason: `Geography node '${locationId}' not found.` };
+    const object = (node.sceneObjects || []).find((candidate) => candidate.id === objectId);
+    if (!object) return { success: false, errorReason: `Scene object '${objectId}' not found at '${locationId}'.` };
+    if (patch.visible !== undefined) object.visible = Boolean(patch.visible);
+    if (patch.interactable !== undefined) object.interactable = Boolean(patch.interactable);
+    if (patch.description !== undefined) object.description = String(patch.description);
+    if (patch.name !== undefined) object.name = String(patch.name);
+    if (patch.properties !== undefined) object.properties = JSON.parse(JSON.stringify(patch.properties));
+    if (patch.tags !== undefined) object.tags = [...patch.tags];
+    return { success: true, object: JSON.parse(JSON.stringify(object)) };
   }
 
   public setDiscovered(id: string, discovered: boolean): void {
@@ -115,10 +170,10 @@ export class GeographyGraph {
     nodes: LocationNode[];
     edges: RouteEdge[];
   } {
-    return {
+    return JSON.parse(JSON.stringify({
       nodes: this.getAllNodes(),
       edges: this.getAllEdges(),
-    };
+    }));
   }
 
   public importState(state: { nodes?: LocationNode[]; edges?: RouteEdge[] }): void {
@@ -291,6 +346,30 @@ export class GeographyGraph {
       accessible: true,
       ambientSensory: 'A faint ozone tang in the air and rhythmic metallic ticking.',
       discovered: true,
+      // Authored starter canon carries structured evidence so the opening scene,
+      // perception, search and review all resolve against real scene data.
+      archetype: 'WORKPLACE',
+      tags: ['orrery', 'astronomical', 'citadel', 'archive'],
+      sceneObjects: [
+        { id: 'obj_orrery_astral_armature', name: 'bronze astral armature', kind: 'STRUCTURE', description: 'A colossal concentric bronze ring assembly, currently motionless.', visible: true, interactable: true, tags: ['armature', 'ring', 'mechanism'], properties: { fixed: true } },
+        { id: 'obj_orrery_prism_ring', name: 'resonant prism ring', kind: 'ENVIRONMENTAL_FEATURE', description: 'A faceted prism ring suspended over the chasm, humming softly.', visible: true, interactable: false, tags: ['prism', 'ring', 'light'], properties: { fixed: true } },
+        { id: 'obj_orrery_instrument_bench', name: 'instrument bench', kind: 'STRUCTURE', description: 'A narrow bench of brass instruments and reference slates.', visible: true, interactable: true, tags: ['bench', 'instruments', 'work'], properties: { fixed: true } },
+        { id: 'obj_orrery_brass_quadrant', name: 'brass quadrant', kind: 'ITEM', description: 'A worn sighting quadrant for reading the ring angles.', visible: true, interactable: true, tags: ['quadrant', 'instrument', 'brass', 'tool'], properties: { takeable: true, itemCategory: 'Tool' } },
+        { id: 'obj_orrery_ring_ledger', name: 'ledger of ring harmonics', kind: 'ITEM', description: 'A technician log of prism-ring harmonics and micro-fractures.', visible: true, interactable: true, tags: ['ledger', 'log', 'record', 'book'], properties: { takeable: true, itemCategory: 'Document' } },
+      ],
+      environment: {
+        terrain: 'Stone',
+        lighting: 'DIM',
+        weatherExposure: 'SHELTERED',
+        features: ['bronze astral armature', 'resonant prism ring', 'instrument bench'],
+        ambientActivity: 'Archive technicians move between the armature and the instrument bench.',
+      },
+      population: {
+        status: 'INHABITED',
+        expectedPopulation: 'SPARSE',
+        explanation: 'A staffed astronomical chamber inside the citadel.',
+        provenance: 'AUTHORED',
+      },
     };
 
     const loc2: LocationNode = {
@@ -303,6 +382,28 @@ export class GeographyGraph {
       accessible: true,
       ambientSensory: 'Slow drips of mineral water and a sulfurous warmth.',
       discovered: true,
+      archetype: 'RESTRICTED_SITE',
+      tags: ['vault', 'restricted', 'catacombs', 'archive'],
+      sceneObjects: [
+        { id: 'obj_vault_lantern_alcove', name: 'sealed lantern alcove', kind: 'STRUCTURE', description: 'A recessed alcove behind a wax-sealed grille.', visible: true, interactable: true, tags: ['alcove', 'lantern', 'seal'], properties: { fixed: true, locked: true, keyTag: 'vault_seal' } },
+        { id: 'obj_vault_tallow_vessel', name: 'glass tallow vessel', kind: 'ITEM', description: 'A stoppered glass vessel of eternal phosphoric tallow.', visible: true, interactable: true, tags: ['vessel', 'glass', 'tallow', 'lamp'], properties: { takeable: true, itemCategory: 'Material' } },
+        { id: 'obj_vault_warden_desk', name: "warden's duty desk", kind: 'STRUCTURE', description: 'A narrow desk holding the vault access register.', visible: true, interactable: true, tags: ['desk', 'register', 'access'], properties: { fixed: true } },
+        { id: 'obj_vault_mineral_channel', name: 'mineral seep channel', kind: 'ENVIRONMENTAL_FEATURE', description: 'A cut channel carrying mineral water toward a floor drain.', visible: true, interactable: false, tags: ['channel', 'drain', 'water'], properties: { fixed: true } },
+      ],
+      environment: {
+        terrain: 'Stone',
+        lighting: 'DARK',
+        weatherExposure: 'SHELTERED',
+        features: ['sealed lantern alcove', "warden's duty desk", 'mineral seep channel'],
+        water: { present: true, drainage: true, description: 'Mineral water drips into a shallow cut drainage channel.' },
+      },
+      population: {
+        status: 'RESTRICTED',
+        expectedPopulation: 'NONE',
+        accessControlled: true,
+        explanation: 'A guarded memorial vault; entry and removal require authorization.',
+        provenance: 'AUTHORED',
+      },
     };
 
     const loc3: LocationNode = {
@@ -315,6 +416,22 @@ export class GeographyGraph {
       accessible: false,
       ambientSensory: 'High-pitched crystalline ringing and brittle wind gusts.',
       discovered: true,
+      archetype: 'WILDERNESS',
+      tags: ['woodland', 'calcified', 'wilderness'],
+      sceneObjects: [
+        { id: 'obj_glasswood_calcified_branch', name: 'calcified branch', kind: 'ITEM', description: 'A brittle branch of petrified wood, snapped free by the wind.', visible: true, interactable: true, tags: ['branch', 'stick', 'wood', 'calcified'], properties: { takeable: true, itemCategory: 'Material' } },
+        { id: 'obj_glasswood_petrified_trunk', name: 'petrified trunk', kind: 'STRUCTURE', description: 'A standing trunk of glassy, calcified wood.', visible: true, interactable: false, tags: ['trunk', 'tree', 'petrified'], properties: { fixed: true } },
+        { id: 'obj_glasswood_chime_thicket', name: 'chime-bark thicket', kind: 'ENVIRONMENTAL_FEATURE', description: 'Dense bark that rings against itself in the gale.', visible: true, interactable: false, tags: ['thicket', 'bark', 'wind'], properties: { fixed: true } },
+      ],
+      environment: {
+        terrain: 'Forest',
+        lighting: 'NATURAL',
+        weatherExposure: 'EXPOSED',
+        features: ['petrified trunk', 'chime-bark thicket'],
+      },
+      // Occupancy of the verge is not established by canon; unknown must stay
+      // unknown rather than being asserted as empty or populated.
+      population: { status: 'UNKNOWN', provenance: 'AUTHORED' },
     };
 
     const loc4: LocationNode = {
@@ -327,6 +444,26 @@ export class GeographyGraph {
       accessible: false,
       ambientSensory: 'Smell of wet vellum, cedar resin, and still black water.',
       discovered: false,
+      archetype: 'ABANDONED_SITE',
+      tags: ['archive', 'submerged', 'abandoned'],
+      sceneObjects: [
+        { id: 'obj_scriptorium_vellum_case', name: 'sealed vellum case', kind: 'ITEM', description: 'A reed-sealed case of vellum folios, floating in its basket.', visible: true, interactable: true, tags: ['vellum', 'case', 'archive', 'document'], properties: { takeable: true, itemCategory: 'Document' } },
+        { id: 'obj_scriptorium_basket', name: 'reed float basket', kind: 'STRUCTURE', description: 'A woven basket that keeps one case above the waterline.', visible: true, interactable: true, tags: ['basket', 'reed', 'float'], properties: { fixed: true } },
+        { id: 'obj_scriptorium_pool', name: 'brackish pool', kind: 'ENVIRONMENTAL_FEATURE', description: 'Still black water covering the archive floor.', visible: true, interactable: false, tags: ['pool', 'water', 'brackish'], properties: { fixed: true } },
+      ],
+      environment: {
+        terrain: 'Swamp',
+        lighting: 'DARK',
+        weatherExposure: 'SHELTERED',
+        features: ['reed float basket', 'brackish pool', 'flooded archive shelves'],
+        water: { present: true, drainage: false, description: 'Brackish runoff stands over the archive floor; the outlet is blocked.' },
+      },
+      population: {
+        status: 'ABANDONED',
+        expectedPopulation: 'NONE',
+        explanation: 'Evacuated and sealed after the brackish tunnel flooded the archive.',
+        provenance: 'AUTHORED',
+      },
     };
 
     this.addNode(loc1);

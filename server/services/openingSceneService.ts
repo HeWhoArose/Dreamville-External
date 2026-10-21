@@ -1,5 +1,5 @@
 import { worldRepository, WorldRepository } from '../repositories/worldRepository';
-import { WorkingContextEngine, AssembledOpeningContext } from '../domain/workingContextEngine';
+import { WorkingContextEngine, AssembledOpeningContext, OPENING_CONTEXT_HARD_TOKEN_BUDGET } from '../domain/workingContextEngine';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { OpeningScene, StructuredNarrativeEvent } from '../../src/types';
 import { serverMockAuthority } from '../mockEngine/serverMockAuthority';
@@ -136,7 +136,7 @@ export class OpeningSceneService {
 
 		const workingContext: AssembledOpeningContext = WorkingContextEngine.assembleOpeningContext({
 			storyId,
-			hardTokenBudget: 1400,
+			hardTokenBudget: OPENING_CONTEXT_HARD_TOKEN_BUDGET,
 			worldRepo,
 		});
 		const { rawOpeningFacts } = workingContext;
@@ -712,14 +712,18 @@ export class OpeningSceneService {
 				parentLocationId: null,
 				connectedLocations: [],
 			},
-			sceneObjects: [],
+			sceneObjects: (facts.location.sceneObjects || []).filter((object) => object.visibleToPlayer),
 			sceneEvidence: {
-				objects: [],
+				objects: (facts.location.sceneObjects || []).filter((object) => object.visibleToPlayer),
 				entities: (facts.location.visibleEntities || []).filter((entity) => entity.visibleToPlayer),
 				events: facts.location.visibleEvents || [],
 				sensory: facts.location.ambientSensory ? [facts.location.ambientSensory] : [],
-				structures: [],
+				structures: (facts.location.sceneObjects || [])
+					.filter((object) => object.kind === 'STRUCTURE' || object.kind === 'ENVIRONMENTAL_FEATURE')
+					.map((object) => object.name),
 				occupancy: facts.location.population || { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
+				environment: facts.location.environment,
+				ambientActivity: facts.location.ambientActivity,
 			},
 			nearbyEntities: [
 				...(facts.location.visibleEntities || []).filter((entity) => entity.visibleToPlayer),
@@ -868,10 +872,22 @@ export class OpeningSceneService {
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
+		const visibleSceneObjects = (location.sceneObjects || [])
+			.filter((object) => object.visibleToPlayer && object.kind !== 'HAZARD')
+			.slice(0, 4);
+		const visibleObjectText = visibleSceneObjects.length
+			? 'In plain view: ' + visibleSceneObjects.map((object) => object.name).join(', ') + '.'
+			: '';
+		// The deterministic fallback is player-facing narration: it must use the
+		// epistemic label, not a canonical name the viewer has not learned.
 		const visiblePeopleText = visiblePeople.length
-			? visiblePeople.map((entity) =>
-				`${entity.name}${entity.role ? ' (' + entity.role + ')' : ''}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`
-			).join(' ')
+			? visiblePeople.map((entity) => {
+				const label = entity.displayName || entity.name;
+				const roleSuffix = entity.role && !label.toLowerCase().includes(entity.role.toLowerCase())
+					? ' (' + entity.role + ')'
+					: '';
+				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
+			}).join(' ')
 			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
@@ -879,7 +895,7 @@ export class OpeningSceneService {
 			character.role ? 'Role: ' + character.role : '',
 			character.capabilities?.slice(0, 3).join(', '),
 		].filter(Boolean).join(' ');
-		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}${visiblePeopleText}`;
+		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}${visibleObjectText ? visibleObjectText + ' ' : ''}${visiblePeopleText}`;
 		const authoredGoal = typeof agenda?.goal === 'string' && agenda.goal.trim() ? agenda.goal.trim() : '';
 		const p3 = narrativeMode === 'SIDE_CHARACTER'
 			? authoredGoal

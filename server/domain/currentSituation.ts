@@ -6,6 +6,7 @@ import type { KnowledgeFact, RouteEdge, WorldTimestamp, LocationSceneObject } fr
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { LocalSpatialState } from './playerLifecycleState';
+import { describeAmbientActivity } from './locationArchetypes';
 
 
 export interface CurrentLocationContext {
@@ -36,7 +37,12 @@ export type EntityDistanceBand = 'SAME_LOCATION' | 'NEAR' | 'ADJACENT' | 'CONTAC
 
 export interface NearbyEntityContext {
 	id: string;
+	/** Canonical name. Server-side mechanics may use it; prompt/UI projections must prefer displayName. */
 	name: string;
+	/** Player-facing label. For an unidentified person this is a role description. */
+	displayName?: string;
+	/** True only when the viewer has legitimately learned the canonical name. */
+	identityKnown?: boolean;
 	kind: EntityKind | string;
 	locationId?: string;
 	presence: 'present' | 'absent' | 'unknown';
@@ -218,6 +224,16 @@ export interface CurrentSituation {
 			accessControlled: boolean;
 			provenance: 'AUTHORED' | 'GENERATED' | 'SIMULATED' | 'UNKNOWN';
 		};
+		/** Structured environment evidence usable by perception and review. */
+		environment?: {
+			archetype?: string;
+			features: string[];
+			lighting?: string;
+			weatherExposure?: string;
+			water?: { present: boolean; drainage?: boolean; description?: string };
+		};
+		/** Aggregate occupancy-derived activity; never a claim of a visible crowd. */
+		ambientActivity?: string;
 	};
 	visibleEvents: VisibleEventContext[];
 	activeDialogue?: ActiveDialogueContext;
@@ -358,6 +374,22 @@ function normalizeThread(raw: any, index: number): OpenThread | null {
 	};
 }
 
+function articleFor(label: string): string {
+	return /^[aeiou]/i.test(label) ? 'an' : 'a';
+}
+
+function unknownIdentityLabel(card: { kind?: string; classification?: any; social?: any; metadata?: any }): string {
+	const rawRole = normalizeText(
+		card.classification?.role ||
+		card.social?.role ||
+		card.classification?.profession ||
+		card.kind ||
+		'person',
+	).toLowerCase();
+	const role = rawRole === 'npc' || rawRole === 'character' ? 'person' : rawRole;
+	return `${articleFor(role)} ${role}`;
+}
+
 function entityCardIsVisible(
   card: EntityCard,
   currentLocationId: string,
@@ -400,10 +432,17 @@ function entityCardIsVisible(
 	return { visible: false, explicitlyReferenced, distanceBand: 'REFERRED' };
 }
 
-function projectEntityCard(card: EntityCard, explicitlyReferenced: boolean, distanceBand: EntityDistanceBand): NearbyEntityContext {
+function projectEntityCard(
+	card: EntityCard,
+	explicitlyReferenced: boolean,
+	distanceBand: EntityDistanceBand,
+	identityKnown: boolean,
+): NearbyEntityContext {
 	return {
 		id: card.id,
 		name: card.name,
+		displayName: identityKnown ? card.name : unknownIdentityLabel(card),
+		identityKnown,
 		kind: card.kind,
 		locationId: card.worldState?.locationId,
 		presence: card.worldState?.presence || 'unknown',
@@ -422,11 +461,15 @@ function projectLifecycleEntity(
 	state: any,
 	currentLocationId: string,
 	explicitlyReferenced: boolean,
-	localSpatialState?: LocalSpatialState,
+	localSpatialState: LocalSpatialState | undefined,
+	identityKnown: boolean,
 ): NearbyEntityContext {
+	const canonicalName = String(state.name || state.actorId);
 	return {
 		id: String(state.actorId),
-		name: String(state.name || state.actorId),
+		name: canonicalName,
+		displayName: identityKnown ? canonicalName : unknownIdentityLabel({ kind: 'NPC' }),
+		identityKnown,
 		kind: 'NPC',
 		locationId: state.locationId,
 		presence: state.isDead ? 'absent' : 'present',
@@ -745,7 +788,13 @@ export class CurrentSituationBuilder {
 			const explicit = Boolean(actionText) && normalizeText(actionText).toLowerCase().includes(normalizeText(npc.name).toLowerCase());
 			if (npc.locationId !== safeLocation.id && !explicit) continue;
 			if (npc.isDead) continue;
-			nearbyEntities.push(projectLifecycleEntity(npc, safeLocation.id, explicit, player?.localSpatialState));
+			const identityKnown = repository.isEntityIdentityKnown(
+				params.storyId,
+				viewerActorId,
+				npc.actorId,
+				npc.name,
+			);
+			nearbyEntities.push(projectLifecycleEntity(npc, safeLocation.id, explicit, player?.localSpatialState, identityKnown));
 		}
 
 		for (const card of repository.getEntityCards(params.storyId)) {
@@ -759,7 +808,13 @@ export class CurrentSituationBuilder {
 				player?.localSpatialState,
 			);
 			if (!visibility.visible) continue;
-			const projected = projectEntityCard(card, visibility.explicitlyReferenced, visibility.distanceBand);
+			const identityKnown = repository.isEntityIdentityKnown(
+				params.storyId,
+				viewerActorId,
+				card.id,
+				card.name,
+			);
+			const projected = projectEntityCard(card, visibility.explicitlyReferenced, visibility.distanceBand, identityKnown);
 			if (projected.presence === 'absent' || !projected.isAlive) continue;
 			nearbyEntities.push(projected);
 		}
@@ -806,10 +861,13 @@ export class CurrentSituationBuilder {
 			}))
 			.filter((event) => event.summary);
 
+		// Ambient activity is a player-facing projection, so it must use the
+		// epistemic label. Using the canonical name here leaked unlearned NPC names
+		// into visible events (and from there into opening/ordinary prompts).
 		const ambientActivityEvents = WorldActivityDirector.buildAmbientEvents(
 			nearbyEntities.map((entity) => ({
 				id: entity.id,
-				name: entity.name,
+				name: entity.displayName || entity.name,
 				kind: entity.kind,
 				role: entity.role,
 				locationId: entity.locationId,
@@ -915,7 +973,7 @@ export class CurrentSituationBuilder {
 				.map((entity) => ({
 					id: `talk:${entity.id}`,
 					type: 'TALK' as const,
-					label: `Talk to ${entity.name}`,
+					label: `Talk to ${entity.displayName || entity.name}`,
 					targetId: entity.id,
 					targetName: entity.name,
 					enabled: true,
@@ -929,7 +987,7 @@ export class CurrentSituationBuilder {
 				.map((entity) => ({
 					id: `inspect:${entity.id}`,
 					type: 'INSPECT' as const,
-					label: `Inspect ${entity.name}`,
+					label: `Inspect ${entity.displayName || entity.name}`,
 					targetId: entity.id,
 					targetName: entity.name,
 					enabled: true,
@@ -997,6 +1055,25 @@ export class CurrentSituationBuilder {
 					accessControlled: safeLocation.population?.accessControlled === true,
 					provenance: safeLocation.population?.provenance || 'UNKNOWN',
 				},
+				environment: {
+					archetype: safeLocation.archetype,
+					features: Array.from(new Set([
+						...(Array.isArray(safeLocation.environment?.features) ? safeLocation.environment.features.map(normalizeText).filter(Boolean) : []),
+						...sceneObjects
+							.filter((object) => object.kind === 'STRUCTURE' || object.kind === 'ENVIRONMENTAL_FEATURE')
+							.map((object) => object.name),
+					])).slice(0, 24),
+					lighting: safeLocation.environment?.lighting,
+					weatherExposure: safeLocation.environment?.weatherExposure,
+					water: safeLocation.environment?.water && typeof safeLocation.environment.water === 'object'
+						? {
+							present: safeLocation.environment.water.present === true,
+							drainage: safeLocation.environment.water.drainage === true,
+							description: safeLocation.environment.water.description,
+						}
+						: undefined,
+				},
+				ambientActivity: describeAmbientActivity(safeLocation, timestamp.hour),
 			},
 			visibleEvents,
 			activeDialogue,
@@ -1022,7 +1099,7 @@ export class CurrentSituationBuilder {
 		const visibleEntities = situation.nearbyEntities
 			.filter((entity) => entity.visibleToPlayer)
 			.slice(0, 8)
-			.map((entity) => `${entity.name} [${entity.kind}; ${entity.distanceBand}]`)
+			.map((entity) => `${entity.displayName || entity.name} [${entity.kind}; ${entity.distanceBand}]`)
 			.join('; ') || 'None';
 
 		const recentTurns = situation.recentTurns
@@ -1076,9 +1153,51 @@ export class CurrentSituationBuilder {
 		].filter(Boolean).join('\n');
 	}
 
+	/**
+	 * Projection for prompt/narration consumption.
+	 *
+	 * Replaces the canonical name of an entity the viewer has not been
+	 * introduced to with its player-facing label. Server-side mechanics still use
+	 * the full situation; anything that reaches a narrator, reviewer, or research
+	 * packet must go through this projection so an unknown identity cannot leak
+	 * through a JSON dump.
+	 */
+	public static toNarratorSafeProjection(situation: CurrentSituation): CurrentSituation {
+		const safe = clone(situation);
+		const relabel = <T extends { name?: string; displayName?: string; identityKnown?: boolean }>(entity: T): T =>
+			entity && entity.identityKnown === false && entity.displayName
+				? { ...entity, name: entity.displayName }
+				: entity;
+		safe.nearbyEntities = (safe.nearbyEntities || []).map(relabel);
+		if (safe.sceneEvidence && Array.isArray(safe.sceneEvidence.entities)) {
+			safe.sceneEvidence.entities = safe.sceneEvidence.entities.map(relabel);
+		}
+		// Interaction plumbing carries the canonical target name for validation.
+		// The narrator only sees labels, so redact unknown target names too.
+		const redacted = new Map(
+			(safe.nearbyEntities || [])
+				.filter((entity) => entity.identityKnown === false && entity.displayName)
+				.map((entity) => [entity.id, String(entity.displayName)]),
+		);
+		if (redacted.size > 0 && Array.isArray(safe.availableInteractions)) {
+			safe.availableInteractions = safe.availableInteractions.map((interaction) => {
+				const label = interaction.targetId ? redacted.get(interaction.targetId) : undefined;
+				return label ? { ...interaction, targetName: label } : interaction;
+			});
+		}
+		return safe;
+	}
+
 	public static toPlayerSafeProjection(situation: CurrentSituation): Omit<CurrentSituation, 'worldFacts'> & { worldFactsOmitted: true } {
 		const safe = clone(situation) as any;
 		delete safe.worldFacts;
+		const scrubUnknownIdentities = (entities: any[]) => {
+			for (const entity of Array.isArray(entities) ? entities : []) {
+				if (entity?.identityKnown === false && entity?.displayName) entity.name = entity.displayName;
+			}
+		};
+		scrubUnknownIdentities(safe.nearbyEntities);
+		scrubUnknownIdentities(safe.sceneEvidence?.entities);
 		if (safe.activeDialogue) {
 			delete safe.activeDialogue.epistemicNote;
 		}

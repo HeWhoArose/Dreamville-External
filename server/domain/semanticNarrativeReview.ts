@@ -150,9 +150,20 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 		return true;
 	}
 
-	const structures = (situation.sceneEvidence?.structures || []).map(normalize);
+	const structures = [
+		...(situation.sceneEvidence?.structures || []),
+		...(situation.sceneEvidence?.environment?.features || []),
+	].map(normalize);
 	if (structures.some((name) => name === normalizedClaim || normalizedClaim.includes(name) || name.includes(normalizedClaim))) {
 		return true;
+	}
+
+	// Water established by the canonical environment is valid evidence for
+	// describing the channel/pond/stream the world actually declares.
+	const water = situation.sceneEvidence?.environment?.water;
+	if (water?.present) {
+		const waterTerms = ['water', 'puddle', 'stream', 'channel', 'drain', 'drainage', 'runoff', 'pond', 'pool'];
+		if (waterTerms.some((term) => normalizedClaim.includes(term))) return true;
 	}
 
 	// A location's own canonical name and exact authored environmental phrases
@@ -349,7 +360,10 @@ export class SemanticNarrativeReview {
 			'Review: ' + JSON.stringify(params.review),
 			'Current situation: ' + JSON.stringify({
 				location: params.situation.location,
-				nearbyEntities: params.situation.nearbyEntities.filter((entity) => entity.visibleToPlayer).slice(0, 8),
+				nearbyEntities: params.situation.nearbyEntities.filter((entity) => entity.visibleToPlayer).slice(0, 8).map((entity) => ({
+					...entity,
+					name: entity.displayName || entity.name,
+				})),
 				visibleEvents: params.situation.visibleEvents.slice(0, 6),
 				activeDialogue: params.situation.activeDialogue,
 			}),

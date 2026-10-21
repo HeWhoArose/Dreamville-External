@@ -209,7 +209,9 @@ export class NarrativeContinuityEngine {
       worldMomentum: worldMomentumEngine.getState(repository, storyId),
       researchEvidence: researchEvidencePipeline.getEvidenceForStory(storyId),
       causalProvenance: researchEvidencePipeline.getCausalGraphForStory(storyId),
-      currentSituation,
+      // The packet is embedded verbatim in narrator prompts and persisted onto the
+      // story run, so unlearned canonical names must be projected away here.
+      currentSituation: CurrentSituationBuilder.toNarratorSafeProjection(currentSituation),
       usageGuidance: {
         knowledgeFacts: 'Use only to establish facts the viewer is authorized to know; never turn secret or uncertain knowledge into certainty.',
         memories: 'Use both world-local and universe-level durable memories to maintain continuity with what the protagonist has experienced, learned, acquired, or persistently remembers. Universe memories may refer to worlds the protagonist is not currently visiting.',

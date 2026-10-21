@@ -83,7 +83,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 	const visibleEntities = (Array.isArray(situation.nearbyEntities) ? situation.nearbyEntities : [])
 		.filter((entity) => entity.visibleToPlayer)
 		.slice(0, 8)
-		.map((entity) => entity.name + ' [' + entity.kind + '; ' + entity.distanceBand + ']')
+		.map((entity) => (entity.displayName || entity.name) + ' [' + entity.kind + '; ' + entity.distanceBand + ']')
 		.join('; ') || 'None';
 
 	const visibleObjects = (Array.isArray(situation.sceneObjects) ? situation.sceneObjects : [])
@@ -126,6 +126,14 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		'Canonical location occupancy: ' + JSON.stringify(situation.sceneEvidence?.occupancy || { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' }),
 		'Occupancy rule: UNKNOWN does not mean ABANDONED. Do not assert a location is empty, deserted, evacuated, or populated unless canonical occupancy, visible entities, sensory evidence, or a committed event supports that claim. If occupancy is unknown, preserve uncertainty and let observation/search actions investigate.',
 		'Canonical scene structures/features: ' + ((situation.sceneEvidence?.structures || []).join('; ') || 'None explicitly registered.'),
+		'Canonical environment features: ' + ((situation.sceneEvidence?.environment?.features || []).join('; ') || 'None explicitly registered.'),
+		situation.sceneEvidence?.environment?.water?.present
+			? 'Canonical water: present' + (situation.sceneEvidence.environment.water.drainage ? '; drainage established' : '') + (situation.sceneEvidence.environment.water.description ? '; ' + situation.sceneEvidence.environment.water.description : '')
+			: '',
+		situation.sceneEvidence?.ambientActivity
+			? 'Canonical aggregate ambient activity: ' + situation.sceneEvidence.ambientActivity + ' (aggregate occupancy evidence, not a claim that every person is individually visible)'
+			: '',
+		'Identity rule: use only the player-facing labels supplied for visible entities. An unidentified person must stay a role/description; never invent or guess a canonical name.',
 		'Canonical visible scene entities/events are authoritative; do not infer additional concrete people, structures, props, or environmental features from descriptive prose.',
 		'Scene-grounding rule: only treat a discrete physical object as present when it appears in canonical visible scene objects or another explicitly supplied authoritative fact. Location prose is environmental description and does not create discrete objects.',
 		situation.activeDialogue ? 'Active dialogue: ' + situation.activeDialogue.speakerName + ': ' + situation.activeDialogue.text : '',

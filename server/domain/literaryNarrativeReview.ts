@@ -139,7 +139,7 @@ export class LiteraryNarrativeReview {
 			params.richnessEvaluation ? NarrativeRichnessEvaluator.buildRewriteGuidance(params.richnessEvaluation) : '',
 			'Player intent: ' + JSON.stringify(params.intent),
 			'Plan: ' + JSON.stringify(params.plan),
-			'Current situation: ' + JSON.stringify({ location: params.situation.location, nearbyEntities: params.situation.nearbyEntities.filter((e) => e.visibleToPlayer).slice(0, 8), activeDialogue: params.situation.activeDialogue }),
+			'Current situation: ' + JSON.stringify({ location: params.situation.location, nearbyEntities: params.situation.nearbyEntities.filter((e) => e.visibleToPlayer).slice(0, 8).map((e) => ({ ...e, name: e.displayName || e.name })), activeDialogue: params.situation.activeDialogue }),
 			'Original turn: ' + JSON.stringify(params.turnPackage),
 			'Return the complete structured turn package as JSON only.',
 		].join('\n');

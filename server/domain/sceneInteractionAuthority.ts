@@ -454,11 +454,12 @@ export function resolveGroundedObservation(
   const leadText = String(establishedLeadText || '').trim();
   const leadEstablishesSignal = /\b(?:beacon|signal|flare|distress|alarm|marker|pulse)\b/i.test(leadText);
   if (observationIntent && causalQuestion && clueQuestion && leadText && leadEstablishesSignal) {
-    const lead = leadText.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
+    const sourceLead = leadText.replace(/\s+/g, ' ').trim();
+    const lead = sourceLead.replace(/[.!?]+$/, '');
     return {
       relevant: true,
       text: `The established lead is that ${lead.charAt(0).toLowerCase() + lead.slice(1)}. The currently visible perimeter evidence does not establish who activated the beacon or what caused it to be lit, so its source and purpose remain unknown from this vantage.`,
-      evidence: [lead],
+      evidence: [sourceLead],
       limitation: 'The signal or beacon is an established lead, but its cause and activator are not established by current visible evidence.',
     };
   }

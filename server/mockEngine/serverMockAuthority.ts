@@ -941,7 +941,15 @@ export class ServerMockAuthority {
       }
     }
 
-    const groundedObservation = resolveGroundedObservation(resolutionSituation, String(freeformText));
+    const groundedObservation = resolveGroundedObservation(
+      resolutionSituation,
+      String(freeformText),
+      // The opening explicitly presents the starting lead to the player. Reuse
+      // only that already-disclosed context to ground follow-up investigations.
+      [run?.startingSituation?.summary, run?.startingSituation?.hook].filter(
+        (value): value is string => typeof value === 'string' && value.trim().length > 0,
+      ),
+    );
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
     // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
     const sceneText = [
@@ -1021,7 +1029,10 @@ export class ServerMockAuthority {
         committedOutcome += ' ' + consequence.summary;
       }
     }
-    if (!storyCheck && !itemUseBlocked) {
+    // Do not overwrite an evidence-backed observation/search result with the
+    // generic no-check action description. The committed outcome is the contract
+    // supplied to the narrator, so preserving it is required for grounded answers.
+    if (!storyCheck && !itemUseBlocked && !committedOutcome.trim()) {
       if (this.explicitCapabilityIntentForNarration(String(freeformText))) {
         committedOutcome = 'A special capability-related action was resolved by the canonical capability/rules layer. Narrate only the visible result and never expose capability or engine terminology.';
       } else {

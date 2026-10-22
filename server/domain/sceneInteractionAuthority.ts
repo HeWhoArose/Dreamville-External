@@ -444,12 +444,31 @@ export class SceneInteractionAuthority {
 export function resolveGroundedObservation(
   situation: CurrentSituation,
   actionText: string,
+  establishedLeadText = '',
 ): GroundedObservation {
   const normalized = String(actionText || '').toLowerCase();
   const crowdIntent = /\b(?:crowd|crowded|busy|bustling|throng|lots? of people|many people|where (?:are|is) (?:the )?people|public|market|populated)\b/.test(normalized);
   const observationIntent = /\b(?:look|looks|looked|look around|observe|scan|survey|search|inspect|examine|watch|notice|listen|hear)\b/.test(normalized);
   if (!crowdIntent && !observationIntent) {
     return { relevant: false, evidence: [] };
+  }
+
+  // A why/cause question about a clue already established in the starting lead
+  // must get a useful bounded answer instead of atmosphere-only narration. The
+  // lead is caller-supplied canonical starting-situation text, never model output.
+  const causalQuestion = /\b(?:why|reason|cause|what (?:caused|made|triggered)|who (?:lit|activated|sent|set off|triggered))\b/i.test(normalized);
+  const clueQuestion = /\b(?:beacon|signal|flare|distress|alarm|marker|pulse)\b/i.test(normalized);
+  const leadText = String(establishedLeadText || '').trim();
+  const establishesSameLead = leadText && /\b(?:beacon|signal|flare|distress|alarm|marker|pulse)\b/i.test(leadText);
+  if (observationIntent && causalQuestion && clueQuestion && establishesSameLead) {
+    const lead = leadText.replace(/\s+/g, ' ').trim();
+    const answer = `The known lead is that ${lead.charAt(0).toLowerCase() + lead.slice(1).replace(/[.!?]+$/, '')}. Looking over the perimeter yields no confirmed evidence of who activated the beacon or what triggered it. Its cause remains unknown from the currently visible evidence; this observation cannot determine why it was activated.`;
+    return {
+      relevant: true,
+      text: answer,
+      evidence: [lead],
+      limitation: 'The signal or beacon is established as a lead, but its cause and activator are not established by current visible evidence.',
+    };
   }
 
   const occupancy = situation.sceneEvidence?.occupancy || { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' };

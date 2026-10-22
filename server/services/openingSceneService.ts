@@ -13,6 +13,7 @@ import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
 import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
+import { normalizeSceneSensoryForTime } from '../domain/sceneSensoryPresentation';
 
 function parseLooseOpeningResponse(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
 	const cleaned = String(rawText || '')
@@ -283,8 +284,15 @@ export class OpeningSceneService {
 			}
 		}
 
-		generatedText = OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts);
-
+		generatedText = OpeningSceneService.sanitizeNarrativeText(
+			OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts),
+		);
+		generatedEvents = generatedEvents.map((event) => ({
+			...event,
+			text: OpeningSceneService.sanitizeNarrativeText(
+				OpeningSceneService.sanitizeFixtureLeaks(String(event.text || ''), rawOpeningFacts),
+			),
+		}));
 		// =========================================================================
 		// Opening-scene presentation-quality gate (N18 richness + N8 pacing).
 		// Deterministic and presentation-only: it never mutates canonical state and
@@ -406,6 +414,66 @@ export class OpeningSceneService {
 				qualityAudit,
 			};
 		}
+
+		// Validate the exact final text/events after all AI rewrite and deterministic fallback paths.
+		generatedText = OpeningSceneService.sanitizeNarrativeText(
+			OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts),
+		);
+		generatedEvents = generatedEvents.map((event) => ({
+			...event,
+			text: OpeningSceneService.sanitizeNarrativeText(
+				OpeningSceneService.sanitizeFixtureLeaks(String(event.text || ''), rawOpeningFacts),
+			),
+		}));
+		// The ordinary quality gate historically skipped deterministic fallbacks.
+		// Run context-neutral final presentation validation on the exact text and
+		// event payload about to be stored, regardless of which source produced it.
+		const finalOpeningReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
+			storyId,
+			narration: generatedText,
+			repository: worldRepo,
+			skipFreshness: true,
+		});
+		if (!finalOpeningReview.valid) {
+			const canonical = OpeningSceneService.synthesizeDeterministicOpening(
+				rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null,
+			);
+			generatedText = OpeningSceneService.sanitizeNarrativeText(
+				OpeningSceneService.sanitizeFixtureLeaks(canonical.narrativeText, rawOpeningFacts),
+			);
+			generatedEvents = canonical.structuredEvents.map((event) => ({
+				...event,
+				text: OpeningSceneService.sanitizeNarrativeText(
+					OpeningSceneService.sanitizeFixtureLeaks(String(event.text || ''), rawOpeningFacts),
+				),
+			}));
+			generationMeta = {
+				...generationMeta,
+				source: 'DETERMINISTIC_FALLBACK',
+				fallbackReason: 'Final opening presentation validation rejected the initial candidate: ' + finalOpeningReview.errorReason,
+			};
+			let fallbackReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
+				storyId, narration: generatedText, repository: worldRepo, skipFreshness: true,
+			});
+			if (!fallbackReview.valid) {
+				generatedText = [
+					rawOpeningFacts.time.formattedHeader + '. ' + rawOpeningFacts.character.name + ' stands within ' + rawOpeningFacts.location.name + '.',
+					rawOpeningFacts.character.startingSituation || 'The immediate situation remains unsettled.',
+					'The situation remains unresolved.',
+				].join('\\n\\n');
+				generatedText = OpeningSceneService.sanitizeNarrativeText(
+					OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts),
+				);
+				fallbackReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
+					storyId, narration: generatedText, repository: worldRepo, skipFreshness: true,
+				});
+				generatedEvents = OpeningSceneService.deriveOpeningEvents(generatedText, storyId, rawOpeningFacts);
+			}
+			if (!fallbackReview.valid) {
+				throw new Error('Final opening validation failed after deterministic repair: ' + fallbackReview.errorReason);
+			}
+		}
+
 
 		const openingScene: OpeningScene = {
 			storyId,
@@ -868,7 +936,10 @@ export class OpeningSceneService {
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
-		const sceneAnchor = location.ambientSensory || location.description;
+		const sceneAnchor = OpeningSceneService.sanitizeOpeningSceneAnchor(
+			location.ambientSensory || location.description,
+			time.formattedHeader,
+		);
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
@@ -888,7 +959,7 @@ export class OpeningSceneService {
 					: '';
 				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
 			}).join(' ')
-			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
+			: 'No one is clearly visible nearby.';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
 			character.background,
@@ -911,7 +982,7 @@ export class OpeningSceneService {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,
 			structuredEvents: [
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.ambientSensory || `No visible occupants are established at ${location.name}.`), timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : OpeningSceneService.sanitizeOpeningSceneAnchor(location.ambientSensory || `No one is clearly visible nearby.`, time.formattedHeader), timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
 				{
 					id: `evt_open_${storyId}_3`,
@@ -949,12 +1020,26 @@ export class OpeningSceneService {
 		}
 		return events.slice(0, 6);
 	}
+	/**
+	 * Convert structured sensory metadata into ordinary player-facing prose.
+	 * The fallback must never expose projection diagnostics or stale time-of-day
+	 * labels copied from an authored sensory string.
+	 */
+	private static sanitizeOpeningSceneAnchor(raw: string, formattedTime: string): string {
+		return normalizeSceneSensoryForTime(raw, formattedTime) ||
+			'The surrounding air is still, and the ground is firm beneath your feet.';
+	}
+
 	private static sanitizeNarrativeText(text: string): string {
 		return String(text || '')
 			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*[^.\n]+[.]?/gi, '')
 			.replace(/\bRight now\s*:?/gi, '')
 			.replace(/\bYour turn\s*:?/gi, '')
 			.replace(/\bWhat do you do\??/gi, '')
+			.replace(/No visible occupants are currently established in the canonical scene projection[^.]*\.?/gi, '')
+			.replace(/This alone does not mean the location is abandoned\.?/gi, '')
+			.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n')
+			.replace(/[ \t]{2,}/g, ' ')
 			.trim();
 	}
 

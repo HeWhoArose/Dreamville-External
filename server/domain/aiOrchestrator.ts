@@ -37,6 +37,7 @@ import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBud
 import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -7781,7 +7782,7 @@ export class MultiModelOrchestrator {
 
     const currentSceneFactualContext = [
       params.situation.location.description,
-      params.situation.location.ambientSensory,
+      normalizeSceneSensoryForTime(params.situation.location.ambientSensory, params.situation.worldTime),
       params.situation.activeDialogue ? 'Active dialogue: ' + params.situation.activeDialogue.speakerName + ': ' + params.situation.activeDialogue.text : '',
       ...params.situation.visibleEvents
         .filter((event) => event.locationId === params.situation.location.id)
@@ -7858,6 +7859,8 @@ export class MultiModelOrchestrator {
     storyId: string;
     narration: string;
     repository?: WorldRepository;
+    /** Skip prior-opening deduplication when validating the final chosen output itself. */
+    skipFreshness?: boolean;
   }): { valid: boolean; errorReason?: string } {
     const narration = String(params.narration || '').trim();
     if (!narration) return { valid: false, errorReason: 'Opening narrative candidate is empty.' };
@@ -7868,15 +7871,17 @@ export class MultiModelOrchestrator {
     // Reuse the ordinary candidate freshness guard against the previously persisted
     // opening, if any; do not compare against ordinary turns because opening setup
     // belongs to the story's starting scene, not the player's latest action.
-    const previousOpeningNarration = repository.getStoryRun(params.storyId)?.openingScene?.narrativeText;
-    const freshness = this.validateNarrativeFreshnessContinuity(
-      narration,
-      typeof previousOpeningNarration === 'string' && previousOpeningNarration.trim()
-        ? [previousOpeningNarration]
-        : [],
-    );
-    if (!freshness.valid) {
-      return { valid: false, errorReason: freshness.errorReason || 'Opening narrative failed freshness validation.' };
+    if (!params.skipFreshness) {
+      const previousOpeningNarration = repository.getStoryRun(params.storyId)?.openingScene?.narrativeText;
+      const freshness = this.validateNarrativeFreshnessContinuity(
+        narration,
+        typeof previousOpeningNarration === 'string' && previousOpeningNarration.trim()
+          ? [previousOpeningNarration]
+          : [],
+      );
+      if (!freshness.valid) {
+        return { valid: false, errorReason: freshness.errorReason || 'Opening narrative failed freshness validation.' };
+      }
     }
 
     // Opening prose also needs a canonical scene anchor. This is the context-neutral
@@ -8177,7 +8182,7 @@ export class MultiModelOrchestrator {
       `Location name: ${currentSituation.location.name}`,
       currentSituation.location.regionId ? `Region: ${currentSituation.location.regionId}` : '',
       currentSituation.location.description ? `Canonical description: ${currentSituation.location.description}` : '',
-      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
+      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${normalizeSceneSensoryForTime(currentSituation.location.ambientSensory, currentSituation.worldTime)}` : '',
       `Canonical world time: ${currentSituation.worldTime}`,
       `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
       `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
@@ -8228,7 +8233,7 @@ export class MultiModelOrchestrator {
         }));
     const currentSceneFactualContext = [
       currentSituation.location.description,
-      currentSituation.location.ambientSensory,
+      normalizeSceneSensoryForTime(currentSituation.location.ambientSensory, currentSituation.worldTime),
       currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
       ...currentSituation.visibleEvents.map((event) => event.summary),
       ...currentSituation.relevantLore.map((fact) => `Authorized lore: ${fact.subjectEntityId} ${fact.predicate} ${fact.objectValue}`),

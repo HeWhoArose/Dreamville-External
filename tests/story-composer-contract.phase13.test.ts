@@ -31,7 +31,7 @@ test('Phase 13 StoryView has accessible multiline action input and safe retry su
 test('Phase 13 App wires refresh and failed-action retry to the canonical StoryView', () => {
 	assert.match(app, /apiClient\.getStoryActionTips\(activeStoryId, \{ refresh: force \}\)/);
 	assert.match(app, /onRefreshSuggestions=\{\(\) => refreshStoryActionTips\(true\)\}/);
-	assert.match(app, /onRetryLastAction=\{\(\) => \{/);
+	assert.match(app, /onRetryLastAction=\{handleRecoverLastAction\}/);
 	assert.match(app, /failedStoryAction/);
 });
 

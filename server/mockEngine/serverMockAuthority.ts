@@ -941,7 +941,15 @@ export class ServerMockAuthority {
       }
     }
 
-    const groundedObservation = resolveGroundedObservation(resolutionSituation, String(freeformText));
+    const establishedLeadText = [
+      run?.startingSituation?.summary,
+      run?.startingSituation?.hook,
+    ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0).join(' ');
+    const groundedObservation = resolveGroundedObservation(
+      resolutionSituation,
+      String(freeformText),
+      establishedLeadText,
+    );
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
     // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
     const sceneText = [

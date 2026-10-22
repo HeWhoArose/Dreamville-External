@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 
 import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
+import { OpeningSceneService } from '../server/services/openingSceneService';
+import { CurrentSituationBuilder } from '../server/domain/currentSituation';
+import { resolveGroundedObservation } from '../server/domain/sceneInteractionAuthority';
 
 test('narration continuity rejects a current action that is silently replaced by unrelated prose', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
@@ -225,3 +228,52 @@ test('narration freshness rejects exact repeats and near-duplicate atmospheric p
 	const advancing = 'The scroll catches your eye: fresh cuts cross the wax seal, and grit from the broken stamp still clings to the fold. Someone has opened it since your last inspection.';
 	assert.equal(validate(advancing, [previous]).valid, true);
 });
+
+test('deterministic opening converts sensory metadata to player-facing, time-consistent prose', () => {
+	const sanitizeAnchor = (OpeningSceneService as any).sanitizeOpeningSceneAnchor.bind(OpeningSceneService);
+	const sanitizeNarrative = (OpeningSceneService as any).sanitizeNarrativeText.bind(OpeningSceneService);
+	const raw = 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.';
+	const normalized = sanitizeAnchor(raw, 'Cycle 42 • 17:42 • Afternoon • Autumn');
+
+	assert.match(normalized, /late-afternoon light/i);
+	assert.match(normalized, /atmospheric sounds/i);
+	assert.match(normalized, /scent of native vegetation/i);
+	assert.match(normalized, /firm earth holds beneath your feet/i);
+	const atNight = sanitizeAnchor('Visual: First light over the tower.', 'Cycle 42 • 23:15 • Night');
+	assert.match(atNight, /the available light over the tower/i);
+	assert.doesNotMatch(atNight, /\bfirst light\b/i);
+	assert.doesNotMatch(normalized, /\bfirst light\b|Visual:|Sounds?:|Scent:|Tactile:/i);
+
+	const withDiagnostic = sanitizeNarrative(
+		'The character watches the perimeter.\n\nNo visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.\n\nThe distress signal remains unresolved.',
+	);
+	assert.doesNotMatch(withDiagnostic, /canonical scene projection|this alone does not mean the location is abandoned/i);
+	assert.match(withDiagnostic, /The distress signal remains unresolved/);
+	assert.match(withDiagnostic, /The character watches the perimeter\.\n\nThe distress signal remains unresolved/, 'removing diagnostics must retain the surrounding paragraphs');
+});
+
+test('causal observation of a canonical distress-signal lead returns a grounded bounded answer', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'grounded_beacon_cause_regression';
+	repository.seedStory(storyId);
+	const action = 'I observe the perimeter trying to find for what reason why the beacon was lit';
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		viewerActorId: 'player_actor_' + storyId,
+		playerAction: action,
+		worldRepo: repository,
+	});
+	const observation = resolveGroundedObservation(
+		situation,
+		action,
+		'A distress signal from a nearby settlement hints that the same void corruption has resurfaced.',
+	);
+
+	assert.equal(observation.relevant, true);
+	assert.match(observation.text || '', /distress signal from a nearby settlement/i);
+	assert.match(observation.text || '', /cause remains unknown/i);
+	assert.match(observation.text || '', /cannot determine why it was activated/i);
+	assert.match(observation.limitation || '', /cause and activator are not established/i);
+	assert.doesNotMatch(observation.text || '', /someone secretly activated|the cult activated|the corruption activated/i);
+});
+

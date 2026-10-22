@@ -230,3 +230,36 @@ test('StoryBeatDirector marks movement without canonical spatial change as unres
 	assert.match(beat.meaningfulChange, /no additional canonical consequence|attempted the requested action/i);
 	assert.ok(beat.mustNotInvent.some((value) => /unsupported consequence/i.test(value)));
 });
+
+test('narration prompt distinguishes local repositioning from a committed location change', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'story_beat_local_movement_prompt';
+	repository.seedStory(storyId);
+	const actionText = 'I rush towards the signal';
+	const situation = CurrentSituationBuilder.build({ storyId, playerAction: actionText, worldRepo: repository });
+	situation.location.ambientSensory = 'Visual: First light over the beacon tower. Sounds: Distant atmosphere.';
+	(situation as any).worldTime = 'Cycle 42 • 17:42 • Afternoon • Autumn';
+	const playerIntent = intent({ originalText: actionText });
+	const research = NarrativeResearchPipeline.research({
+		repository,
+		storyId,
+		currentSituation: situation,
+		playerIntent,
+		playerAction: actionText,
+	});
+	const plan = NarrativeDirector.create({ repository, storyId, situation, intent: playerIntent, research });
+	const result = buildNarrationPrompt({
+		situation,
+		intent: playerIntent,
+		research,
+		plan,
+		actionResolution: resolution({ storyId, turnId: situation.turnId, playerAction: actionText }),
+		maxPromptTokens: 5000,
+	});
+
+	assert.match(result.prompt, /A SPATIAL change without a LOCATION change means local repositioning/i);
+	assert.match(result.prompt, /do not narrate arrival at a different location/i);
+	assert.match(result.prompt, /late-afternoon light over the beacon tower/i);
+	assert.doesNotMatch(result.prompt, /\bfirst light\b|Visual:/i, 'unreconciled sensory metadata must not re-enter later-turn prompts');
+});
+

@@ -1,4 +1,5 @@
 import type { CurrentSituation } from './currentSituation';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { EphemeralNarrativePlan } from './narrativeDirector';
 import type { StructuredTurnPackage } from './aiOrchestrator';
@@ -60,7 +61,7 @@ function buildForbiddenKnowledgeSet(situation: CurrentSituation): string[] {
 	const playerVisibleContext = [
 		situation.location.name,
 		situation.location.description,
-		situation.location.ambientSensory,
+		normalizeSceneSensoryForTime(situation.location.ambientSensory, situation.worldTime),
 		situation.activeDialogue?.text || '',
 		...situation.visibleEvents.map((event) => event.summary),
 		...situation.relevantLore.map((fact) => [fact.predicate, fact.objectValue].join(' ')),
@@ -172,7 +173,7 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 	const authoredEnvironment = [
 		situation.location.name,
 		situation.location.description,
-		situation.location.ambientSensory,
+		normalizeSceneSensoryForTime(situation.location.ambientSensory, situation.worldTime),
 		...(situation.sceneEvidence?.sensory || []),
 	].map(normalize).filter(Boolean);
 	if (authoredEnvironment.some((source) =>

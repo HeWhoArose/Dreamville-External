@@ -1923,10 +1923,11 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 onClick={onRetryLastAction}
                 disabled={isProcessingAction || isProcessingOoc}
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-red-200/20 px-3 text-[10px] font-semibold text-red-100 hover:bg-red-200/10 disabled:opacity-40"
-                aria-label="Retry the last failed story action"
+                aria-label="Recover the last story action safely"
+                title="Checks whether the action already committed; regenerates narration only when safe"
               >
                 <RotateCcw className="h-3 w-3" />
-                Retry
+                Recover
               </button>
             )}
           </div>

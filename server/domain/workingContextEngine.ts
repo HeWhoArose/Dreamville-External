@@ -8,6 +8,7 @@ import { NarrativeContinuityEngine, type NarrativeResearchPacket } from './narra
 import { CurrentSituationBuilder, type CurrentSituation, type NearbyEntityContext, type VisibleEventContext } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 
 export interface WorkingContextPacket {
   scene: string;
@@ -1460,6 +1461,7 @@ export class WorkingContextEngine {
     const formattedHeader = clock.getFormattedLocationTimeHeader(locName, timestamp);
     const eraName = world?.defaultEra || (run as any)?.worldTime?.era || 'Age of Shadows';
     const periodName = clock.getState().currentDayPhase;
+    const presentationLocSensory = normalizeSceneSensoryForTime(locSensory, `${periodName} ${formattedHeader}`);
 
     const resolvedNarrativeMode = narrativeProfile?.mode || run?.storyMode || 'PROTAGONIST';
 
@@ -1488,8 +1490,8 @@ export class WorkingContextEngine {
         id: `chunk_${storyId}_b1_location`,
         band: 'B1_CRITICAL',
         label: 'STARTING_LOCATION',
-        content: `Location ID: ${startingLocId} | Name: "${locName}" (${locRegion}) | Surroundings: ${locDesc} | Atmosphere: ${locSensory}`,
-        estimatedTokens: WorkingContextEngine.estimateTokens(locName + locDesc + locSensory),
+        content: `Location ID: ${startingLocId} | Name: "${locName}" (${locRegion}) | Surroundings: ${locDesc} | Atmosphere: ${presentationLocSensory}`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(locName + locDesc + presentationLocSensory),
         isProtected: true,
         relevanceScore: 1.0,
       },
@@ -1623,7 +1625,7 @@ export class WorkingContextEngine {
           id: startingLocId,
           name: locName,
           description: locDesc,
-          ambientSensory: locSensory,
+          ambientSensory: presentationLocSensory,
           region: locRegion,
           population: openingPopulation,
           visibleEntities: openingVisibleEntities,

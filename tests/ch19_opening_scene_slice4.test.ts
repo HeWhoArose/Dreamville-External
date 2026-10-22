@@ -1001,3 +1001,60 @@ test('deterministic opening fallback removes sensory labels, clock contradiction
   assert.doesNotMatch(opening.narrativeText, /Role:|Wanderer \/ Seeker/);
   assert.doesNotMatch(opening.structuredEvents.map((event) => event.text).join(' '), /canonical scene projection|Visual:|first light/i);
 });
+
+
+test('an unresolved signal is not treated as a spatial target when the player rushes toward it', async () => {
+  const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
+  const storyId = 'unresolved_signal_movement_' + Date.now();
+  worldRepository.seedStory(storyId);
+  const beforePlayer = worldRepository.getPlayerLifecycle(storyId)!;
+  const beforeLocationId = beforePlayer.locationId;
+  const beforeSpatialState = JSON.stringify(beforePlayer.localSpatialState || null);
+  const orchestrator: any = worldRepository.getAiOrchestrator();
+  const originalGenerateNarrativeOnly = orchestrator.generateNarrativeOnly;
+  let seenCommittedOutcome = '';
+
+  orchestrator.generateNarrativeOnly = async (params: any) => {
+    seenCommittedOutcome = String(params?.committedOutcome || '');
+    return {
+      success: true,
+      source: 'AI_PRIMARY',
+      providerId: 'test-provider',
+      modelId: 'test-model',
+      turnPackage: {
+        narrative: ['The character hurries across the threshold, still within the same place.'],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+        visualCues: [],
+      },
+    };
+  };
+
+  try {
+    const result: any = await serverMockAuthority.processCustomAction(
+      {
+        type: 'CUSTOM_ACTION',
+        storyId,
+        actionText: 'I rush towards the signal.',
+      } as any,
+      'unresolved_signal_movement_command_' + Date.now(),
+      { bypassCapabilityAdvisor: true } as any,
+    );
+
+    const afterPlayer = worldRepository.getPlayerLifecycle(storyId)!;
+    assert.equal(afterPlayer.locationId, beforeLocationId, 'the unresolved signal must not become a synthetic location');
+    assert.equal(JSON.stringify(afterPlayer.localSpatialState || null), beforeSpatialState, 'no canonical proximity may be committed without a grounded target');
+    assert.equal(
+      (result.actionResolution?.canonicalStateChanges || []).some((change: any) => change.kind === 'SPATIAL'),
+      false,
+      'the action must not claim a canonical spatial-state change',
+    );
+    assert.match(seenCommittedOutcome, /no canonical destination or visible target is established/i);
+    assert.match(seenCommittedOutcome, /active location remains/i);
+  } finally {
+    orchestrator.generateNarrativeOnly = originalGenerateNarrativeOnly;
+  }
+});

@@ -237,6 +237,8 @@ test('narration prompt distinguishes local repositioning from a committed locati
 	repository.seedStory(storyId);
 	const actionText = 'I rush towards the signal';
 	const situation = CurrentSituationBuilder.build({ storyId, playerAction: actionText, worldRepo: repository });
+	situation.location.ambientSensory = 'Visual: First light over the beacon tower. Sounds: Distant atmosphere.';
+	(situation as any).worldTime = 'Cycle 42 • 17:42 • Afternoon • Autumn';
 	const playerIntent = intent({ originalText: actionText });
 	const research = NarrativeResearchPipeline.research({
 		repository,
@@ -257,5 +259,7 @@ test('narration prompt distinguishes local repositioning from a committed locati
 
 	assert.match(result.prompt, /A SPATIAL change without a LOCATION change means local repositioning/i);
 	assert.match(result.prompt, /do not narrate arrival at a different location/i);
+	assert.match(result.prompt, /late-afternoon light over the beacon tower/i);
+	assert.doesNotMatch(result.prompt, /\bfirst light\b|Visual:/i, 'unreconciled sensory metadata must not re-enter later-turn prompts');
 });
 

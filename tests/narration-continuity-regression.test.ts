@@ -237,12 +237,12 @@ test('deterministic opening converts sensory metadata to player-facing, time-con
 	assert.match(normalized, /atmospheric sounds/i);
 	assert.match(normalized, /scent of native vegetation/i);
 	assert.match(normalized, /firm earth holds beneath your feet/i);
-	assert.doesNotMatch(normalized, /\\bfirst light\\b|Visual:|Sounds?:|Scent:|Tactile:/i);
+	assert.doesNotMatch(normalized, /\bfirst light\b|Visual:|Sounds?:|Scent:|Tactile:/i);
 
 	const withDiagnostic = sanitizeNarrative(
-		'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.\\n\\nThe distress signal remains unresolved.',
+		'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.\n\nThe distress signal remains unresolved.',
 	);
 	assert.doesNotMatch(withDiagnostic, /canonical scene projection|this alone does not mean the location is abandoned/i);
 	assert.match(withDiagnostic, /The distress signal remains unresolved/);
-	assert.match(withDiagnostic, /\\n\\n/, 'sanitization must preserve paragraph breaks');
+	assert.match(withDiagnostic, /\n\n/, 'sanitization must preserve paragraph breaks');
 });

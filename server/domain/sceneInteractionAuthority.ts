@@ -444,10 +444,39 @@ export class SceneInteractionAuthority {
 export function resolveGroundedObservation(
   situation: CurrentSituation,
   actionText: string,
+  establishedContext: string[] = [],
 ): GroundedObservation {
   const normalized = String(actionText || '').toLowerCase();
   const crowdIntent = /\b(?:crowd|crowded|busy|bustling|throng|lots? of people|many people|where (?:are|is) (?:the )?people|public|market|populated)\b/.test(normalized);
-  const observationIntent = /\b(?:look|looks|looked|look around|observe|scan|survey|search|inspect|examine|watch|notice|listen|hear)\b/.test(normalized);
+  const observationIntent = /\b(?:look|looks|looked|look around|observe|scan|survey|search|inspect|examine|watch|notice|listen|hear|find out|investigate|why|reason|cause|purpose)\b/.test(normalized);
+  const signalIntent = /\b(?:beacon|distress signal|signal light|signal|flare|warning light)\b/.test(normalized);
+  const signalCauseQuestion = signalIntent && /\b(?:why|reason|cause|purpose|lit|activated|triggered|sent|source|origin|who|what happened)\b/.test(normalized);
+  const contextClues = [
+    ...establishedContext.map((entry) => String(entry || '').trim()).filter(Boolean),
+    ...((situation.sceneEvidence?.events || []).map((event) => event.summary).filter(Boolean)),
+  ].filter((entry, index, all) => all.indexOf(entry) === index).slice(0, 12);
+  if (signalCauseQuestion) {
+    const establishedSignalClues = contextClues.filter((entry) =>
+      /\b(?:beacon|distress signal|signal|flare|warning|void corruption|corruption)\b/i.test(entry),
+    );
+    const visibleSceneClues = [
+      ...(situation.sceneEvidence?.objects || [])
+        .filter((object) => object.visibleToPlayer)
+        .map((object) => object.name + (object.description ? ': ' + object.description : '')),
+      ...(situation.sceneEvidence?.sensory || []),
+      ...(situation.sceneEvidence?.environment?.features || []),
+    ].filter(Boolean).slice(0, 10);
+    const evidence = [...establishedSignalClues, ...visibleSceneClues].slice(0, 12);
+    const clueText = establishedSignalClues.length
+      ? 'The established lead describes ' + establishedSignalClues.join(' ') + '.'
+      : 'No established clue in the current scene explains the signal’s source or purpose.';
+    return {
+      relevant: true,
+      text: clueText + ' The canonical scene does not yet establish who activated it or why, so its cause remains unknown.',
+      evidence,
+      limitation: 'The signal’s cause is not established by currently available canonical evidence.',
+    };
+  }
   if (!crowdIntent && !observationIntent) {
     return { relevant: false, evidence: [] };
   }

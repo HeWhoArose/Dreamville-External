@@ -868,7 +868,10 @@ export class OpeningSceneService {
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
-		const sceneAnchor = location.ambientSensory || location.description;
+		const sceneAnchor = OpeningSceneService.sanitizeOpeningSceneAnchor(
+			location.ambientSensory || location.description,
+			time.formattedHeader,
+		);
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
@@ -888,7 +891,7 @@ export class OpeningSceneService {
 					: '';
 				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
 			}).join(' ')
-			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
+			: 'No one is clearly visible nearby.';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
 			character.background,
@@ -949,6 +952,26 @@ export class OpeningSceneService {
 		}
 		return events.slice(0, 6);
 	}
+	/**
+	 * Convert structured sensory metadata into ordinary player-facing prose.
+	 * The fallback must never expose projection diagnostics or stale time-of-day
+	 * labels copied from an authored sensory string.
+	 */
+	private static sanitizeOpeningSceneAnchor(raw: string, formattedTime: string): string {
+		let anchor = String(raw || '').trim();
+		if (!anchor) return 'The surrounding air is still, and the ground is firm beneath your feet.';
+
+		anchor = anchor
+			.replace(/\\b(?:Visual|Sounds|Scent|Tactile)\\s*:\\s*/gi, '')
+			.replace(/\\bfirst light\\b/gi, /\\b(?:Predawn|Dawn|Morning)\\b/i.test(formattedTime) ? 'early light' : 'late light')
+			.replace(/\\bmorning chill\\b/gi, /\\bAfternoon\\b/i.test(formattedTime) ? 'afternoon air' : 'cool air')
+			.replace(/\\bmorning light\\b/gi, /\\bAfternoon\\b/i.test(formattedTime) ? 'afternoon light' : 'early light')
+			.replace(/\\s+/g, ' ')
+			.trim();
+
+		return anchor || 'The surrounding air is still, and the ground is firm beneath your feet.';
+	}
+
 	private static sanitizeNarrativeText(text: string): string {
 		return String(text || '')
 			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*[^.\n]+[.]?/gi, '')

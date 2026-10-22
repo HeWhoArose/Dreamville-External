@@ -248,7 +248,7 @@ export class OpeningSceneService {
 					throw error;
 				}
 				const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null);
-				generatedText = canonical.narrativeText;
+				generatedText = OpeningSceneService.sanitizeFixtureLeaks(OpeningSceneService.sanitizeNarrativeText(canonical.narrativeText), rawOpeningFacts);
 				generatedEvents = canonical.structuredEvents;
 			} else {
 				const parsed = parseLooseOpeningResponse(response.text);
@@ -263,7 +263,7 @@ export class OpeningSceneService {
 			);
 			if (testRuntimeFallback || (error?.code === 'AI_UNAVAILABLE' && allowDeterministicFallback)) {
 				const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null);
-				generatedText = canonical.narrativeText;
+				generatedText = OpeningSceneService.sanitizeFixtureLeaks(OpeningSceneService.sanitizeNarrativeText(canonical.narrativeText), rawOpeningFacts);
 				generatedEvents = canonical.structuredEvents;
 				generationMeta = {
 					...generationMeta,
@@ -871,12 +871,12 @@ export class OpeningSceneService {
 		const rawSceneAnchor = String(location.ambientSensory || location.description || '').trim();
 		// Older world templates store sensory cues as labeled fragments, not prose.
 		// Do not reuse a stale Visual cue such as "First light" against an afternoon
-		// clock. Convert the non-temporal sensory cues into restrained player-facing prose.
+		// clock. Convert non-temporal sensory cues into restrained player-facing prose.
 		const readCue = (label: string): string => {
-			const match = rawSceneAnchor.match(new RegExp('(?:^|[.\\\\n]\\\\s*)' + label + '\\\\s*:\\\\s*([^\\\\n.]+)', 'i'));
+			const match = rawSceneAnchor.match(new RegExp('(?:^|[.\\n]\\s*)' + label + '\\s*:\\s*([^\\n.]+)', 'i'));
 			return match?.[1]?.trim() || '';
 		};
-		const hasLabeledSensoryCues = /\\b(?:Visual|Sounds|Scent|Tactile)\\s*:/i.test(rawSceneAnchor);
+		const hasLabeledSensoryCues = /\b(?:Visual|Sounds|Scent|Tactile)\s*:/i.test(rawSceneAnchor);
 		const soundCue = readCue('Sounds');
 		const scentCue = readCue('Scent');
 		const tactileCue = readCue('Tactile');
@@ -888,7 +888,7 @@ export class OpeningSceneService {
 						: 'You hear ' + soundCue.charAt(0).toLowerCase() + soundCue.slice(1).replace(/[.!?]+$/, '') + '.'
 					: '',
 				scentCue
-					? 'The air carries the scent of ' + scentCue.replace(/^the scent of\\s*/i, '').toLowerCase().replace(/[.!?]+$/, '') + '.'
+					? 'The air carries the scent of ' + scentCue.replace(/^the scent of\s*/i, '').toLowerCase().replace(/[.!?]+$/, '') + '.'
 					: '',
 				tactileCue
 					? /^firm earth$/i.test(tactileCue)

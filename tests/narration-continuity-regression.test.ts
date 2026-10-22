@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
 import { OpeningSceneService } from '../server/services/openingSceneService';
+import { CurrentSituationBuilder } from '../server/domain/currentSituation';
+import { resolveGroundedObservation } from '../server/domain/sceneInteractionAuthority';
 
 test('narration continuity rejects a current action that is silently replaced by unrelated prose', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
@@ -246,3 +248,29 @@ test('deterministic opening converts sensory metadata to player-facing, time-con
 	assert.match(withDiagnostic, /The distress signal remains unresolved/);
 	assert.match(withDiagnostic, /\n\n/, 'sanitization must preserve paragraph breaks');
 });
+
+test('causal observation of a canonical distress-signal lead returns a grounded bounded answer', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'grounded_beacon_cause_regression';
+	repository.seedStory(storyId);
+	const action = 'I observe the perimeter trying to find for what reason why the beacon was lit';
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		viewerActorId: 'player_actor_' + storyId,
+		playerAction: action,
+		worldRepo: repository,
+	});
+	const observation = resolveGroundedObservation(
+		situation,
+		action,
+		'A distress signal from a nearby settlement hints that the same void corruption has resurfaced.',
+	);
+
+	assert.equal(observation.relevant, true);
+	assert.match(observation.text || '', /distress signal from a nearby settlement/i);
+	assert.match(observation.text || '', /cause remains unknown/i);
+	assert.match(observation.text || '', /cannot determine why it was activated/i);
+	assert.match(observation.limitation || '', /cause and activator are not established/i);
+	assert.doesNotMatch(observation.text || '', /someone secretly activated|the cult activated|the corruption activated/i);
+});
+

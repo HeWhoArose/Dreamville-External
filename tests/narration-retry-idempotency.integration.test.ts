@@ -8,8 +8,8 @@ import { serverMockAuthority } from '../server/mockEngine/serverMockAuthority';
 import { worldRepository } from '../server/repositories/worldRepository';
 import { storyActionAdvisor } from '../server/services/storyActionAdvisor';
 
-const storyId = 'narration_retry_idempotency_http';
-const commandId = 'cmd_narration_retry_idempotency_http';
+const storyId = 'narration_retry_idempotency_http_' + process.pid + '_' + Date.now().toString(36);
+const commandId = 'cmd_' + storyId;
 let server: Server;
 let baseUrl = '';
 let orchestrator: any;

@@ -76,19 +76,32 @@ const fetch = async (url: RequestInfo | URL, init?: RequestInit): Promise<Respon
   }
   finalInit.headers = headers;
 
+  const requestUrl = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+  const method = String(finalInit.method || (typeof Request !== 'undefined' && url instanceof Request ? url.method : 'GET')).toUpperCase();
+  // A player action may commit canonical state before a gateway/connection failure
+  // prevents the client from receiving the response. Blindly replaying POST /action
+  // then executes that action twice. Recovery for this endpoint must first inspect the
+  // committed Story Run; only presentation-only regeneration is safe to retry.
+  const canonicalActionSubmission = method === 'POST' && requestUrl.split('?')[0].replace(/\\/$/, '').endsWith('/action');
+
   let attempts = 0;
   const maxAttempts = 4;
   while (attempts < maxAttempts) {
     try {
       const response = await originalFetch(url, finalInit);
-      // Retry transient 502/503/504 gateway errors when server is restarting
-      if ([502, 503, 504].includes(response.status) && attempts < maxAttempts - 1) {
+      // Retry transient gateway failures only when repeating the request is safe.
+      if ([502, 503, 504].includes(response.status) && attempts < maxAttempts - 1 && !canonicalActionSubmission) {
         attempts++;
         await new Promise((resolve) => setTimeout(resolve, attempts * 700));
         continue;
       }
       return response;
     } catch (err: any) {
+      // The server may have committed the action before the connection was lost.
+      // Surface an ambiguous outcome instead of automatically posting it again.
+      if (canonicalActionSubmission) {
+        throw new Error('The action request ended without a confirmed response. Its outcome may already be committed; refresh story history before submitting it again.');
+      }
       attempts++;
       if (attempts >= maxAttempts) {
         if (err?.name === 'TypeError' && err?.message?.includes('fetch')) {

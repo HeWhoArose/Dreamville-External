@@ -283,7 +283,7 @@ export class OpeningSceneService {
 			}
 		}
 
-		generatedText = OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts);
+		generatedText = OpeningSceneService.sanitizeFixtureLeaks(OpeningSceneService.sanitizeNarrativeText(generatedText), rawOpeningFacts);
 
 		// =========================================================================
 		// Opening-scene presentation-quality gate (N18 richness + N8 pacing).
@@ -389,7 +389,7 @@ export class OpeningSceneService {
 				}
 				if (qualityAudit.finalDecision === 'REWRITE') {
 					const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null);
-					generatedText = canonical.narrativeText;
+					generatedText = OpeningSceneService.sanitizeNarrativeText(canonical.narrativeText);
 					generatedEvents = canonical.structuredEvents;
 					qualityAudit.finalScore = 1;
 					qualityAudit.issues = [...qualityAudit.issues, 'Opening downgraded to the canonical deterministic fallback after quality or semantic/epistemic review was not satisfied.'];
@@ -868,7 +868,16 @@ export class OpeningSceneService {
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
-		const sceneAnchor = location.ambientSensory || location.description;
+		const rawSceneAnchor = location.ambientSensory || location.description || '';
+		// Older world templates store sensory cues as labeled, time-specific fragments.
+		// They are data, not finished prose: normalize them before player-facing use.
+		const sceneAnchor = rawSceneAnchor
+			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*/gi, '')
+			.replace(/\bfirst light\b|\bdaybreak\b|\bdawn\b|\bsunrise\b|\bmorning\b/gi, 'soft')
+			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:/gi, '')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.replace(/^(.*)$/s, (value) => value ? value.replace(/\.$/, '') + '.' : 'The air is still, and the ground is firm underfoot.');
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
@@ -888,7 +897,7 @@ export class OpeningSceneService {
 					: '';
 				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
 			}).join(' ')
-			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
+			: '';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
 			character.background,
@@ -911,7 +920,7 @@ export class OpeningSceneService {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,
 			structuredEvents: [
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.ambientSensory || `No visible occupants are established at ${location.name}.`), timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.description || `The immediate situation remains unresolved at ${location.name}.`), timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
 				{
 					id: `evt_open_${storyId}_3`,

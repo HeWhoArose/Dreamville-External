@@ -5,6 +5,7 @@ import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import { WorkingContextEngine, type AssembledTurnContext } from './workingContextEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import type { ActionResolution } from './actionResolution';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 import { buildActionResolutionPromptContext } from './actionResolution';
 import { NarrativeQualityContractEngine, type NarrativeQualityControls, type NarrativeQualityContract } from './narrativeQualityContract';
 import { NarratorVoiceEngine, type NarratorVoiceControls, type NarratorVoiceState } from './narratorVoiceEngine';
@@ -107,7 +108,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		.slice(-2)
 		.map((turn) => [
 			turn.playerAction ? 'Player: ' + turn.playerAction : '',
-			turn.narration ? 'Narration: ' + turn.narration : '',
+			turn.narration ? 'Narration: ' + (turn.isOpeningScene ? normalizeSceneSensoryForTime(turn.narration, situation.worldTime) : turn.narration) : '',
 			turn.unresolvedConsequence ? 'Unresolved consequence: ' + turn.unresolvedConsequence : '',
 		].filter(Boolean).join(' | '))
 		.join('\n') || 'No recent turns.';
@@ -119,7 +120,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		'Location: ' + (situation.location?.name || 'Unknown Location') + ' (' + (situation.location?.id || 'unknown') + ')',
 		'Region: ' + (situation.location?.regionId || 'Unknown Region'),
 		'Location description: ' + (situation.location?.description || ''),
-		situation.location?.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
+		situation.location?.ambientSensory ? 'Ambient: ' + normalizeSceneSensoryForTime(situation.location.ambientSensory, situation.worldTime) : '',
 		'Visible entities: ' + visibleEntities,
 		'Canonical visible scene objects: ' + visibleObjects,
 		'Visible current-scene events (canonical or projected): ' + visibleSceneEvents,

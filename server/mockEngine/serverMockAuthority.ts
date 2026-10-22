@@ -43,6 +43,7 @@ import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from '..
 import { NarrativePacingEngine } from '../domain/narrativePacingEngine';
 import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
 import type { PlayerIntent } from '../domain/playerIntentInterpreter';
+import { normalizeSceneSensoryForTime } from '../domain/sceneSensoryPresentation';
 
 /**
  * ServerMockAuthority
@@ -671,7 +672,7 @@ export class ServerMockAuthority {
       emotionalBeat: 'The situation responds to the player action.',
       emotionalMovement: params.actionResolution.outcomeTier === 'NO_CHECK' ? 'HOLD' : 'RISING',
       physicalBeat: params.actionResolution.actualEffect || 'A visible consequence follows the action.',
-      sensoryAnchor: params.situation.location.ambientSensory,
+      sensoryAnchor: normalizeSceneSensoryForTime(params.situation.location.ambientSensory, params.situation.worldTime),
       dialogueAct: params.intent.speechIntent ? 'RESPOND' : 'NONE',
       subtext: [], reveal: [], withhold: [],
       reactionPriority: (params.actionResolution.targetEntityIds || [])
@@ -941,7 +942,16 @@ export class ServerMockAuthority {
       }
     }
 
-    const groundedObservation = resolveGroundedObservation(resolutionSituation, String(freeformText));
+    const establishedLeadText = [
+      run?.startingSituation?.summary,
+      run?.startingSituation?.hook,
+      typeof run?.startingSituation === 'string' ? run.startingSituation : '',
+    ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0).join(' ');
+    const groundedObservation = resolveGroundedObservation(
+      resolutionSituation,
+      String(freeformText),
+      establishedLeadText,
+    );
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
     // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
     const sceneText = [
@@ -1022,7 +1032,14 @@ export class ServerMockAuthority {
       }
     }
     if (!storyCheck && !itemUseBlocked) {
-      if (this.explicitCapabilityIntentForNarration(String(freeformText))) {
+      if (groundedObservation.relevant && groundedObservation.text) {
+        // Preserve the authoritative bounded observation result. The generic freeform
+        // outcome is only appropriate when no scene-evidence resolver answered the turn.
+        committedOutcome = [
+          sceneResolution.attempted ? sceneResolution.feedback : '',
+          groundedObservation.text,
+        ].filter(Boolean).join(' ');
+      } else if (this.explicitCapabilityIntentForNarration(String(freeformText))) {
         committedOutcome = 'A special capability-related action was resolved by the canonical capability/rules layer. Narrate only the visible result and never expose capability or engine terminology.';
       } else {
         committedOutcome = 'This is an ordinary narrative/world action. No special capability was invoked. Narrate the physical and sensory result naturally and continue the scene.';
@@ -1425,7 +1442,7 @@ export class ServerMockAuthority {
           run?.startingSituation?.hook,
           location?.name,
           location?.description,
-          location?.ambientSensory,
+          normalizeSceneSensoryForTime(location?.ambientSensory, worldRepository.getWorldClock(targetStoryId).getState().currentDayPhase),
         ].filter(Boolean).join(' '),
         continuationDirective: (options as any)?.narrationDirective
           ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective
@@ -1801,7 +1818,7 @@ export class ServerMockAuthority {
       .getAllNodes()
       .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId);
     const atmosphere = this.formatNarrativeAtmosphere(
-      location?.ambientSensory || location?.description || 'The surroundings remain still.',
+      normalizeSceneSensoryForTime(location?.ambientSensory, worldRepository.getWorldClock(storyId).getState().currentDayPhase) || location?.description || 'The surroundings remain still.',
     );
     const normalized = actionText.toLowerCase();
     const continuity = narrativeContinuityEngine.getState(worldRepository, storyId);
@@ -2219,8 +2236,8 @@ The moment does not end so much as shift, leaving the scene open to whatever the
         const activeLoc =
           worldRepository.getGeographyGraph().getAllNodes().find(n => n.id === state.activeLocationId) || worldRepository.getGeographyGraph().getAllNodes()[0];
         message = `Inspected surroundings at ${activeLoc.name}.`;
-        const presentationFeedback = activeLoc.ambientSensory || activeLoc.description || activeLoc.name;
-        authoritativeFeedback = `Server emitted ambient sensory narrative: "${presentationFeedback}"`;
+        const presentationFeedback = normalizeSceneSensoryForTime(activeLoc.ambientSensory, worldRepository.getWorldClock(targetStoryId).getState().currentDayPhase) || activeLoc.description || activeLoc.name;
+        authoritativeFeedback = `You take in the immediate surroundings: ${presentationFeedback}`;
         logEntry = {
           id: actionId,
           timestamp: now,

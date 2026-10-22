@@ -13,6 +13,7 @@ import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
 import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
+import { normalizeSceneSensoryForTime } from '../domain/sceneSensoryPresentation';
 
 function parseLooseOpeningResponse(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
 	const cleaned = String(rawText || '')
@@ -283,6 +284,9 @@ export class OpeningSceneService {
 			}
 		}
 
+		// Sanitize both model output and deterministic fallback. The fallback is still
+		// player-facing text and must obey the same presentation hygiene rules.
+		generatedText = OpeningSceneService.sanitizeNarrativeText(generatedText);
 		generatedText = OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts);
 
 		// =========================================================================
@@ -460,7 +464,13 @@ export class OpeningSceneService {
 		let generatedEvents: StructuredNarrativeEvent[] = rawEvents.map((evt: any, idx: number) => ({
 			id: evt.id || `evt_open_${storyId}_${idx}`,
 			type: evt.type || 'normal',
-			text: String(evt.text || '').trim(),
+			text: OpeningSceneService.sanitizeFixtureLeaks(
+				OpeningSceneService.sanitizeOpeningSensoryAnchor(
+					normalizeSceneSensoryForTime(String(evt.text || '').trim(), facts.time.period || facts.time.formattedHeader),
+					facts.time.period || facts.time.formattedHeader,
+				),
+				facts,
+			),
 			speaker: evt.speaker || undefined,
 			timestamp: facts.time.formattedHeader,
 		})).filter((event) =>
@@ -868,7 +878,18 @@ export class OpeningSceneService {
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
-		const sceneAnchor = location.ambientSensory || location.description;
+		// Ambient sensory inputs may be structured fields (for example, "Visual: First light...").
+		// Convert them into safe player-facing prose and remove sentence-level time claims
+		// that contradict the canonical opening clock. Sensory metadata is not an authority
+		// for changing time in the world.
+		const openingClock = time.period || time.formattedHeader;
+		const sceneAnchor =
+			OpeningSceneService.sanitizeOpeningSensoryAnchor(
+				normalizeSceneSensoryForTime(location.ambientSensory, openingClock),
+				openingClock,
+			) ||
+			OpeningSceneService.sanitizeOpeningSensoryAnchor(location.description || '', openingClock) ||
+			'The immediate surroundings offer no further established sensory detail.';
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
@@ -888,7 +909,7 @@ export class OpeningSceneService {
 					: '';
 				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
 			}).join(' ')
-			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
+			: 'No one is immediately visible nearby, and the current view does not establish whether anyone else is present.';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
 			character.background,
@@ -911,7 +932,7 @@ export class OpeningSceneService {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,
 			structuredEvents: [
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.ambientSensory || `No visible occupants are established at ${location.name}.`), timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (sceneAnchor || `No one is immediately visible at ${location.name}.`), timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
 				{
 					id: `evt_open_${storyId}_3`,
@@ -952,9 +973,33 @@ export class OpeningSceneService {
 	private static sanitizeNarrativeText(text: string): string {
 		return String(text || '')
 			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*[^.\n]+[.]?/gi, '')
+			.replace(/\bNo visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned\.?/gi, 'No one is immediately visible nearby, and the current view does not establish whether anyone else is present.')
 			.replace(/\bRight now\s*:?/gi, '')
 			.replace(/\bYour turn\s*:?/gi, '')
 			.replace(/\bWhat do you do\??/gi, '')
+			.replace(/[ \t]{2,}/g, ' ')
+			.trim();
+	}
+
+	private static sanitizeOpeningSensoryAnchor(text: string, canonicalTime: string): string {
+		const sanitized = OpeningSceneService.sanitizeNarrativeText(text).replace(/\s+/g, ' ').trim();
+		const match = String(canonicalTime || '').match(/\b(Predawn|Dawn|Morning|Afternoon|Dusk|Night)\b/i);
+		const phase = match?.[1]?.toLowerCase() || '';
+		const conflictingTerms: Record<string, RegExp> = {
+			predawn: /\b(?:sunset|dusk|afternoon|midday|noon|night|midnight|first light|sunrise|morning)\b/i,
+			dawn: /\b(?:sunset|dusk|afternoon|midday|noon|night|midnight|late evening)\b/i,
+			morning: /\b(?:first light|predawn|sunset|dusk|midnight|late evening)\b/i,
+			afternoon: /\b(?:first light|daybreak|dawn|predawn|sunrise|early morning|morning|midnight)\b/i,
+			dusk: /\b(?:first light|daybreak|dawn|predawn|sunrise|midday|noon|early morning|morning)\b/i,
+			night: /\b(?:first light|daybreak|dawn|predawn|sunrise|morning|afternoon|midday|noon|sunset)\b/i,
+		};
+		const contradiction = conflictingTerms[phase];
+		if (!contradiction) return sanitized;
+		return sanitized
+			.split(/(?<=[.!?])\s+/)
+			.filter((sentence) => !contradiction.test(sentence))
+			.join(' ')
+			.replace(/\s+/g, ' ')
 			.trim();
 	}
 

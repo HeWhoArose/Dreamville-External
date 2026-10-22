@@ -10,6 +10,7 @@ import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine, OPENING_CONTEXT_HARD_TOKEN_BUDGET } from '../domain/workingContextEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
+import { normalizeSceneSensoryForTime } from '../domain/sceneSensoryPresentation';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { NarrativeResearchPipeline } from '../domain/narrativeResearchPipeline';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
@@ -700,7 +701,7 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
         run?.startingSituation?.hook,
         location?.name,
         location?.description,
-        location?.ambientSensory,
+        normalizeSceneSensoryForTime(location?.ambientSensory, `${worldRepository.getWorldClock(storyId).getState().currentDayPhase} ${formatCanonicalTimestamp(worldRepository.getWorldClock(storyId).getTimestamp())}`),
       ].filter(Boolean).join(' '),
       continuationDirective: presentationDirective,
     } as any);
@@ -1064,6 +1065,86 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     // Lazily bind every active Story Run to a persistent Universe identity.
     // This is idempotent and does not replace the Story Run's canonical world state.
     const universe = UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+
+    // A retry may arrive after the server committed the action but the response was lost.
+    // Replay that exact canonical command before capability preflight or narration work:
+    // preflight can call an AI model and add ephemeral directives that must not change the
+    // command fingerprint or cause an already-committed action to execute a second time.
+    const incomingCommandId = String(
+      (req.headers['x-command-id'] as string | undefined) ||
+      (actionRequest as any).commandId ||
+      ''
+    ).trim();
+    if (actionRequest.type === 'CUSTOM_ACTION' && incomingCommandId) {
+      const existingEvent = (worldRepository.getStoryRun(storyId)?.canonicalEvents || [])
+        .find((event: any) => event.commandId === incomingCommandId);
+      if (existingEvent) {
+        const originalRequest = (existingEvent.replay?.commandPayload as any)?.actionRequest;
+        const actionText = (request: any) => String(
+          request?.actionText || request?.customText || request?.description || request?.input || ''
+        ).trim();
+        const currentText = actionText(actionRequest);
+        const originalText = actionText(originalRequest);
+        if (
+          existingEvent.commandType !== 'INTERACT' ||
+          originalRequest?.type !== 'CUSTOM_ACTION' ||
+          !currentText ||
+          currentText !== originalText
+        ) {
+          return res.status(409).json({
+            success: false,
+            code: 'IDEMPOTENCY_KEY_REUSED',
+            errorReason: 'This action command identity was already used for a different canonical request.',
+            commandId: incomingCommandId,
+          });
+        }
+
+        const replay = await canonicalCommandEngine.execute(
+          worldRepository,
+          {
+            commandId: existingEvent.commandId,
+            storyId,
+            actorId: existingEvent.actorId,
+            type: existingEvent.commandType,
+            payload: existingEvent.replay.commandPayload || { actionRequest: originalRequest },
+            source: existingEvent.source,
+            transactionMode: existingEvent.transactionMode,
+          } as any,
+          async () => ({
+            success: false,
+            errorReason: 'A recorded command replay must never execute a fresh action handler.',
+          }),
+        );
+        if (replay.data) {
+          return res.json({
+            ...(replay.data as any),
+            viewState: serverMockAuthority.getSanitizedViewState(storyId),
+            idempotencyReplayed: true,
+          });
+        }
+
+        const state = serverMockAuthority.getDynamicStoryState(storyId);
+        const previousAction = state.actionHistory.find((entry: any) =>
+          entry.canonicalCommandId === incomingCommandId || entry.canonicalEventId === existingEvent.eventId
+        );
+        // After a process restart, the in-memory result cache may be empty. Returning the
+        // committed view is still safer than re-executing the action or advancing the clock.
+        return res.json({
+          success: true,
+          actionId: previousAction?.id,
+          requestType: 'CUSTOM_ACTION',
+          status: 'MOCK_ENGINE_COMMITTED',
+          message: previousAction?.narrativeResponse || previousAction?.authoritativeFeedback ||
+            'This action was already committed. The current state is returned without applying it again.',
+          authoritativeFeedback: previousAction?.authoritativeFeedback,
+          narrativeResponse: previousAction?.narrativeResponse,
+          narrativeError: previousAction?.narrativeError,
+          narrativeGeneration: previousAction?.narrativeGeneration,
+          viewState: serverMockAuthority.getSanitizedViewState(storyId),
+          idempotencyReplayed: true,
+        });
+      }
+    }
 
     // Explicit cross-world freeform actions ("fly to another planet", "leave this world for X")
     // are promoted to the same canonical travel path as the structured world-travel request.

@@ -5,6 +5,7 @@ import { CurrentSituationBuilder, isAvailableLocationScopedOpportunityThread, is
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import { isWorkAvailabilityGoal, type PlayerIntent } from './playerIntentInterpreter';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 import { SemanticNarrativeResearchEngine, type SemanticNarrativeResearchProfile } from './semanticNarrativeResearch';
 import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
 
@@ -280,7 +281,7 @@ export class NarrativeResearchPipeline {
 			`Location: ${situation.location.name} [${situation.location.id}]`,
 			`Region: ${situation.location.regionId}`,
 			situation.location.description ? `Description: ${situation.location.description}` : '',
-			situation.location.ambientSensory ? `Ambient: ${situation.location.ambientSensory}` : '',
+			situation.location.ambientSensory ? `Ambient: ${normalizeSceneSensoryForTime(situation.location.ambientSensory, situation.worldTime)}` : '',
 			situation.activeDialogue ? `Active dialogue: ${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}` : '',
 			...situation.visibleEvents.slice(0, 6).map((event) => `Visible event: ${event.summary}`),
 			situation.availableInteractions.filter((interaction) => interaction.enabled).slice(0, 8).map((interaction) => `Interaction: ${interaction.label}`).join('\n'),

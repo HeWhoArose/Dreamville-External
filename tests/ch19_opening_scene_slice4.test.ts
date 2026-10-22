@@ -963,3 +963,40 @@ test('Deterministic opening fallback respects protagonist, side-character, and f
   const freeRoam = OpeningSceneService.synthesizeDeterministicOpening(freeRoamFacts, 'mode_free');
   assert.match(freeRoam.narrativeText, /There is no prescribed main quest/i);
 });
+
+test('deterministic opening strips structured sensory labels and time-of-day contradictions', () => {
+	const facts: any = {
+		world: { id: 'world_opening_sanitize', title: 'Elysium', narrativeProfile: { mode: 'PROTAGONIST' } },
+		character: {
+			name: 'Aelion Vane',
+			role: 'Wanderer / Seeker',
+			background: 'A traveler following a distress signal.',
+			startingSituation: 'A distress signal from a nearby settlement hints that void corruption has resurfaced.',
+			capabilities: [], conditions: [], equipment: [],
+		},
+		location: {
+			id: 'loc_threshold_sanitize',
+			name: 'Threshold of the Radiance',
+			region: 'Elysium Solar Citadel Outskirts',
+			description: 'Uneven ground extends toward the outer reaches of the citadel.',
+			ambientSensory: 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.',
+			visibleEntities: [],
+			sceneObjects: [],
+		},
+		time: {
+			cycle: 42,
+			period: 'Afternoon',
+			formattedHeader: 'Cycle 42 • Month 10, Day 14 • 17:42 • Afternoon • Autumn',
+		},
+		knowledge: [],
+	};
+	const opening = OpeningSceneService.synthesizeDeterministicOpening(facts, 'opening_sanitize_regression');
+	assert.doesNotMatch(opening.narrativeText, /Visual:|Sounds:|Scent:|Tactile:/i);
+	assert.doesNotMatch(opening.narrativeText, /first light|daybreak|sunrise/i);
+	assert.doesNotMatch(opening.narrativeText, /canonical scene projection|canonical occupancy/i);
+	assert.match(opening.narrativeText, /late-afternoon light over Elysium Solar Citadel/i);
+	assert.match(opening.narrativeText, /Firm earth holds beneath your feet/i);
+	assert.match(opening.narrativeText, /No one is immediately visible nearby/i);
+	assert.doesNotMatch(JSON.stringify(opening.structuredEvents), /Visual:|Sounds:|Scent:|Tactile:|first light/i);
+});
+

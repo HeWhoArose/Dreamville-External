@@ -124,6 +124,7 @@ export const App: React.FC = () => {
   const [storyActionTips, setStoryActionTips] = useState<ActionTip[]>([]);
   const [isRefreshingStoryActionTips, setIsRefreshingStoryActionTips] = useState(false);
   const [failedStoryAction, setFailedStoryAction] = useState<string | null>(null);
+  const [failedStoryActionCommandId, setFailedStoryActionCommandId] = useState<string | null>(null);
   const [combatTransition, setCombatTransition] = useState<CombatTransitionState | null>(null);
   const actionSeqRef = useRef<number>(0);
 
@@ -372,6 +373,7 @@ export const App: React.FC = () => {
     setIsProcessingAction(true);
     if ((action as any).type === 'CUSTOM_ACTION') {
       setFailedStoryAction(null);
+      setFailedStoryActionCommandId(null);
     }
     try {
       const payload = { ...action, storyId: (action as any).storyId || activeStoryId };
@@ -382,6 +384,7 @@ export const App: React.FC = () => {
       setViewState(result.viewState);
       if ((action as any).type === 'CUSTOM_ACTION') {
         setFailedStoryAction(null);
+        setFailedStoryActionCommandId(null);
       }
       if (result.combatTransition) {
         setCombatTransition(result.combatTransition);
@@ -401,6 +404,8 @@ export const App: React.FC = () => {
           const actionText = typeof (action as any).actionText === 'string' ? (action as any).actionText.trim() : '';
           if ((action as any).type === 'CUSTOM_ACTION' && actionText) {
             setFailedStoryAction(actionText);
+            const commandId = String((action as any).commandId || '').trim();
+            setFailedStoryActionCommandId(commandId || null);
           }
           setNetworkError(err instanceof Error ? err.message : 'The story action could not be executed.');
         }
@@ -561,9 +566,15 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleCustomAction = async (actionText: string) => {
+  const handleCustomAction = async (actionText: string, retryCommandId?: string) => {
     setPendingActionAdvice(null);
     setFailedStoryAction(null);
+    setFailedStoryActionCommandId(null);
+    // Keep one command identity across a network retry. The server may already have
+    // committed the action even if its response was lost or timed out; replaying this
+    // identity makes CanonicalCommandEngine return the prior result instead of applying
+    // the same player action twice.
+    const commandId = retryCommandId || `story-action-${activeStoryId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
     // The canonical /action endpoint performs capability preflight itself.
     // Hostile freeform actions now return a canonical combat transition.
@@ -574,6 +585,8 @@ export const App: React.FC = () => {
         type: 'CUSTOM_ACTION',
         actionText,
         intent: actionText,
+        commandId,
+        idempotencyKey: commandId,
       } as any,
       async (result) => {
         if (result.combatTransition) {
@@ -776,7 +789,7 @@ export const App: React.FC = () => {
           isRefreshingSuggestions={isRefreshingStoryActionTips}
           actionError={failedStoryAction ? networkError : null}
           onRetryLastAction={() => {
-            if (failedStoryAction) void handleCustomAction(failedStoryAction);
+            if (failedStoryAction) void handleCustomAction(failedStoryAction, failedStoryActionCommandId || undefined);
           }}
           onAcceptActionAdvice={handleAcceptActionAdvice}
           onRejectActionAdvice={handleRejectActionAdvice}

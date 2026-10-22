@@ -37,6 +37,7 @@ import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBud
 import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -53,7 +54,7 @@ const NARRATIVE_INFORMATION_RESPONSE_PATTERN =
 	/\b(answer|answered|answers|reply|replied|replies|respond|responded|responds|explain|explained|explains|mention|mentioned|mentions|report|reported|reports|reveal|revealed|reveals|confirm|confirmed|confirms|warn|warned|warns|tell|told|tells|said|says|whispered|whispers|admitted|admits|learned|learns|heard|hears|stated|states|state|described|describes|describe|noted|notes|note|indicated|indicates|indicate|detailed|details|detail|showed|shows|show|read|reads|recorded|records|record|documented|documents|document|outlined|outlines|outline|conveyed|conveys|convey|recounted|recounts|recount|remarked|remarks|remark|spoke|speaks|speak|confessed|confesses|confess|informed|informs|inform|clarified|clarifies|clarify|testified|testifies|testify|observed|observes|observe|found|finds|find|discovered|discovers|discover|hang|hangs|hung|stand|stands|stood|lie|lies|lay|fill|fills|filled|stretch|stretches|stretched|remain|remains|remained|glow|glows|glowing|echo|echoes|echoed|surround|surrounds|surrounded|sit|sits|sat|turn|turns|turned|catch|catches|caught|appear|appears|appeared|seem|seems|seemed)\b/i;
 
 const NARRATIVE_INFORMATION_NONANSWER_PATTERN =
-	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay|no information|no answer|gives no answer|gave no answer|reveals nothing|revealed nothing|finds nothing|found nothing|shows nothing|showed nothing|no sign|no signs|without answer|without explanation|cannot determine|could not determine|unable to determine|none claims|none could say|none can say|limited to what can be directly observed)\b/i;
+	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay|no information|no answer|gives no answer|gave no answer|reveals nothing|revealed nothing|finds nothing|found nothing|shows nothing|showed nothing|no sign|no signs|no evidence|no indication|no explanation|no visible source|no confirmed source|insufficient evidence|not enough evidence|not enough information|without answer|without explanation|cannot determine|could not determine|can't determine|cannot establish|could not establish|can't establish|cannot identify|can't identify|no way to tell|cannot be determined|can't be determined|unable to determine|not established|none claims|none could say|none can say|limited to what can be directly observed)\b/i;
 
 const NARRATIVE_INTERNAL_META_LEAK_PATTERNS: RegExp[] = [
 	/\b(?:the )?125[- ]turn (?:integration stress test|stress test|integration test)(?: cycle| run| session)?\b/i,
@@ -7224,7 +7225,7 @@ export class MultiModelOrchestrator {
       location.name,
       location.regionId,
       location.description,
-      location.ambientSensory,
+      normalizeSceneSensoryForTime(location.ambientSensory, repository.getWorldClock(storyId).getState().currentDayPhase),
     ].filter(Boolean).join(' '));
     const narrationTokens = new Set(tokenize(narration));
     const nameMatch = nameTokens.some((token) => narrationTokens.has(token));
@@ -7781,7 +7782,7 @@ export class MultiModelOrchestrator {
 
     const currentSceneFactualContext = [
       params.situation.location.description,
-      params.situation.location.ambientSensory,
+      normalizeSceneSensoryForTime(params.situation.location.ambientSensory, params.situation.worldTime),
       params.situation.activeDialogue ? 'Active dialogue: ' + params.situation.activeDialogue.speakerName + ': ' + params.situation.activeDialogue.text : '',
       ...params.situation.visibleEvents
         .filter((event) => event.locationId === params.situation.location.id)
@@ -8177,7 +8178,7 @@ export class MultiModelOrchestrator {
       `Location name: ${currentSituation.location.name}`,
       currentSituation.location.regionId ? `Region: ${currentSituation.location.regionId}` : '',
       currentSituation.location.description ? `Canonical description: ${currentSituation.location.description}` : '',
-      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
+      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${normalizeSceneSensoryForTime(currentSituation.location.ambientSensory, currentSituation.worldTime)}` : '',
       `Canonical world time: ${currentSituation.worldTime}`,
       `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
       `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
@@ -8228,7 +8229,7 @@ export class MultiModelOrchestrator {
         }));
     const currentSceneFactualContext = [
       currentSituation.location.description,
-      currentSituation.location.ambientSensory,
+      normalizeSceneSensoryForTime(currentSituation.location.ambientSensory, currentSituation.worldTime),
       currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
       ...currentSituation.visibleEvents.map((event) => event.summary),
       ...currentSituation.relevantLore.map((fact) => `Authorized lore: ${fact.subjectEntityId} ${fact.predicate} ${fact.objectValue}`),

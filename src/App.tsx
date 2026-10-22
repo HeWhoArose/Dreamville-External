@@ -124,6 +124,9 @@ export const App: React.FC = () => {
   const [storyActionTips, setStoryActionTips] = useState<ActionTip[]>([]);
   const [isRefreshingStoryActionTips, setIsRefreshingStoryActionTips] = useState(false);
   const [failedStoryAction, setFailedStoryAction] = useState<string | null>(null);
+  // A committed action with rejected/failed narration must retry presentation only,
+  // not resubmit the gameplay command.
+  const [failedStoryNarrationActionId, setFailedStoryNarrationActionId] = useState<string | null>(null);
   // Keep the canonical command id with a failed request. Retrying after a lost
   // HTTP response must replay the already-committed command, not execute it twice.
   const [failedStoryCommandId, setFailedStoryCommandId] = useState<string | null>(null);
@@ -383,6 +386,7 @@ export const App: React.FC = () => {
     if ((action as any).type === 'CUSTOM_ACTION') {
       setFailedStoryAction(null);
       setFailedStoryCommandId(null);
+      setFailedStoryNarrationActionId(null);
     }
     try {
       const result = await apiClient.sendAction(payload);
@@ -393,6 +397,7 @@ export const App: React.FC = () => {
       if ((action as any).type === 'CUSTOM_ACTION') {
         setFailedStoryAction(null);
         setFailedStoryCommandId(null);
+        setFailedStoryNarrationActionId(null);
       }
       if (result.combatTransition) {
         setCombatTransition(result.combatTransition);
@@ -407,13 +412,23 @@ export const App: React.FC = () => {
           setPendingActionAdvice(err.data.advice as ActionAdvice);
           setFailedStoryAction(null);
           setFailedStoryCommandId(null);
+          setFailedStoryNarrationActionId(null);
           setNetworkError(null);
         } else {
           console.error('Failed to execute story action:', err);
           const actionText = typeof (action as any).actionText === 'string' ? (action as any).actionText.trim() : '';
           if ((action as any).type === 'CUSTOM_ACTION' && actionText) {
             setFailedStoryAction(actionText);
-            setFailedStoryCommandId(commandId);
+            if (err?.data?.actionCommitted === true && typeof err?.data?.actionId === 'string') {
+              // The world change already committed. Refresh the canonical projection
+              // and retry narration by action ID rather than replaying the command.
+              setFailedStoryNarrationActionId(err.data.actionId);
+              setFailedStoryCommandId(null);
+              if (err.data.viewState) setViewState(err.data.viewState);
+            } else {
+              setFailedStoryNarrationActionId(null);
+              setFailedStoryCommandId(commandId);
+            }
           }
           setNetworkError(err instanceof Error ? err.message : 'The story action could not be executed.');
         }
@@ -578,6 +593,7 @@ export const App: React.FC = () => {
     setPendingActionAdvice(null);
     setFailedStoryAction(null);
     setFailedStoryCommandId(null);
+    setFailedStoryNarrationActionId(null);
 
     // The canonical /action endpoint performs capability preflight itself.
     // Hostile freeform actions now return a canonical combat transition.
@@ -791,7 +807,30 @@ export const App: React.FC = () => {
           isRefreshingSuggestions={isRefreshingStoryActionTips}
           actionError={failedStoryAction ? networkError : null}
           onRetryLastAction={() => {
-            if (failedStoryAction) {
+            if (failedStoryNarrationActionId) {
+              void (async () => {
+                setIsProcessingAction(true);
+                setNetworkError(null);
+                try {
+                  const result = await apiClient.regenerateNarration({
+                    storyId: activeStoryId,
+                    actionId: failedStoryNarrationActionId,
+                  });
+                  const nextState = result.viewState || await apiClient.getGameState(activeStoryId);
+                  setViewState(nextState);
+                  setFailedStoryAction(null);
+                  setFailedStoryCommandId(null);
+                  setFailedStoryNarrationActionId(null);
+                  setNetworkError(null);
+                  fetchAuxiliaryData();
+                } catch (retryError: any) {
+                  if (retryError?.data?.viewState) setViewState(retryError.data.viewState);
+                  setNetworkError(retryError?.message || 'Narration retry failed. The committed action remains in the story.');
+                } finally {
+                  setIsProcessingAction(false);
+                }
+              })();
+            } else if (failedStoryAction) {
               void handleCustomAction(failedStoryAction, failedStoryCommandId || undefined);
             }
           }}

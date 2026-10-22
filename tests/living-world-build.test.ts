@@ -421,6 +421,35 @@ test('grounded observation answers the crowded-place request from canonical occu
   assert.doesNotMatch(unknownObservation.text || '', /bustling|crowded with people/i);
 });
 
+test('investigating an established distress signal returns its known lead and an honest unknown-cause boundary', () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const location = parkNode('loc_signal_perimeter', {
+    name: 'Threshold of the Radiance',
+    description: 'A broad stone threshold overlooks the outer approaches to Elysium Solar Citadel.',
+    ambientSensory: 'The air carries the scent of native vegetation.',
+    archetype: 'GENERIC',
+  });
+  const world = worldFixture([location]);
+  const storyId = createStory(repository, world, location.id);
+  const situation = CurrentSituationBuilder.build({
+    storyId,
+    worldRepo: repository,
+    playerAction: 'I observe the perimeter trying to find for what reason why the beacon was lit.',
+  });
+  const observation = resolveGroundedObservation(
+    situation,
+    'I observe the perimeter trying to find for what reason why the beacon was lit.',
+    ['A distress signal from a nearby settlement hints that the same void corruption has resurfaced.'],
+  );
+
+  assert.equal(observation.relevant, true);
+  assert.match(observation.text || '', /distress signal from a nearby settlement/i);
+  assert.match(observation.text || '', /void corruption has resurfaced/i);
+  assert.match(observation.text || '', /cause remains unknown/i);
+  assert.match(observation.limitation || '', /cause is not established/i);
+  assert.doesNotMatch(observation.text || '', /the beacon was lit because/i);
+});
+
 test('unknown NPC names stay out of player-facing projections and prompts until identity is learned', () => {
   const repository = new InMemoryWorldRepository({ disablePersistence: true });
   const market = parkNode('loc_identity_market', { name: 'Lantern Market', description: 'A market.', archetype: 'MARKET' });

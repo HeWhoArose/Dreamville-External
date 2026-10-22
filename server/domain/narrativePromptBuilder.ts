@@ -108,7 +108,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		.slice(-2)
 		.map((turn) => [
 			turn.playerAction ? 'Player: ' + turn.playerAction : '',
-			turn.narration ? 'Narration: ' + turn.narration : '',
+			turn.narration ? 'Narration: ' + (turn.isOpeningScene ? normalizeSceneSensoryForTime(turn.narration, situation.worldTime) : turn.narration) : '',
 			turn.unresolvedConsequence ? 'Unresolved consequence: ' + turn.unresolvedConsequence : '',
 		].filter(Boolean).join(' | '))
 		.join('\n') || 'No recent turns.';

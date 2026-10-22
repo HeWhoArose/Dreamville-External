@@ -292,55 +292,6 @@ export class OpeningSceneService {
 				OpeningSceneService.sanitizeFixtureLeaks(String(event.text || ''), rawOpeningFacts),
 			),
 		}));
-		// The ordinary quality gate historically skipped deterministic fallbacks.
-		// Run context-neutral final presentation validation on the exact text and
-		// event payload about to be stored, regardless of which source produced it.
-		const finalOpeningReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
-			storyId,
-			narration: generatedText,
-			repository: worldRepo,
-			skipFreshness: true,
-		});
-		if (!finalOpeningReview.valid) {
-			const canonical = OpeningSceneService.synthesizeDeterministicOpening(
-				rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null,
-			);
-			generatedText = OpeningSceneService.sanitizeNarrativeText(
-				OpeningSceneService.sanitizeFixtureLeaks(canonical.narrativeText, rawOpeningFacts),
-			);
-			generatedEvents = canonical.structuredEvents.map((event) => ({
-				...event,
-				text: OpeningSceneService.sanitizeNarrativeText(
-					OpeningSceneService.sanitizeFixtureLeaks(String(event.text || ''), rawOpeningFacts),
-				),
-			}));
-			generationMeta = {
-				...generationMeta,
-				source: 'DETERMINISTIC_FALLBACK',
-				fallbackReason: 'Final opening presentation validation rejected the initial candidate: ' + finalOpeningReview.errorReason,
-			};
-			let fallbackReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
-				storyId, narration: generatedText, repository: worldRepo, skipFreshness: true,
-			});
-			if (!fallbackReview.valid) {
-				generatedText = [
-					rawOpeningFacts.time.formattedHeader + '. ' + rawOpeningFacts.character.name + ' stands within ' + rawOpeningFacts.location.name + '.',
-					rawOpeningFacts.character.startingSituation || 'The immediate situation remains unsettled.',
-					'The situation remains unresolved.',
-				].join('\\n\\n');
-				generatedText = OpeningSceneService.sanitizeNarrativeText(
-					OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts),
-				);
-				fallbackReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
-					storyId, narration: generatedText, repository: worldRepo, skipFreshness: true,
-				});
-				generatedEvents = OpeningSceneService.deriveOpeningEvents(generatedText, storyId, rawOpeningFacts);
-			}
-			if (!fallbackReview.valid) {
-				throw new Error('Final opening validation failed after deterministic repair: ' + fallbackReview.errorReason);
-			}
-		}
-
 		// =========================================================================
 		// Opening-scene presentation-quality gate (N18 richness + N8 pacing).
 		// Deterministic and presentation-only: it never mutates canonical state and
@@ -462,6 +413,66 @@ export class OpeningSceneService {
 				qualityAudit,
 			};
 		}
+
+		// Validate the exact final text/events after all AI rewrite and deterministic fallback paths.
+		generatedText = OpeningSceneService.sanitizeNarrativeText(
+			OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts),
+		);
+		generatedEvents = generatedEvents.map((event) => ({
+			...event,
+			text: OpeningSceneService.sanitizeNarrativeText(
+				OpeningSceneService.sanitizeFixtureLeaks(String(event.text || ''), rawOpeningFacts),
+			),
+		}));
+		// The ordinary quality gate historically skipped deterministic fallbacks.
+		// Run context-neutral final presentation validation on the exact text and
+		// event payload about to be stored, regardless of which source produced it.
+		const finalOpeningReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
+			storyId,
+			narration: generatedText,
+			repository: worldRepo,
+			skipFreshness: true,
+		});
+		if (!finalOpeningReview.valid) {
+			const canonical = OpeningSceneService.synthesizeDeterministicOpening(
+				rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null,
+			);
+			generatedText = OpeningSceneService.sanitizeNarrativeText(
+				OpeningSceneService.sanitizeFixtureLeaks(canonical.narrativeText, rawOpeningFacts),
+			);
+			generatedEvents = canonical.structuredEvents.map((event) => ({
+				...event,
+				text: OpeningSceneService.sanitizeNarrativeText(
+					OpeningSceneService.sanitizeFixtureLeaks(String(event.text || ''), rawOpeningFacts),
+				),
+			}));
+			generationMeta = {
+				...generationMeta,
+				source: 'DETERMINISTIC_FALLBACK',
+				fallbackReason: 'Final opening presentation validation rejected the initial candidate: ' + finalOpeningReview.errorReason,
+			};
+			let fallbackReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
+				storyId, narration: generatedText, repository: worldRepo, skipFreshness: true,
+			});
+			if (!fallbackReview.valid) {
+				generatedText = [
+					rawOpeningFacts.time.formattedHeader + '. ' + rawOpeningFacts.character.name + ' stands within ' + rawOpeningFacts.location.name + '.',
+					rawOpeningFacts.character.startingSituation || 'The immediate situation remains unsettled.',
+					'The situation remains unresolved.',
+				].join('\\n\\n');
+				generatedText = OpeningSceneService.sanitizeNarrativeText(
+					OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts),
+				);
+				fallbackReview = (worldRepo.getAiOrchestrator() as any).validateOpeningNarrativeCandidate({
+					storyId, narration: generatedText, repository: worldRepo, skipFreshness: true,
+				});
+				generatedEvents = OpeningSceneService.deriveOpeningEvents(generatedText, storyId, rawOpeningFacts);
+			}
+			if (!fallbackReview.valid) {
+				throw new Error('Final opening validation failed after deterministic repair: ' + fallbackReview.errorReason);
+			}
+		}
+
 
 		const openingScene: OpeningScene = {
 			storyId,

@@ -1476,8 +1476,10 @@ export class ServerMockAuthority {
             worldTime: entry.timestamp,
           })),
         npcTargetId: this.getDynamicStoryState(targetStoryId).activeDialogue?.speakerId || undefined,
+        // Only canonical starting facts and the time-safe scene projection belong here.
+        // Previously displayed prose is not a source of canonical evidence and may contain
+        // stale or rejected temporal claims.
         sceneContext: [
-          run?.openingScene?.narrativeText,
           run?.startingSituation?.summary,
           run?.startingSituation?.hook,
           resolutionSituation.location?.name,

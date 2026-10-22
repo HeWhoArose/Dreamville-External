@@ -207,11 +207,17 @@ describe('Phase 18 — end-to-end turn harness', () => {
 		}
 	});
 
-	it('keeps the UI retry contract visible for failed story actions', async () => {
+	it('keeps story-action retry idempotent when the original response may have been lost', async () => {
 		const fs = await import('node:fs/promises');
 		const storyView = await fs.readFile(new URL('../src/components/StoryView.tsx', import.meta.url), 'utf8');
+		const app = await fs.readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+		const route = await fs.readFile(new URL('../server/api/gameRoutes.ts', import.meta.url), 'utf8');
 		assert.match(storyView, /Retry the last failed story action/);
 		assert.match(storyView, /onRetryLastAction/);
+		assert.match(app, /failedStoryCommandId/);
+		assert.match(app, /commandId \|\|/);
+		assert.match(app, /handleCustomAction\(failedStoryAction, failedStoryCommandId \|\| undefined\)/);
+		assert.match(route, /req\.body\?\.commandId/);
 	});
 
 });

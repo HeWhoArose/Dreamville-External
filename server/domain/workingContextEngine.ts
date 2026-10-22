@@ -1363,7 +1363,7 @@ export class WorkingContextEngine {
     const locNode = geography.getNode(startingLocId);
     const locName = locNode?.name || run.startingLocation?.name || startingLocId;
     const locDesc = locNode?.description || run.startingLocation?.description || `The opening lands of ${world?.title || run.worldId}.`;
-    const locSensory = locNode?.ambientSensory || run.startingLocation?.ambientSensory || 'A quiet, watchful atmosphere fills the surroundings.';
+    const locSensorySource = locNode?.ambientSensory || run.startingLocation?.ambientSensory;
     const locRegion = locNode?.regionId || run.startingLocation?.region || 'Frontier';
 
     // Opening generation uses the same canonical, epistemically-filtered scene
@@ -1392,6 +1392,13 @@ export class WorkingContextEngine {
     const openingSceneObjects = (openingSituation.sceneObjects || []).filter((object) => object.visibleToPlayer).slice(0, 16);
     const openingEnvironment = openingSituation.sceneEvidence.environment;
     const openingAmbientActivity = openingSituation.sceneEvidence.ambientActivity;
+    // Use the time-aware scene projection, not potentially stale authored sensory prose.
+    // If every cue conflicts with the canonical clock, keep the prompt bounded rather than
+    // reintroducing the raw cue that the projection intentionally removed.
+    const locSensory = openingSituation.location.ambientSensory
+      || (locSensorySource
+        ? 'No time-compatible sensory detail is established for the current moment.'
+        : 'A quiet, watchful atmosphere fills the surroundings.');
     const visiblePopulationText = openingVisibleEntities.length
       ? openingVisibleEntities.map((entity) =>
           `- ${entity.displayName || entity.name}${entity.role ? ` (role: ${entity.role})` : ''}${entity.currentActivity ? `: ${entity.currentActivity}` : ''}`

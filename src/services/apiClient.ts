@@ -76,6 +76,7 @@ const fetch = async (url: RequestInfo | URL, init?: RequestInit): Promise<Respon
     headers['X-Story-ID'] = globalActiveStoryId;
   }
   finalInit.headers = headers;
+  const method = String(finalInit.method || 'GET').toUpperCase();
 
   let attempts = 0;
   const maxAttempts = 4;
@@ -91,7 +92,7 @@ const fetch = async (url: RequestInfo | URL, init?: RequestInit): Promise<Respon
         ? await response.clone().text().catch(() => '')
         : '';
       if (
-        shouldRetryTransientHttpResponse(response.status, contentType, responsePreview) &&
+        shouldRetryTransientHttpResponse(response.status, contentType, responsePreview, method) &&
         attempts < maxAttempts - 1
       ) {
         attempts++;

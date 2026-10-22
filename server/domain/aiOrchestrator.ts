@@ -7858,6 +7858,8 @@ export class MultiModelOrchestrator {
     storyId: string;
     narration: string;
     repository?: WorldRepository;
+    /** Skip prior-opening deduplication when validating the final chosen output itself. */
+    skipFreshness?: boolean;
   }): { valid: boolean; errorReason?: string } {
     const narration = String(params.narration || '').trim();
     if (!narration) return { valid: false, errorReason: 'Opening narrative candidate is empty.' };
@@ -7868,15 +7870,17 @@ export class MultiModelOrchestrator {
     // Reuse the ordinary candidate freshness guard against the previously persisted
     // opening, if any; do not compare against ordinary turns because opening setup
     // belongs to the story's starting scene, not the player's latest action.
-    const previousOpeningNarration = repository.getStoryRun(params.storyId)?.openingScene?.narrativeText;
-    const freshness = this.validateNarrativeFreshnessContinuity(
-      narration,
-      typeof previousOpeningNarration === 'string' && previousOpeningNarration.trim()
-        ? [previousOpeningNarration]
-        : [],
-    );
-    if (!freshness.valid) {
-      return { valid: false, errorReason: freshness.errorReason || 'Opening narrative failed freshness validation.' };
+    if (!params.skipFreshness) {
+      const previousOpeningNarration = repository.getStoryRun(params.storyId)?.openingScene?.narrativeText;
+      const freshness = this.validateNarrativeFreshnessContinuity(
+        narration,
+        typeof previousOpeningNarration === 'string' && previousOpeningNarration.trim()
+          ? [previousOpeningNarration]
+          : [],
+      );
+      if (!freshness.valid) {
+        return { valid: false, errorReason: freshness.errorReason || 'Opening narrative failed freshness validation.' };
+      }
     }
 
     // Opening prose also needs a canonical scene anchor. This is the context-neutral

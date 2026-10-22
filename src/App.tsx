@@ -124,6 +124,9 @@ export const App: React.FC = () => {
   const [storyActionTips, setStoryActionTips] = useState<ActionTip[]>([]);
   const [isRefreshingStoryActionTips, setIsRefreshingStoryActionTips] = useState(false);
   const [failedStoryAction, setFailedStoryAction] = useState<string | null>(null);
+  // Keep the canonical command id with a failed request. Retrying after a lost
+  // HTTP response must replay the already-committed command, not execute it twice.
+  const [failedStoryCommandId, setFailedStoryCommandId] = useState<string | null>(null);
   const [combatTransition, setCombatTransition] = useState<CombatTransitionState | null>(null);
   const actionSeqRef = useRef<number>(0);
 
@@ -368,13 +371,20 @@ export const App: React.FC = () => {
     onComplete?: (result: ActionResult) => void | Promise<void>
   ) => {
     const currentSeq = ++actionSeqRef.current;
+    const commandId = String((action as any).commandId || (
+      `cmd_ui_${Date.now().toString(36)}_${currentSeq}_${Math.random().toString(36).slice(2, 10)}`
+    ));
+    // Send a stable ID with the request and retain it for an uncertain-response
+    // retry. The server's canonical command ledger rejects mismatched replays and
+    // does not reapply a command that already committed.
+    const payload = { ...action, commandId, storyId: (action as any).storyId || activeStoryId } as ActionRequest;
     setNetworkError(null);
     setIsProcessingAction(true);
     if ((action as any).type === 'CUSTOM_ACTION') {
       setFailedStoryAction(null);
+      setFailedStoryCommandId(null);
     }
     try {
-      const payload = { ...action, storyId: (action as any).storyId || activeStoryId };
       const result = await apiClient.sendAction(payload);
       if (currentSeq !== actionSeqRef.current) {
         return;
@@ -382,6 +392,7 @@ export const App: React.FC = () => {
       setViewState(result.viewState);
       if ((action as any).type === 'CUSTOM_ACTION') {
         setFailedStoryAction(null);
+        setFailedStoryCommandId(null);
       }
       if (result.combatTransition) {
         setCombatTransition(result.combatTransition);
@@ -395,12 +406,14 @@ export const App: React.FC = () => {
         if (err?.status === 409 && err?.data?.advice) {
           setPendingActionAdvice(err.data.advice as ActionAdvice);
           setFailedStoryAction(null);
+          setFailedStoryCommandId(null);
           setNetworkError(null);
         } else {
           console.error('Failed to execute story action:', err);
           const actionText = typeof (action as any).actionText === 'string' ? (action as any).actionText.trim() : '';
           if ((action as any).type === 'CUSTOM_ACTION' && actionText) {
             setFailedStoryAction(actionText);
+            setFailedStoryCommandId(commandId);
           }
           setNetworkError(err instanceof Error ? err.message : 'The story action could not be executed.');
         }
@@ -561,9 +574,10 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleCustomAction = async (actionText: string) => {
+  const handleCustomAction = async (actionText: string, commandId?: string) => {
     setPendingActionAdvice(null);
     setFailedStoryAction(null);
+    setFailedStoryCommandId(null);
 
     // The canonical /action endpoint performs capability preflight itself.
     // Hostile freeform actions now return a canonical combat transition.
@@ -574,6 +588,7 @@ export const App: React.FC = () => {
         type: 'CUSTOM_ACTION',
         actionText,
         intent: actionText,
+        ...(commandId ? { commandId } : {}),
       } as any,
       async (result) => {
         if (result.combatTransition) {
@@ -776,7 +791,9 @@ export const App: React.FC = () => {
           isRefreshingSuggestions={isRefreshingStoryActionTips}
           actionError={failedStoryAction ? networkError : null}
           onRetryLastAction={() => {
-            if (failedStoryAction) void handleCustomAction(failedStoryAction);
+            if (failedStoryAction) {
+              void handleCustomAction(failedStoryAction, failedStoryCommandId || undefined);
+            }
           }}
           onAcceptActionAdvice={handleAcceptActionAdvice}
           onRejectActionAdvice={handleRejectActionAdvice}

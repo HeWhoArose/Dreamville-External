@@ -242,6 +242,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'CANONICAL CURRENT SCENE ANCHOR:',
 		'Canonical constraints:',
 		'- The current location and time in Current Situation are authoritative.',
+		'- Match every time-of-day claim to the canonical current time. Do not describe first light, daybreak, dawn, sunrise, morning, or any other incompatible phase unless the canonical clock says it is that phase; narration cannot advance the clock.',
 		'- Visible current-scene events (canonical or projected): ' + canonicalVisibleSceneEvents,
 		'- Stay in the canonical current location unless the canonical game state has already committed a location change.',
 		'- Player Intent is the semantic description of what the player meant to attempt.',
@@ -249,6 +250,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'- Research is bounded evidence. Omitted or excluded information is not permission to invent it.',
 		'- Do not invent unsupported entities or unsupported objects without canonical evidence.',
 		'- Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
+		'- For observation or information-seeking actions, answer the actual question with specific evidence from canonical scene facts or bounded research; if evidence cannot answer it, state that limitation plainly. Atmosphere alone is not an answer.',
 		'- The Narrative Director Plan is ephemeral guidance for this turn only; it does not create canonical state.',
 		'- State changes must come from canonical engines/commands, not from prose.',
 		'- If the player listens, watches, observes, overhears, or eavesdrops without explicit speech, do not make the player speak, ask, shout, answer, or call out.',
@@ -350,6 +352,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
 			const microCanonical = [
 				'The current location and time are authoritative.',
+				'Match time-of-day language to the current canonical clock; never introduce an incompatible dawn/morning/afternoon/night claim.',
+				'Information-seeking and observation must yield a grounded clue/answer or an explicit bounded lack of answer; atmosphere alone does not resolve the action.',
 				'Visible current-scene events (canonical or projected): ' + canonicalVisibleSceneEvents,
 				'Stay in the canonical current location unless the canonical game state has already committed a location change.',
 				'Do not invent unsupported facts or turn rumor into certainty.',
@@ -494,6 +498,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				'State changes must come from canonical engines/commands.',
 				'Visible current-scene events (canonical or projected): ' + canonicalVisibleSceneEvents,
 				'Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
+				'For observation or information-seeking, provide a grounded clue/answer or say what cannot be determined from available evidence; atmosphere alone is not a result.',
+				'Match time-of-day language to the canonical current clock; do not invent a conflicting time phase.',
 				'Omitted or excluded information is not permission to invent it.',
 				'Stay in the canonical scene unless the canonical game state has already committed a location change.',
 			].join(' ');

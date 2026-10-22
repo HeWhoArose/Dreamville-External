@@ -103,3 +103,16 @@ test('ambiguous action recovery never resubmits a committed world action', () =>
   assert.ok(client.includes('outcome may already be committed'));
 });
 
+test('presentation-only narration retry uses time-normalized sensory context', () => {
+  const routes = read('server/api/gameRoutes.ts');
+  assert.ok(routes.includes("from '../domain/sceneSensoryPresentation'"));
+  const retryIndex = routes.indexOf("gameRouter.post('/action/narrate/regenerate'");
+  assert.ok(retryIndex >= 0);
+  const contextStart = routes.indexOf('sceneContext: [', retryIndex);
+  const contextEnd = routes.indexOf('continuationDirective:', contextStart);
+  assert.ok(contextStart >= 0 && contextEnd > contextStart);
+  const retryContext = routes.slice(contextStart, contextEnd);
+  assert.ok(retryContext.includes('normalizeSceneSensoryForTime('));
+  assert.ok(retryContext.includes('getState().currentDayPhase'));
+});
+

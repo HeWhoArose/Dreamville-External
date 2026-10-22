@@ -1026,7 +1026,8 @@ export class OpeningSceneService {
 	 * labels copied from an authored sensory string.
 	 */
 	private static sanitizeOpeningSceneAnchor(raw: string, formattedTime: string): string {
-		return normalizeSceneSensoryForTime(raw, formattedTime);
+		return normalizeSceneSensoryForTime(raw, formattedTime) ||
+			'The surrounding air is still, and the ground is firm beneath your feet.';
 	}
 
 	private static sanitizeNarrativeText(text: string): string {

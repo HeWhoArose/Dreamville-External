@@ -1646,6 +1646,7 @@ export class ServerMockAuthority {
             'If an object is affected, show the object-level consequence rather than only a sound effect.',
             'Do not merely restate the room or list scenery.',
             'Do not invent a consequence not supported by the canonical action resolution or current situation.',
+            'When canonical action resolution says no destination or visible target was found, do not claim arrival, completed approach, or identify where a signal originates.',
             'Do not choose the player’s next consequential action.',
             'Return JSON only with narrativeText and structuredEvents.',
           ].filter(Boolean).join('\\n');

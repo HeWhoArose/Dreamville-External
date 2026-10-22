@@ -402,7 +402,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
         );
         if (matched?.displayName) return matched.displayName;
         if (rawModelId === 'local-story-fallback' || rawModelId === 'provider_local_story_fallback::local-story-fallback') {
-          return 'Local Story Fallback';
+          return 'Deterministic Fallback';
         }
         if (rawModelId.includes('gemini')) {
           return rawModelId.replace(/^models\//, '').replace(/^google\//, '');

@@ -955,14 +955,11 @@ export class OpeningSceneService {
 		return events.slice(0, 6);
 	}
 	private static sanitizeOpeningSceneAnchor(text: string | undefined, period: string): string {
-		const cleaned = String(text || '')
-			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*/gi, '')
-			.replace(/\s+/g, ' ')
-			.trim();
-		if (!cleaned) return '';
+		const source = String(text || '').replace(/\s+/g, ' ').trim();
+		if (!source) return '';
 
 		// Environmental source text is not allowed to contradict the clock. Filter
-		// only the offending sentence, preserving unrelated canonical description.
+		// only the offending claim, preserving unrelated canonical description.
 		const phase = String(period || '').toLowerCase();
 		const incompatible: Record<string, RegExp> = {
 			predawn: /\b(?:sunrise|morning|midday|afternoon|dusk|sunset|night)\b/i,
@@ -973,14 +970,47 @@ export class OpeningSceneService {
 			night: /\b(?:first light|daybreak|dawn|sunrise|morning light|afternoon light|midday|noon|sunset light)\b/i,
 		};
 		const conflict = incompatible[phase];
-		return cleaned
+		const sentenceIsCompatible = (value: string) =>
+			value.length > 0 && !(conflict && conflict.test(value));
+
+		// Sensory labels are structured authoring fields, not prose. Convert the
+		// useful non-conflicting values into sentences rather than leaving fragments.
+		const fields = Array.from(source.matchAll(
+			/\b(Visual|Sounds?|Scent|Tactile)\s*:\s*([\s\S]*?)(?=(?:\s*[.!?]?\s*)\b(?:Visual|Sounds?|Scent|Tactile)\s*:|$)/gi,
+		));
+		if (fields.length) {
+			const prose = fields.flatMap((match) => {
+				const kind = String(match[1] || '').toLowerCase();
+				const value = String(match[2] || '').trim().replace(/[.!?;]+$/g, '').trim();
+				if (!sentenceIsCompatible(value)) return [];
+				if (kind === 'visual') {
+					return [/[.!?]$/.test(value) ? value : `The view opens onto ${value.toLowerCase()}.`];
+				}
+				if (kind === 'scent') {
+					return [`The air carries the scent of ${value.toLowerCase()}.`];
+				}
+				if (kind === 'tactile' && /\b(?:earth|ground|stone|soil|sand|floor|gravel)\b/i.test(value)) {
+					return [`${value} lies underfoot.`];
+				}
+				if (kind === 'sounds' || kind === 'sound') {
+					// Vague payloads ("distant atmosphere") are not evidence of a source
+					// or event and should not be inflated into one.
+					return /\b(?:rings|echoes|drifts|carries|hums|rustles|whispers|cracks|footsteps|voices|wind|water|bell|engine|rain)\b/i.test(value)
+						? [/[.!?]$/.test(value) ? value : `${value}.`]
+						: [];
+				}
+				return [];
+			});
+			return prose.join(' ').trim();
+		}
+
+		return source
 			.split(/(?<=[.!?])\s+/)
 			.map((sentence) => sentence.trim())
-			.filter((sentence) => sentence && !(conflict && conflict.test(sentence)))
+			.filter(sentenceIsCompatible)
 			.join(' ')
 			.trim();
 	}
-
 	private static sanitizeNarrativeText(text: string): string {
 		return String(text || '')
 			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*[^.\n]+[.]?/gi, '')

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
+import { OpeningSceneService } from '../server/services/openingSceneService';
 
 test('narration continuity rejects a current action that is silently replaced by unrelated prose', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
@@ -224,4 +225,24 @@ test('narration freshness rejects exact repeats and near-duplicate atmospheric p
 	assert.equal(validate(nearDuplicate, [previous]).valid, false);
 	const advancing = 'The scroll catches your eye: fresh cuts cross the wax seal, and grit from the broken stamp still clings to the fold. Someone has opened it since your last inspection.';
 	assert.equal(validate(advancing, [previous]).valid, true);
+});
+
+test('deterministic opening converts sensory metadata to player-facing, time-consistent prose', () => {
+	const sanitizeAnchor = (OpeningSceneService as any).sanitizeOpeningSceneAnchor.bind(OpeningSceneService);
+	const sanitizeNarrative = (OpeningSceneService as any).sanitizeNarrativeText.bind(OpeningSceneService);
+	const raw = 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.';
+	const normalized = sanitizeAnchor(raw, 'Cycle 42 • 17:42 • Afternoon • Autumn');
+
+	assert.match(normalized, /late-afternoon light/i);
+	assert.match(normalized, /atmospheric sounds/i);
+	assert.match(normalized, /scent of native vegetation/i);
+	assert.match(normalized, /firm earth holds beneath your feet/i);
+	assert.doesNotMatch(normalized, /\\bfirst light\\b|Visual:|Sounds?:|Scent:|Tactile:/i);
+
+	const withDiagnostic = sanitizeNarrative(
+		'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.\\n\\nThe distress signal remains unresolved.',
+	);
+	assert.doesNotMatch(withDiagnostic, /canonical scene projection|this alone does not mean the location is abandoned/i);
+	assert.match(withDiagnostic, /The distress signal remains unresolved/);
+	assert.match(withDiagnostic, /\\n\\n/, 'sanitization must preserve paragraph breaks');
 });

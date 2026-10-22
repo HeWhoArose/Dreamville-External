@@ -8,6 +8,7 @@ import { NarrativeContinuityEngine, type NarrativeResearchPacket } from './narra
 import { CurrentSituationBuilder, type CurrentSituation, type NearbyEntityContext, type VisibleEventContext } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 
 export interface WorkingContextPacket {
   scene: string;
@@ -1363,7 +1364,7 @@ export class WorkingContextEngine {
     const locNode = geography.getNode(startingLocId);
     const locName = locNode?.name || run.startingLocation?.name || startingLocId;
     const locDesc = locNode?.description || run.startingLocation?.description || `The opening lands of ${world?.title || run.worldId}.`;
-    const locSensory = locNode?.ambientSensory || run.startingLocation?.ambientSensory || 'A quiet, watchful atmosphere fills the surroundings.';
+    const locSensory = normalizeSceneSensoryForTime(locNode?.ambientSensory || run.startingLocation?.ambientSensory || 'A quiet, watchful atmosphere fills the surroundings.', clock.getState().currentDayPhase);
     const locRegion = locNode?.regionId || run.startingLocation?.region || 'Frontier';
 
     // Opening generation uses the same canonical, epistemically-filtered scene

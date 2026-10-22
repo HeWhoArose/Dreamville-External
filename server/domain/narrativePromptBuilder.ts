@@ -244,6 +244,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'- The current location and time in Current Situation are authoritative.',
 		'- Visible current-scene events (canonical or projected): ' + canonicalVisibleSceneEvents,
 		'- Stay in the canonical current location unless the canonical game state has already committed a location change.',
+		'- A SPATIAL change without a LOCATION change means local repositioning within the current location; do not narrate arrival at a different location, a new region, or a destination that was not canonically reached.',
 		'- Player Intent is the semantic description of what the player meant to attempt.',
 		'- The structured Action Resolution is authoritative for mechanics, outcome tier, effects, and consequences; never reconstruct hidden mechanics from prose.',
 		'- Research is bounded evidence. Omitted or excluded information is not permission to invent it.',

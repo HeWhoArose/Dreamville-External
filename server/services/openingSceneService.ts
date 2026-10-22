@@ -283,7 +283,9 @@ export class OpeningSceneService {
 			}
 		}
 
-		generatedText = OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts);
+		generatedText = OpeningSceneService.sanitizeNarrativeText(
+			OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts),
+		);
 
 		// =========================================================================
 		// Opening-scene presentation-quality gate (N18 richness + N8 pacing).
@@ -958,26 +960,49 @@ export class OpeningSceneService {
 	 * labels copied from an authored sensory string.
 	 */
 	private static sanitizeOpeningSceneAnchor(raw: string, formattedTime: string): string {
-		let anchor = String(raw || '').trim();
-		if (!anchor) return 'The surrounding air is still, and the ground is firm beneath your feet.';
-
-		anchor = anchor
-			.replace(/\\b(?:Visual|Sounds|Scent|Tactile)\\s*:\\s*/gi, '')
-			.replace(/\\bfirst light\\b/gi, /\\b(?:Predawn|Dawn|Morning)\\b/i.test(formattedTime) ? 'early light' : 'late light')
-			.replace(/\\bmorning chill\\b/gi, /\\bAfternoon\\b/i.test(formattedTime) ? 'afternoon air' : 'cool air')
-			.replace(/\\bmorning light\\b/gi, /\\bAfternoon\\b/i.test(formattedTime) ? 'afternoon light' : 'early light')
-			.replace(/\\s+/g, ' ')
+		const source = String(raw || '').trim();
+		if (!source) return 'The surrounding air is still, and the ground is firm beneath your feet.';
+		const isMorning = /\b(?:Predawn|Dawn|Morning)\b/i.test(formattedTime);
+		const isAfternoon = /\bAfternoon\b/i.test(formattedTime);
+		const repairTime = (value: string) => value
+			.replace(/\bfirst light\b/gi, isMorning ? 'early light' : 'late-afternoon light')
+			.replace(/\bmorning light\b/gi, isAfternoon ? 'afternoon light' : 'early light')
+			.replace(/\bmorning chill\b/gi, isAfternoon ? 'afternoon air' : 'cool air')
+			.replace(/\s+/g, ' ')
 			.trim();
-
-		return anchor || 'The surrounding air is still, and the ground is firm beneath your feet.';
+		const fields: Record<string, string> = {};
+		const fieldPattern = /\b(Visual|Sounds?|Scent|Tactile)\s*:\s*([\s\S]*?)(?=\s+\b(?:Visual|Sounds?|Scent|Tactile)\s*:|$)/gi;
+		for (const match of source.matchAll(fieldPattern)) fields[String(match[1]).toLowerCase()] = String(match[2] || '').trim().replace(/[.\s]+$/, '');
+		const visual = repairTime(fields.visual || '');
+		const sounds = (fields.sound || fields.sounds || '').trim();
+		const scent = (fields.scent || '').trim();
+		const tactile = (fields.tactile || '').trim();
+		if (visual || sounds || scent || tactile) {
+			const sentences: string[] = [];
+			if (visual) sentences.push(visual.charAt(0).toUpperCase() + visual.slice(1).replace(/[.]+$/, '') + '.');
+			if (sounds) sentences.push(/^distant atmosphere$/i.test(sounds)
+				? 'Distant atmospheric sounds drift across the outskirts.'
+				: 'Nearby, ' + sounds.charAt(0).toLowerCase() + sounds.slice(1).replace(/[.]+$/, '') + ' can be heard.');
+			if (scent) sentences.push('The air carries the scent of ' + scent.charAt(0).toLowerCase() + scent.slice(1).replace(/[.]+$/, '') + '.');
+			if (tactile) sentences.push(/^firm earth$/i.test(tactile)
+				? 'Firm earth holds beneath your feet.'
+				: tactile.charAt(0).toUpperCase() + tactile.slice(1).replace(/[.]+$/, '') + ' is apparent underfoot.');
+			return sentences.join(' ');
+		}
+		return repairTime(source)
+			.replace(/No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned\.?/gi, 'No one is clearly visible nearby.')
+			.replace(/\s+/g, ' ')
+			.trim();
 	}
-
 	private static sanitizeNarrativeText(text: string): string {
 		return String(text || '')
 			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*[^.\n]+[.]?/gi, '')
 			.replace(/\bRight now\s*:?/gi, '')
 			.replace(/\bYour turn\s*:?/gi, '')
 			.replace(/\bWhat do you do\??/gi, '')
+			.replace(/No visible occupants are currently established in the canonical scene projection[^.]*\.?/gi, '')
+			.replace(/This alone does not mean the location is abandoned\.?/gi, '')
+			.replace(/\s{2,}/g, ' ')
 			.trim();
 	}
 

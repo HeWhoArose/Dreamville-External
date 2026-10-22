@@ -5,7 +5,7 @@
  */
 export function normalizeSceneSensoryForTime(raw: string | undefined | null, timeContext: string | undefined | null): string {
 	const source = String(raw || '').trim();
-	if (!source) return 'The immediate surroundings offer no reliable sensory detail.';
+	if (!source) return '';
 
 	const phase = String(timeContext || '').match(/\b(Predawn|Dawn|Morning|Afternoon|Dusk|Night)\b/i)?.[1]?.toLowerCase() || '';
 	const firstLightReplacement = ['predawn', 'dawn', 'morning'].includes(phase)

@@ -1027,12 +1027,25 @@ export class OpeningSceneService {
 	private static sanitizeOpeningSceneAnchor(raw: string, formattedTime: string): string {
 		const source = String(raw || '').trim();
 		if (!source) return 'The surrounding air is still, and the ground is firm beneath your feet.';
-		const isMorning = /\b(?:Predawn|Dawn|Morning)\b/i.test(formattedTime);
-		const isAfternoon = /\bAfternoon\b/i.test(formattedTime);
+		const phase = formattedTime.match(/\b(Predawn|Dawn|Morning|Afternoon|Dusk|Night)\b/i)?.[1]?.toLowerCase() || '';
+		const firstLightReplacement = ['predawn', 'dawn', 'morning'].includes(phase)
+			? 'early light'
+			: phase === 'afternoon'
+				? 'late-afternoon light'
+				: phase === 'dusk'
+					? 'fading light'
+					: 'the available light';
+		const morningLightReplacement = phase === 'afternoon'
+			? 'afternoon light'
+			: phase === 'dusk'
+				? 'fading light'
+				: phase === 'night'
+					? 'the available light'
+					: 'early light';
 		const repairTime = (value: string) => value
-			.replace(/\bfirst light\b/gi, isMorning ? 'early light' : 'late-afternoon light')
-			.replace(/\bmorning light\b/gi, isAfternoon ? 'afternoon light' : 'early light')
-			.replace(/\bmorning chill\b/gi, isAfternoon ? 'afternoon air' : 'cool air')
+			.replace(/\bfirst light\b/gi, firstLightReplacement)
+			.replace(/\bmorning light\b/gi, morningLightReplacement)
+			.replace(/\bmorning chill\b/gi, phase === 'afternoon' ? 'afternoon air' : 'cool air')
 			.replace(/\s+/g, ' ')
 			.trim();
 		const fields: Record<string, string> = {};

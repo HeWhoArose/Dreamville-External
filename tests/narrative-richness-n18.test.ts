@@ -288,6 +288,29 @@ test('N18 ACTION_SUBSTANCE accepts an explicit bounded lack of answer without re
 	assert.ok((substance?.score || 0) >= 0.50);
 });
 
+test('N18 ACTION_SUBSTANCE recognizes an observation with an explicit evidence-bounded explanation', () => {
+	const evaluation = NarrativeRichnessEvaluator.evaluate({
+		intent: makeIntent({
+			action: 'observe',
+			goal: 'determine why the beacon was lit',
+			interactionMode: 'INFORMATION_SEEKING',
+			speechIntent: false,
+			observationIntent: true,
+			informationGoal: 'determine why the beacon was lit',
+			originalText: 'I observe the perimeter to determine why the beacon was lit.',
+		}),
+		situation: makeSituation(),
+		plan: makePlan(),
+		turnPackage: turn('No evidence at the perimeter establishes who lit the beacon; its source remains unknown from this vantage.'),
+	});
+	const substance = evaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
+	assert.ok(substance);
+	assert.ok(
+		(substance?.score || 0) >= 0.50,
+		'An honest limitation tied to the available evidence should count as an information result, not be rejected as atmosphere-only narration.',
+	);
+});
+
 test('N18 scoring consumes the resolved N13 scene composition in both narration paths', async () => {
 	const fs = await import('node:fs/promises');
 	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');

@@ -663,8 +663,12 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
 
     const player = worldRepository.getPlayerLifecycle(storyId);
     const run = worldRepository.getStoryRun(storyId);
-    const locationId = player?.locationId || run?.currentLocationId;
-    const location = locationId ? worldRepository.getGeographyGraph(storyId).getNode(locationId) : undefined;
+    const retrySituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction: action.description,
+      viewerActorId: player?.actorId,
+      worldRepo: worldRepository,
+    });
     const recentTurns = state.actionHistory
       .filter((entry: any) => entry.id !== actionId && Boolean(entry.narrativeResponse || entry.description))
       .slice(-8)
@@ -698,9 +702,9 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
       sceneContext: [
         run?.startingSituation?.summary,
         run?.startingSituation?.hook,
-        location?.name,
-        location?.description,
-        location?.ambientSensory,
+        retrySituation.location?.name,
+        retrySituation.location?.description,
+        retrySituation.location?.ambientSensory,
       ].filter(Boolean).join(' '),
       continuationDirective: presentationDirective,
     } as any);

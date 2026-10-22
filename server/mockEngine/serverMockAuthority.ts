@@ -1031,7 +1031,14 @@ export class ServerMockAuthority {
       }
     }
     if (!storyCheck && !itemUseBlocked) {
-      if (this.explicitCapabilityIntentForNarration(String(freeformText))) {
+      if (groundedObservation.relevant && groundedObservation.text) {
+        // Preserve the authoritative bounded observation result. The generic freeform
+        // outcome is only appropriate when no scene-evidence resolver answered the turn.
+        committedOutcome = [
+          sceneResolution.attempted ? sceneResolution.feedback : '',
+          groundedObservation.text,
+        ].filter(Boolean).join(' ');
+      } else if (this.explicitCapabilityIntentForNarration(String(freeformText))) {
         committedOutcome = 'A special capability-related action was resolved by the canonical capability/rules layer. Narrate only the visible result and never expose capability or engine terminology.';
       } else {
         committedOutcome = 'This is an ordinary narrative/world action. No special capability was invoked. Narrate the physical and sensory result naturally and continue the scene.';

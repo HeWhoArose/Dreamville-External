@@ -871,8 +871,10 @@ export class OpeningSceneService {
 		// Prefer authored location prose; raw sensory fields may contain UI labels or
 		// stale time-of-day claims (for example, "Visual: First light" at 17:42).
 		// They are fallback evidence, not ready-made player-facing narration.
-		const sceneAnchor = OpeningSceneService.sanitizeOpeningSceneAnchor(location.ambientSensory, time.period)
-			|| OpeningSceneService.sanitizeOpeningSceneAnchor(location.description, time.period);
+		const sceneAnchor = Array.from(new Set([
+			OpeningSceneService.sanitizeOpeningSceneAnchor(location.description, time.period),
+			OpeningSceneService.sanitizeOpeningSceneAnchor(location.ambientSensory, time.period),
+		].filter(Boolean))).join(' ').slice(0, 520);
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);

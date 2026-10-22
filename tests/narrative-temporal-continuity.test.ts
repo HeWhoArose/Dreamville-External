@@ -67,3 +67,13 @@ test('information-seeking narration is still rejected when it provides only atmo
   assert.equal(result.valid, false);
   assert.match(result.errorReason || '', /does not contain a grounded answer/i);
 });
+
+test('internal occupancy diagnostics are blocked from live narration', () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const orchestrator = new MultiModelOrchestrator(repository);
+  const result = (orchestrator as any).validateNarrativeMetaLeakage(
+    'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.',
+  );
+  assert.equal(result.valid, false);
+  assert.match(result.errorReason || '', /internal test, provider, orchestration, or canonical-state terminology/i);
+});

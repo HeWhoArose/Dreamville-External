@@ -464,7 +464,13 @@ export class OpeningSceneService {
 		let generatedEvents: StructuredNarrativeEvent[] = rawEvents.map((evt: any, idx: number) => ({
 			id: evt.id || `evt_open_${storyId}_${idx}`,
 			type: evt.type || 'normal',
-			text: String(evt.text || '').trim(),
+			text: OpeningSceneService.sanitizeFixtureLeaks(
+				OpeningSceneService.sanitizeOpeningSensoryAnchor(
+					normalizeSceneSensoryForTime(String(evt.text || '').trim(), facts.time.period || facts.time.formattedHeader),
+					facts.time.period || facts.time.formattedHeader,
+				),
+				facts,
+			),
 			speaker: evt.speaker || undefined,
 			timestamp: facts.time.formattedHeader,
 		})).filter((event) =>

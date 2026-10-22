@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OpeningSceneService } from '../server/services/openingSceneService';
+import { normalizeSceneSensoryForTime } from '../server/domain/sceneSensoryPresentation';
+import { resolveGroundedObservation } from '../server/domain/sceneInteractionAuthority';
 
 function openingFacts(ambientSensory: string) {
 	return {
@@ -105,4 +107,45 @@ test('narration retry remains presentation-only for an existing committed action
 	assert.match(regenerateRoute, /state\.actionHistory\.find\(\(entry: any\) => entry\.id === actionId\)/);
 	assert.doesNotMatch(regenerateRoute, /processCustomAction|processAction\(/);
 	assert.match(regenerateRoute, /action\.narrativeResponse = generated\.turnPackage\.narrative\.join/);
+});
+
+test('structured ambient sensory evidence becomes time-consistent player-facing prose', () => {
+	const normalized = normalizeSceneSensoryForTime(
+		'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.',
+		'17:42 Afternoon',
+	);
+
+	assert.match(normalized, /Late-afternoon light over Elysium Solar Citadel/i);
+	assert.match(normalized, /Distant atmospheric sounds drift across the outskirts/i);
+	assert.match(normalized, /air carries the scent of native vegetation/i);
+	assert.match(normalized, /Firm earth holds beneath your feet/i);
+	assert.doesNotMatch(normalized, /Visual:|Sounds:|Scent:|Tactile:|first light|canonical scene projection/i);
+});
+
+test('signal-cause observation returns the known lead and an explicit evidence boundary', () => {
+	const lead = 'A distress signal from a nearby settlement hints that the same void corruption has resurfaced.';
+	const result = resolveGroundedObservation({
+		location: { id: 'loc_threshold', name: 'Threshold of the Radiance' },
+		sceneEvidence: {
+			occupancy: { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
+			events: [],
+			objects: [],
+			sensory: [],
+			environment: { features: [] },
+		},
+		nearbyEntities: [],
+	} as any, 'I observe the perimeter trying to find why the beacon was lit.', lead);
+
+	assert.equal(result.relevant, true);
+	assert.match(result.text || '', /distress signal from a nearby settlement/i);
+	assert.match(result.text || '', /void corruption/i);
+	assert.match(result.text || '', /does not establish who activated the beacon/i);
+	assert.match(result.text || '', /source and purpose remain unknown/i);
+	assert.deepEqual(result.evidence, [lead]);
+});
+
+test('authoritative custom-action outcome preserves a grounded observation instead of generic narration text', async () => {
+	const fs = await import('node:fs/promises');
+	const source = await fs.readFile(new URL('../server/mockEngine/serverMockAuthority.ts', import.meta.url), 'utf8');
+	assert.match(source, /if \(groundedObservation\.relevant && groundedObservation\.text\) \{[\s\S]*?committedOutcome = \[[\s\S]*?groundedObservation\.text[\s\S]*?\]\.filter\(Boolean\)\.join\(' '\);/);
 });

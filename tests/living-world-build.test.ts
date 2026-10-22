@@ -424,7 +424,14 @@ test('grounded observation answers the crowded-place request from canonical occu
 test('beacon investigation uses the established distress lead and does not invent its cause', () => {
   const action = 'I observe the perimeter trying to find for what reason why the beacon was lit.';
   const lead = 'A distress signal from a nearby settlement hints that the same void corruption has resurfaced.';
-  const observation = resolveGroundedObservation({} as any, action, lead);
+  const unknownSituation = {
+    location: { name: 'Threshold of the Radiance' },
+    sceneEvidence: {
+      occupancy: { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
+    },
+    nearbyEntities: [],
+  } as any;
+  const observation = resolveGroundedObservation(unknownSituation, action, lead);
 
   assert.equal(observation.relevant, true);
   assert.match(observation.text || '', /distress signal from a nearby settlement/i);
@@ -433,7 +440,7 @@ test('beacon investigation uses the established distress lead and does not inven
   assert.match(observation.limitation || '', /cause and activator are not established/i);
   assert.doesNotMatch(observation.text || '', /the beacon was lit by|the corruption activated/i);
 
-  const noLead = resolveGroundedObservation({} as any, action);
+  const noLead = resolveGroundedObservation(unknownSituation, action);
   assert.equal(noLead.relevant, true, 'an observation can still report a bounded scene limitation');
   assert.doesNotMatch(noLead.text || '', /distress signal from a nearby settlement|established lead/i,
     'without a canonical lead, the resolver must not fabricate a signal explanation');

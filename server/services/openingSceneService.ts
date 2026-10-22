@@ -868,7 +868,11 @@ export class OpeningSceneService {
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
-		const sceneAnchor = location.ambientSensory || location.description;
+		// Prefer authored location prose; raw sensory fields may contain UI labels or
+		// stale time-of-day claims (for example, "Visual: First light" at 17:42).
+		// They are fallback evidence, not ready-made player-facing narration.
+		const sceneAnchor = OpeningSceneService.sanitizeOpeningSceneAnchor(location.description, time.period)
+			|| OpeningSceneService.sanitizeOpeningSceneAnchor(location.ambientSensory, time.period);
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
@@ -888,30 +892,31 @@ export class OpeningSceneService {
 					: '';
 				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
 			}).join(' ')
-			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
-		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
-		const characterContext = [
-			character.background,
-			character.role ? 'Role: ' + character.role : '',
-			character.capabilities?.slice(0, 3).join(', '),
-		].filter(Boolean).join(' ');
-		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}${visibleObjectText ? visibleObjectText + ' ' : ''}${visiblePeopleText}`;
+			: '';
+		const p1 = `${character.name} stands at ${location.name}.${sceneAnchor ? ' ' + sceneAnchor : ''}`;
+		// Character build fields such as "Role:" and tiered capability names belong
+		// in the character UI, not in literary opening prose.
+		const characterContext = [character.background].filter(Boolean).join(' ');
+		const p2 = [characterContext, visibleObjectText, visiblePeopleText].filter(Boolean).join(' ').trim();
 		const authoredGoal = typeof agenda?.goal === 'string' && agenda.goal.trim() ? agenda.goal.trim() : '';
+		const hasSignalLead = /\b(?:distress signal|beacon|signal)\b/i.test(String(character.startingSituation || ''));
 		const p3 = narrativeMode === 'SIDE_CHARACTER'
 			? authoredGoal
-				? `The principal actor's current aim is ${authoredGoal}. You are connected to this unfolding situation, but your response and loyalties remain your decision.`
-				: 'The wider story centers on another principal actor and their goal; your place in that story is real, but your response remains your decision.'
+				? `Beyond this moment, ${authoredGoal} remains unresolved; your response and loyalties are your own.`
+				: 'Another person\'s purpose may shape events beyond this moment, but your response and loyalties remain your own.'
 			: narrativeMode === 'FREE_ROAM'
-				? 'There is no prescribed main quest here. People have their own purposes, visible opportunities may be pursued or ignored, and the direction of the journey is yours to choose.'
+				? 'People and places around you follow their own purposes; what deserves your attention is yours to decide.'
 				: authoredGoal
-					? `Your first lead is clear: ${authoredGoal}. It gives you a place to begin, not a decision you must make; how you pursue it remains yours.`
-					: `Your first lead is the unresolved matter already established: ${character.startingSituation || 'the situation unfolding around you'}. Begin there, and let your choices determine what follows.`;
+					? `A lead remains: ${authoredGoal}. What you do with it is yours to decide.`
+					: hasSignalLead
+						? 'The signal’s cause remains unresolved. Its warning is reason enough to investigate, but it does not yet explain what happened.'
+						: 'The immediate situation remains unresolved, and the next step is yours to choose.';
 
 		return {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,
 			structuredEvents: [
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.ambientSensory || `No visible occupants are established at ${location.name}.`), timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeopleText || visibleObjectText || sceneAnchor || `${location.name} is the current location.`, timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
 				{
 					id: `evt_open_${storyId}_3`,
@@ -949,6 +954,33 @@ export class OpeningSceneService {
 		}
 		return events.slice(0, 6);
 	}
+	private static sanitizeOpeningSceneAnchor(text: string | undefined, period: string): string {
+		const cleaned = String(text || '')
+			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*/gi, '')
+			.replace(/\s+/g, ' ')
+			.trim();
+		if (!cleaned) return '';
+
+		// Environmental source text is not allowed to contradict the clock. Filter
+		// only the offending sentence, preserving unrelated canonical description.
+		const phase = String(period || '').toLowerCase();
+		const incompatible: Record<string, RegExp> = {
+			predawn: /\b(?:sunrise|morning|midday|afternoon|dusk|sunset|night)\b/i,
+			dawn: /\b(?:sunset|dusk|afternoon|midday|noon|midnight)\b/i,
+			morning: /\b(?:first light|predawn|sunset|dusk|midnight|late evening)\b/i,
+			afternoon: /\b(?:first light|daybreak|dawn light|predawn|sunrise|early morning|morning light)\b/i,
+			dusk: /\b(?:first light|daybreak|dawn|predawn|sunrise|midday|noon|early morning)\b/i,
+			night: /\b(?:first light|daybreak|dawn|sunrise|morning light|afternoon light|midday|noon|sunset light)\b/i,
+		};
+		const conflict = incompatible[phase];
+		return cleaned
+			.split(/(?<=[.!?])\s+/)
+			.map((sentence) => sentence.trim())
+			.filter((sentence) => sentence && !(conflict && conflict.test(sentence)))
+			.join(' ')
+			.trim();
+	}
+
 	private static sanitizeNarrativeText(text: string): string {
 		return String(text || '')
 			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*[^.\n]+[.]?/gi, '')

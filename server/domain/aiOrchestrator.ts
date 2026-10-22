@@ -37,6 +37,7 @@ import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBud
 import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
+import { sanitizeAmbientSensoryForCurrentPhase } from './temporalNarrativeContext';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -8182,23 +8183,10 @@ export class MultiModelOrchestrator {
       Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
     };
     const forbiddenTimePhrases = forbiddenTimePhrasesByPhase[currentDayPhase] || [];
-    const promptSafeAmbientCue = (rawValue: string | undefined): string => {
-      const raw = String(rawValue || '').trim();
-      if (!raw || !/\b(?:Visual|Sounds|Scent|Tactile)\s*:/i.test(raw)) return raw;
-      return raw.split(/(?=\b(?:Visual|Sounds|Scent|Tactile)\s*:)/i)
-        .map((section) => {
-          const match = section.trim().match(/^(Visual|Sounds|Scent|Tactile)\s*:\s*([^\n.]+)/i);
-          if (!match) return '';
-          const normalized = ' ' + match[2].toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
-          // Ambient metadata can be stale; discard a conflicting cue rather than
-          // passing it to the model as evidence about the current time of day.
-          if (forbiddenTimePhrases.some((phrase) => normalized.includes(' ' + phrase + ' '))) return '';
-          return match[1] + ': ' + match[2].trim();
-        })
-        .filter(Boolean)
-        .join('. ');
-    };
-    const ambientCueForPrompt = promptSafeAmbientCue(currentSituation.location.ambientSensory);
+    const ambientCueForPrompt = sanitizeAmbientSensoryForCurrentPhase(
+      currentSituation.location.ambientSensory,
+      currentDayPhase,
+    );
     const canonicalSceneAnchor = [
       'Location ID: ' + currentSituation.location.id,
       'Location name: ' + currentSituation.location.name,

@@ -210,7 +210,7 @@ describe('Phase 18 — end-to-end turn harness', () => {
 	it('keeps the UI retry contract visible for failed story actions', async () => {
 		const fs = await import('node:fs/promises');
 		const storyView = await fs.readFile(new URL('../src/components/StoryView.tsx', import.meta.url), 'utf8');
-		assert.match(storyView, /Retry the last failed story action/);
+		assert.match(storyView, /Recover the last story action safely/);
 		assert.match(storyView, /onRetryLastAction/);
 	});
 

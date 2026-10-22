@@ -723,7 +723,7 @@ export class ServerMockAuthority {
       /no canonical destination or visible target/i.test(String(item)),
     );
     const unsupportedSignalOriginClaim = unresolvedSpatialTarget && (
-      /\b(?:where|from which|at which)\b.{0,100}\b(?:beacon|signal|source)\b.{0,40}\b(?:originate|comes? from|is coming from|was lit|was activated|was triggered)\b/i.test(params.narrativeText) ||
+      /\b(?:where|from which|at which)\b.{0,100}\b(?:beacon|signal|source)\b.{0,40}\b(?:originat(?:e|es|ed|ing)|comes? from|is coming from|was lit|was activated|was triggered)\b/i.test(params.narrativeText) ||
       /\b(?:arriv(?:e|es|ed|ing)|reach(?:es|ed|ing))\s+(?:the\s+)?(?:signal|source|settlement)\b/i.test(params.narrativeText)
     );
     const actionFidelityValid = !unsupportedSignalOriginClaim &&

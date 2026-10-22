@@ -75,14 +75,23 @@ test('current custom actions remain editable, and AI narration failure remains v
 
 test('past-action edits remain distinct from presentation-only narration regeneration', () => {
   const view = read('src/components/StoryView.tsx');
+  const client = read('src/services/apiClient.ts');
   const routes = read('server/api/gameRoutes.ts');
 
-  const presentationOnlyIndex = routes.indexOf('gameRouter.post(\'/action/narrate/regenerate\'');
-  const historyEditIndex = routes.indexOf('gameRouter.post(\'/action/history/edit\'');
+  const presentationOnlyIndex = routes.indexOf("gameRouter.post('/action/narrate/regenerate'");
+  const historyEditIndex = routes.indexOf("gameRouter.post('/action/history/edit'");
   assert.ok(historyEditIndex >= 0);
   assert.ok(presentationOnlyIndex >= 0);
   assert.notEqual(historyEditIndex, presentationOnlyIndex);
   assert.ok(view.includes('regenerateNarration(entry'));
   assert.ok(view.includes('(entry.narrativeResponse || entry.narrativeError)'), 'retry must remain available when fail-closed validation clears narration but keeps a retryable error');
   assert.ok(view.includes('editPastAction(entry'));
+
+  const retryHandlerEnd = routes.indexOf('\n gameRouter.', presentationOnlyIndex);
+  const retryHandler = routes.slice(presentationOnlyIndex, retryHandlerEnd > presentationOnlyIndex ? retryHandlerEnd : undefined);
+  assert.ok(retryHandler.includes('state.actionHistory.find((entry: any) => entry.id === actionId)'));
+  assert.ok(retryHandler.includes('generateNarrativeOnly'));
+  assert.equal(retryHandler.includes('serverMockAuthority.processAction('), false, 'retry must not re-commit the player action');
+
+  assert.ok(client.includes('shouldRetryTransientHttpResponse(response.status, contentType, responsePreview)'));
 });

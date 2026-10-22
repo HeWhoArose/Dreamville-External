@@ -982,3 +982,37 @@ test('Deterministic opening fallback respects protagonist, side-character, and f
   assert.doesNotMatch(legacyOpening.narrativeText, /first light|daybreak|dawn|sunrise|morning/i);
   assert.doesNotMatch(legacyOpening.narrativeText, /Visual:|Sounds:|Scent:|Tactile:/i);
 });
+
+
+test('stored legacy opening scenes are sanitized on retrieval without rebuilding canon', () => {
+  const opening: any = {
+    storyId: 'stale_opening_fixture',
+    worldId: 'world',
+    narrativeProfile: { mode: 'PROTAGONIST' },
+    worldName: 'Elysium',
+    startingLocationId: 'threshold',
+    startingLocationName: 'Threshold of the Radiance',
+    characterId: 'char_aelion',
+    characterName: 'Aelion Vane',
+    characterRole: 'Wanderer',
+    worldTime: { cycle: 42, period: 'Afternoon', era: 'Autumn', formattedTime: '17:42 Afternoon' },
+    startingSituation: 'A distress signal has been received.',
+    narrativeText: 'At 17:42 in the afternoon, Aelion stands at the Threshold. Visual: First light over Elysium. No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned. The distress signal continues to pulse.',
+    structuredEvents: [
+      { id: 'legacy_sensory', type: 'normal', text: 'Visual: First light over Elysium. No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.' },
+    ],
+  };
+  const run: any = { openingScene: opening };
+  let persisted = false;
+  const fakeRepository: any = {
+    getStoryRun: () => run,
+    registerStoryRun: () => { persisted = true; },
+  };
+
+  const result = OpeningSceneService.getOpeningScene('stale_opening_fixture', fakeRepository);
+  assert.ok(result);
+  assert.doesNotMatch(result!.narrativeText, /first light|Visual:|No visible occupants are currently established/i);
+  assert.match(result!.narrativeText, /distress signal continues to pulse/i);
+  assert.doesNotMatch(result!.structuredEvents[0].text, /first light|Visual:|No visible occupants/i);
+  assert.equal(persisted, true, 'the sanitized presentation should replace the stale stored opening');
+});

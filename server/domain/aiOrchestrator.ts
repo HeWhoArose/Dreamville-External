@@ -37,6 +37,7 @@ import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBud
 import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
+import { sanitizeAmbientSensoryForCurrentPhase } from './temporalNarrativeContext';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -53,10 +54,11 @@ const NARRATIVE_INFORMATION_RESPONSE_PATTERN =
 	/\b(answer|answered|answers|reply|replied|replies|respond|responded|responds|explain|explained|explains|mention|mentioned|mentions|report|reported|reports|reveal|revealed|reveals|confirm|confirmed|confirms|warn|warned|warns|tell|told|tells|said|says|whispered|whispers|admitted|admits|learned|learns|heard|hears|stated|states|state|described|describes|describe|noted|notes|note|indicated|indicates|indicate|detailed|details|detail|showed|shows|show|read|reads|recorded|records|record|documented|documents|document|outlined|outlines|outline|conveyed|conveys|convey|recounted|recounts|recount|remarked|remarks|remark|spoke|speaks|speak|confessed|confesses|confess|informed|informs|inform|clarified|clarifies|clarify|testified|testifies|testify|observed|observes|observe|found|finds|find|discovered|discovers|discover|hang|hangs|hung|stand|stands|stood|lie|lies|lay|fill|fills|filled|stretch|stretches|stretched|remain|remains|remained|glow|glows|glowing|echo|echoes|echoed|surround|surrounds|surrounded|sit|sits|sat|turn|turns|turned|catch|catches|caught|appear|appears|appeared|seem|seems|seemed)\b/i;
 
 const NARRATIVE_INFORMATION_NONANSWER_PATTERN =
-	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay|no information|no answer|gives no answer|gave no answer|reveals nothing|revealed nothing|finds nothing|found nothing|shows nothing|showed nothing|no sign|no signs|without answer|without explanation|cannot determine|could not determine|unable to determine|none claims|none could say|none can say|limited to what can be directly observed)\b/i;
+	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay|no information|no answer|gives no answer|gave no answer|reveals nothing|revealed nothing|finds nothing|found nothing|shows nothing|showed nothing|no sign|no signs|without answer|without explanation|cannot determine|could not determine|unable to determine|none claims|none could say|none can say|limited to what can be directly observed|(?:cause|reason|source|origin|motive|explanation|identity|answer) (?:is|remains|was|has been) not (?:yet )?established|not known|cannot tell from here|can't tell from here|no evidence identifies|no evidence establishes)\b/i;
 
 const NARRATIVE_INTERNAL_META_LEAK_PATTERNS: RegExp[] = [
 	/\b(?:the )?125[- ]turn (?:integration stress test|stress test|integration test)(?: cycle| run| session)?\b/i,
+	/\bNo visible occupants are (?:currently )?established in the canonical scene projection\b/i,
 	/\b(?:integration|stress) test(?:ing)? (?:cycle|run|session)\b/i,
 	/\b(?:the )?(?:canonical|authoritative) (?:world )?state (?:report|evaluation|check|verification|assertion|checkpoint)\b/i,
 	/\b(?:active|selected|primary|fallback) provider (?:is|was|remains) (?:Gemini|Groq|OpenRouter|[A-Za-z0-9._:-]+)\b/i,
@@ -8172,16 +8174,34 @@ export class MultiModelOrchestrator {
       .filter((line) => line.trim().length > 0)
       .join(' | ') || 'None';
 
+    const currentDayPhase = worldRepo.getWorldClock(storyId).getState().currentDayPhase;
+    const forbiddenTimePhrasesByPhase: Record<string, string[]> = {
+      Predawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'night', 'midnight'],
+      Dawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'midnight'],
+      Morning: ['first light', 'dawn', 'predawn', 'sunset', 'dusk', 'midnight', 'late evening'],
+      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midnight', 'early morning', 'morning'],
+      Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
+      Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
+    };
+    const forbiddenTimePhrases = forbiddenTimePhrasesByPhase[currentDayPhase] || [];
+    const ambientCueForPrompt = sanitizeAmbientSensoryForCurrentPhase(
+      currentSituation.location.ambientSensory,
+      currentDayPhase,
+    );
     const canonicalSceneAnchor = [
-      `Location ID: ${currentSituation.location.id}`,
-      `Location name: ${currentSituation.location.name}`,
-      currentSituation.location.regionId ? `Region: ${currentSituation.location.regionId}` : '',
-      currentSituation.location.description ? `Canonical description: ${currentSituation.location.description}` : '',
-      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
-      `Canonical world time: ${currentSituation.worldTime}`,
-      `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
-      `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
-      currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
+      'Location ID: ' + currentSituation.location.id,
+      'Location name: ' + currentSituation.location.name,
+      currentSituation.location.regionId ? 'Region: ' + currentSituation.location.regionId : '',
+      currentSituation.location.description ? 'Canonical description: ' + currentSituation.location.description : '',
+      ambientCueForPrompt ? 'Canonical ambient/sensory cues (non-authoritative for time): ' + ambientCueForPrompt : '',
+      'Canonical world time: ' + currentSituation.worldTime,
+      'CANONICAL TIME AUTHORITY: The current day phase is ' + currentDayPhase + '. The world clock overrides every previous narration and ambient cue. Do not repeat any contradictory time-of-day language from history.',
+      forbiddenTimePhrases.length
+        ? 'Forbidden time-of-day phrases for this turn: ' + forbiddenTimePhrases.join(', ') + '.'
+        : '',
+      'Visible entities: ' + (currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'),
+      'Visible current-scene events (canonical or projected): ' + canonicalSceneEventContext,
+      currentSituation.activeDialogue ? 'Active dialogue: ' + currentSituation.activeDialogue.speakerName + ': ' + currentSituation.activeDialogue.text : '',
       'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
       'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
     ].filter(Boolean).join('\n');
@@ -8197,8 +8217,11 @@ export class MultiModelOrchestrator {
       'Substance has priority over flourish. Every paragraph must either depict a concrete current-turn action, reveal a canon-grounded observation, show an immediate reaction/consequence, or establish a specific unresolved detail. Do not spend a paragraph merely describing atmosphere that does not change what the player knows or what is happening.',
       'Do not pad short actions into poetic scene-setting. The player action is the reason this turn exists; move the scene forward because of it.',
       'When the current action contains multiple concrete steps, resolve each observable step in order instead of stopping after the first movement.',
+      playerIntent.interactionMode === 'PASSIVE_OBSERVATION'
+        ? 'This is passive observation, not dialogue or an unrequested journey. Report only clues supported by the current canonical scene, visible entities, visible events, or the established lead in recent committed story context. If those sources do not reveal who activated a beacon or why, clearly state that the cause is not established from the current vantage point; distinguish that bounded lack of evidence from a claim that nothing happened. Do not invent a cause, hidden mechanism, informant, or unseen object, and do not turn the observation into speech.'
+        : '',
       isInformationSeekingAction
-        ? 'This is an information-seeking action. The minimum useful response is: reach the relevant source already established in context, then perform only the kind of information gathering the player actually requested. If the player says listen, hear, overhear, or eavesdrop, the protagonist is listening only; do not make the protagonist ask, answer, speak, call out, or raise their voice unless the player also explicitly requested speech. Then provide the specific information that can be learned from canonical context or clearly state that the available people provide no reliable answer. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation that is not supported by the supplied context.'
+        ? 'This is an information-seeking action. The minimum useful response is: consult only a relevant source already established in context, then perform only the kind of information gathering the player actually requested. If the player says listen, hear, overhear, or eavesdrop, the protagonist is listening only; do not make the protagonist ask, answer, speak, call out, or raise their voice unless the player also explicitly requested speech. Provide specific information supported by canonical context or clearly state what remains unknown. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation not supported by the supplied context.'
         : '',
       'Prefer concrete nouns, specific observations, reactions, facts, and consequences over decorative adjectives and repeated sensory metaphors.',
       authoritativeOutcome

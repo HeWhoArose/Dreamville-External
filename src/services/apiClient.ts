@@ -1,3 +1,4 @@
+import { shouldRetryTransientHttpResponse } from './apiRetryPolicy';
 import {
   ExternalViewState,
   ActionRequest,
@@ -75,14 +76,25 @@ const fetch = async (url: RequestInfo | URL, init?: RequestInit): Promise<Respon
     headers['X-Story-ID'] = globalActiveStoryId;
   }
   finalInit.headers = headers;
+  const method = String(finalInit.method || 'GET').toUpperCase();
 
   let attempts = 0;
   const maxAttempts = 4;
   while (attempts < maxAttempts) {
     try {
       const response = await originalFetch(url, finalInit);
-      // Retry transient 502/503/504 gateway errors when server is restarting
-      if ([502, 503, 504].includes(response.status) && attempts < maxAttempts - 1) {
+      // Gateway failures can be transient, and HTML 503 pages are often the
+      // server's startup/warmup response. Do not replay JSON 503s: those are
+      // application results such as narration-provider exhaustion, and replaying
+      // them silently repeats expensive model calls for the same action.
+      const contentType = response.headers.get('content-type') || '';
+      const responsePreview = response.status === 503
+        ? await response.clone().text().catch(() => '')
+        : '';
+      if (
+        shouldRetryTransientHttpResponse(response.status, contentType, responsePreview, method) &&
+        attempts < maxAttempts - 1
+      ) {
         attempts++;
         await new Promise((resolve) => setTimeout(resolve, attempts * 700));
         continue;

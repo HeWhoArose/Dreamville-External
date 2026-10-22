@@ -841,7 +841,7 @@ export class InMemoryWorldRepository implements WorldRepository {
           coordinates: char.startingLocation?.coordinates || { x: 50, y: 50 },
           accessible: char.startingLocation?.accessible !== undefined ? Boolean(char.startingLocation.accessible) : true,
           discovered: true,
-          ambientSensory: char.startingLocation?.ambientSensory || `Visual: First light over ${world.title}. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.`,
+          ambientSensory: char.startingLocation?.ambientSensory || `The air carries the distant sounds of ${world.title}, with native vegetation nearby and firm earth underfoot.`,
           provenance: 'generated' as const,
           ...(char.startingLocation?.population && typeof char.startingLocation.population === 'object'
             ? { population: JSON.parse(JSON.stringify(char.startingLocation.population)) }

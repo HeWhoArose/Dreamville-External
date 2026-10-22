@@ -444,10 +444,24 @@ export class SceneInteractionAuthority {
 export function resolveGroundedObservation(
   situation: CurrentSituation,
   actionText: string,
+  establishedLeadText = '',
 ): GroundedObservation {
   const normalized = String(actionText || '').toLowerCase();
   const crowdIntent = /\b(?:crowd|crowded|busy|bustling|throng|lots? of people|many people|where (?:are|is) (?:the )?people|public|market|populated)\b/.test(normalized);
-  const observationIntent = /\b(?:look|looks|looked|look around|observe|scan|survey|search|inspect|examine|watch|notice|listen|hear)\b/.test(normalized);
+  const observationIntent = /\b(?:look|looks|looked|look around|observe|scan|survey|search|inspect|examine|watch|notice|listen|hear|investigate|find out|determine)\b/.test(normalized);
+  const causalQuestion = /\b(?:why|reason|cause|what (?:caused|made|triggered)|who (?:lit|activated|sent|set off|triggered)|source|origin|purpose)\b/.test(normalized);
+  const clueQuestion = /\b(?:beacon|signal|flare|distress|alarm|marker|pulse)\b/.test(normalized);
+  const leadText = String(establishedLeadText || '').trim();
+  const leadEstablishesSignal = /\b(?:beacon|signal|flare|distress|alarm|marker|pulse)\b/i.test(leadText);
+  if (observationIntent && causalQuestion && clueQuestion && leadText && leadEstablishesSignal) {
+    const lead = leadText.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
+    return {
+      relevant: true,
+      text: `The established lead is that ${lead.charAt(0).toLowerCase() + lead.slice(1)}. The currently visible perimeter evidence does not establish who activated the beacon or what caused it to be lit, so its source and purpose remain unknown from this vantage.`,
+      evidence: [lead],
+      limitation: 'The signal or beacon is an established lead, but its cause and activator are not established by current visible evidence.',
+    };
+  }
   if (!crowdIntent && !observationIntent) {
     return { relevant: false, evidence: [] };
   }

@@ -871,8 +871,8 @@ export class OpeningSceneService {
 		// Prefer authored location prose; raw sensory fields may contain UI labels or
 		// stale time-of-day claims (for example, "Visual: First light" at 17:42).
 		// They are fallback evidence, not ready-made player-facing narration.
-		const sceneAnchor = OpeningSceneService.sanitizeOpeningSceneAnchor(location.description, time.period)
-			|| OpeningSceneService.sanitizeOpeningSceneAnchor(location.ambientSensory, time.period);
+		const sceneAnchor = OpeningSceneService.sanitizeOpeningSceneAnchor(location.ambientSensory, time.period)
+			|| OpeningSceneService.sanitizeOpeningSceneAnchor(location.description, time.period);
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
@@ -893,7 +893,7 @@ export class OpeningSceneService {
 				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
 			}).join(' ')
 			: '';
-		const p1 = `${character.name} stands at ${location.name}.${sceneAnchor ? ' ' + sceneAnchor : ''}`;
+		const p1 = `${character.name} stands within ${location.name}.${sceneAnchor ? ' ' + sceneAnchor : ''}`;
 		// Character build fields such as "Role:" and tiered capability names belong
 		// in the character UI, not in literary opening prose.
 		const characterContext = [character.background].filter(Boolean).join(' ');

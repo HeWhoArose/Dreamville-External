@@ -8172,16 +8172,47 @@ export class MultiModelOrchestrator {
       .filter((line) => line.trim().length > 0)
       .join(' | ') || 'None';
 
+    const currentDayPhase = worldRepo.getWorldClock(storyId).getState().currentDayPhase;
+    const forbiddenTimePhrasesByPhase: Record<string, string[]> = {
+      Predawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'night', 'midnight'],
+      Dawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'midnight'],
+      Morning: ['first light', 'dawn', 'predawn', 'sunset', 'dusk', 'midnight', 'late evening'],
+      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midnight', 'early morning', 'morning'],
+      Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
+      Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
+    };
+    const forbiddenTimePhrases = forbiddenTimePhrasesByPhase[currentDayPhase] || [];
+    const promptSafeAmbientCue = (rawValue: string | undefined): string => {
+      const raw = String(rawValue || '').trim();
+      if (!raw || !/\b(?:Visual|Sounds|Scent|Tactile)\s*:/i.test(raw)) return raw;
+      return raw.split(/(?=\b(?:Visual|Sounds|Scent|Tactile)\s*:)/i)
+        .map((section) => {
+          const match = section.trim().match(/^(Visual|Sounds|Scent|Tactile)\s*:\s*([^\n.]+)/i);
+          if (!match) return '';
+          const normalized = ' ' + match[2].toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+          // Ambient metadata can be stale; discard a conflicting cue rather than
+          // passing it to the model as evidence about the current time of day.
+          if (forbiddenTimePhrases.some((phrase) => normalized.includes(' ' + phrase + ' '))) return '';
+          return match[1] + ': ' + match[2].trim();
+        })
+        .filter(Boolean)
+        .join('. ');
+    };
+    const ambientCueForPrompt = promptSafeAmbientCue(currentSituation.location.ambientSensory);
     const canonicalSceneAnchor = [
-      `Location ID: ${currentSituation.location.id}`,
-      `Location name: ${currentSituation.location.name}`,
-      currentSituation.location.regionId ? `Region: ${currentSituation.location.regionId}` : '',
-      currentSituation.location.description ? `Canonical description: ${currentSituation.location.description}` : '',
-      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
-      `Canonical world time: ${currentSituation.worldTime}`,
-      `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
-      `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
-      currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
+      'Location ID: ' + currentSituation.location.id,
+      'Location name: ' + currentSituation.location.name,
+      currentSituation.location.regionId ? 'Region: ' + currentSituation.location.regionId : '',
+      currentSituation.location.description ? 'Canonical description: ' + currentSituation.location.description : '',
+      ambientCueForPrompt ? 'Canonical ambient/sensory cues (non-authoritative for time): ' + ambientCueForPrompt : '',
+      'Canonical world time: ' + currentSituation.worldTime,
+      'CANONICAL TIME AUTHORITY: The current day phase is ' + currentDayPhase + '. The world clock overrides every previous narration and ambient cue. Do not repeat any contradictory time-of-day language from history.',
+      forbiddenTimePhrases.length
+        ? 'Forbidden time-of-day phrases for this turn: ' + forbiddenTimePhrases.join(', ') + '.'
+        : '',
+      'Visible entities: ' + (currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'),
+      'Visible current-scene events (canonical or projected): ' + canonicalSceneEventContext,
+      currentSituation.activeDialogue ? 'Active dialogue: ' + currentSituation.activeDialogue.speakerName + ': ' + currentSituation.activeDialogue.text : '',
       'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
       'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
     ].filter(Boolean).join('\n');
@@ -8197,8 +8228,11 @@ export class MultiModelOrchestrator {
       'Substance has priority over flourish. Every paragraph must either depict a concrete current-turn action, reveal a canon-grounded observation, show an immediate reaction/consequence, or establish a specific unresolved detail. Do not spend a paragraph merely describing atmosphere that does not change what the player knows or what is happening.',
       'Do not pad short actions into poetic scene-setting. The player action is the reason this turn exists; move the scene forward because of it.',
       'When the current action contains multiple concrete steps, resolve each observable step in order instead of stopping after the first movement.',
+      playerIntent.interactionMode === 'PASSIVE_OBSERVATION'
+        ? 'This is passive observation, not dialogue or an unrequested journey. Report only clues supported by the current canonical scene, visible entities, visible events, or the established lead in recent committed story context. If those sources do not reveal who activated a beacon or why, clearly state that the cause is not established from the current vantage point; distinguish that bounded lack of evidence from a claim that nothing happened. Do not invent a cause, hidden mechanism, informant, or unseen object, and do not turn the observation into speech.'
+        : '',
       isInformationSeekingAction
-        ? 'This is an information-seeking action. The minimum useful response is: reach the relevant source already established in context, then perform only the kind of information gathering the player actually requested. If the player says listen, hear, overhear, or eavesdrop, the protagonist is listening only; do not make the protagonist ask, answer, speak, call out, or raise their voice unless the player also explicitly requested speech. Then provide the specific information that can be learned from canonical context or clearly state that the available people provide no reliable answer. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation that is not supported by the supplied context.'
+        ? 'This is an information-seeking action. The minimum useful response is: consult only a relevant source already established in context, then perform only the kind of information gathering the player actually requested. If the player says listen, hear, overhear, or eavesdrop, the protagonist is listening only; do not make the protagonist ask, answer, speak, call out, or raise their voice unless the player also explicitly requested speech. Provide specific information supported by canonical context or clearly state what remains unknown. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation not supported by the supplied context.'
         : '',
       'Prefer concrete nouns, specific observations, reactions, facts, and consequences over decorative adjectives and repeated sensory metaphors.',
       authoritativeOutcome

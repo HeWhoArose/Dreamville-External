@@ -872,9 +872,13 @@ export class OpeningSceneService {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
 		// Ambient sensory inputs may be structured fields (for example, "Visual: First light...").
-		// Strip those labels and their values before they can leak into player-facing prose;
-		// temporal details in authored prose must not override the canonical world clock.
-		const sceneAnchor = OpeningSceneService.sanitizeNarrativeText(location.ambientSensory || location.description || '').replace(/\s+/g, ' ').trim();
+		// Convert them into safe player-facing prose and remove sentence-level time claims
+		// that contradict the canonical opening clock. Sensory metadata is not an authority
+		// for changing time in the world.
+		const sceneAnchor = OpeningSceneService.sanitizeOpeningSensoryAnchor(
+			location.ambientSensory || location.description || '',
+			time.period || time.formattedHeader,
+		);
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
@@ -958,9 +962,33 @@ export class OpeningSceneService {
 	private static sanitizeNarrativeText(text: string): string {
 		return String(text || '')
 			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*[^.\n]+[.]?/gi, '')
+			.replace(/\bNo visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned\.?/gi, 'No one is immediately visible nearby, and the current view does not establish whether anyone else is present.')
 			.replace(/\bRight now\s*:?/gi, '')
 			.replace(/\bYour turn\s*:?/gi, '')
 			.replace(/\bWhat do you do\??/gi, '')
+			.replace(/\s{2,}/g, ' ')
+			.trim();
+	}
+
+	private static sanitizeOpeningSensoryAnchor(text: string, canonicalTime: string): string {
+		const sanitized = OpeningSceneService.sanitizeNarrativeText(text).replace(/\s+/g, ' ').trim();
+		const match = String(canonicalTime || '').match(/\b(Predawn|Dawn|Morning|Afternoon|Dusk|Night)\b/i);
+		const phase = match?.[1]?.toLowerCase() || '';
+		const conflictingTerms: Record<string, RegExp> = {
+			predawn: /\b(?:sunset|dusk|afternoon|midday|noon|night|midnight|first light|sunrise|morning)\b/i,
+			dawn: /\b(?:sunset|dusk|afternoon|midday|noon|night|midnight|late evening)\b/i,
+			morning: /\b(?:first light|predawn|sunset|dusk|midnight|late evening)\b/i,
+			afternoon: /\b(?:first light|daybreak|dawn|predawn|sunrise|early morning|morning|midnight)\b/i,
+			dusk: /\b(?:first light|daybreak|dawn|predawn|sunrise|midday|noon|early morning|morning)\b/i,
+			night: /\b(?:first light|daybreak|dawn|predawn|sunrise|morning|afternoon|midday|noon|sunset)\b/i,
+		};
+		const contradiction = conflictingTerms[phase];
+		if (!contradiction) return sanitized;
+		return sanitized
+			.split(/(?<=[.!?])\s+/)
+			.filter((sentence) => !contradiction.test(sentence))
+			.join(' ')
+			.replace(/\s+/g, ' ')
 			.trim();
 	}
 

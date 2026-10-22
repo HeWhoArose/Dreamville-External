@@ -43,6 +43,7 @@ import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from '..
 import { NarrativePacingEngine } from '../domain/narrativePacingEngine';
 import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
 import type { PlayerIntent } from '../domain/playerIntentInterpreter';
+import { normalizeSceneSensoryForTime } from '../domain/sceneSensoryPresentation';
 
 /**
  * ServerMockAuthority
@@ -671,7 +672,7 @@ export class ServerMockAuthority {
       emotionalBeat: 'The situation responds to the player action.',
       emotionalMovement: params.actionResolution.outcomeTier === 'NO_CHECK' ? 'HOLD' : 'RISING',
       physicalBeat: params.actionResolution.actualEffect || 'A visible consequence follows the action.',
-      sensoryAnchor: params.situation.location.ambientSensory,
+      sensoryAnchor: normalizeSceneSensoryForTime(params.situation.location.ambientSensory, params.situation.worldTime),
       dialogueAct: params.intent.speechIntent ? 'RESPOND' : 'NONE',
       subtext: [], reveal: [], withhold: [],
       reactionPriority: (params.actionResolution.targetEntityIds || [])
@@ -1441,7 +1442,7 @@ export class ServerMockAuthority {
           run?.startingSituation?.hook,
           location?.name,
           location?.description,
-          location?.ambientSensory,
+          normalizeSceneSensoryForTime(location?.ambientSensory, worldRepository.getWorldClock(targetStoryId).getState().currentDayPhase),
         ].filter(Boolean).join(' '),
         continuationDirective: (options as any)?.narrationDirective
           ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective
@@ -1817,7 +1818,7 @@ export class ServerMockAuthority {
       .getAllNodes()
       .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId);
     const atmosphere = this.formatNarrativeAtmosphere(
-      location?.ambientSensory || location?.description || 'The surroundings remain still.',
+      normalizeSceneSensoryForTime(location?.ambientSensory, worldRepository.getWorldClock(storyId).getState().currentDayPhase) || location?.description || 'The surroundings remain still.',
     );
     const normalized = actionText.toLowerCase();
     const continuity = narrativeContinuityEngine.getState(worldRepository, storyId);

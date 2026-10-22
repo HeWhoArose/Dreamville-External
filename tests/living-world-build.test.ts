@@ -434,7 +434,9 @@ test('beacon investigation uses the established distress lead and does not inven
   assert.doesNotMatch(observation.text || '', /the beacon was lit by|the corruption activated/i);
 
   const noLead = resolveGroundedObservation({} as any, action);
-  assert.equal(noLead.relevant, false, 'without a canonical lead, the resolver must not fabricate a signal explanation');
+  assert.equal(noLead.relevant, true, 'an observation can still report a bounded scene limitation');
+  assert.doesNotMatch(noLead.text || '', /distress signal from a nearby settlement|established lead/i,
+    'without a canonical lead, the resolver must not fabricate a signal explanation');
 });
 
 test('unknown NPC names stay out of player-facing projections and prompts until identity is learned', () => {

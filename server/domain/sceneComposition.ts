@@ -4,6 +4,7 @@ import type { NarrativeContinuityState } from './narrativeContinuityState';
 import type { NarrativePacingContract } from './narrativePacingEngine';
 import type { InformationReveal } from './narrativeDirector';
 import type { StoryBeatContract } from './storyBeatDirector';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 
 export type SceneCompositionBeatType =
 	| 'OBSERVATION'
@@ -149,7 +150,7 @@ export class SceneCompositionEngine {
 			: intent.interactionMode === 'COMBAT'
 				? 'Show the attempted physical action and only the canon-grounded immediate response.'
 				: 'Anchor the beat in what physically changes, is observed, or remains still because of the player action.';
-		const sensoryAnchor = text(situation.location?.ambientSensory) || undefined;
+		const sensoryAnchor = text(normalizeSceneSensoryForTime(situation.location?.ambientSensory, situation.worldTime)) || undefined;
 		const fallbackReason = [
 			!continuityState ? 'continuity unavailable' : '',
 			!sensoryAnchor ? 'no ambient sensory anchor supplied' : '',

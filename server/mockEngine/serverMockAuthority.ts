@@ -1480,9 +1480,9 @@ export class ServerMockAuthority {
           run?.openingScene?.narrativeText,
           run?.startingSituation?.summary,
           run?.startingSituation?.hook,
-          location?.name,
-          location?.description,
-          location?.ambientSensory,
+          resolutionSituation.location?.name,
+          resolutionSituation.location?.description,
+          resolutionSituation.location?.ambientSensory,
         ].filter(Boolean).join(' '),
         continuationDirective: (options as any)?.narrationDirective
           ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective

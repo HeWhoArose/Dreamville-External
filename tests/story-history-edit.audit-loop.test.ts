@@ -87,7 +87,7 @@ test('past-action edits remain distinct from presentation-only narration regener
   assert.ok(view.includes('(entry.narrativeResponse || entry.narrativeError)'), 'retry must remain available when fail-closed validation clears narration but keeps a retryable error');
   assert.ok(view.includes('editPastAction(entry'));
 
-  const retryHandlerEnd = routes.indexOf('\n gameRouter.', presentationOnlyIndex);
+  const retryHandlerEnd = routes.indexOf('\ngameRouter.', presentationOnlyIndex + 40);
   const retryHandler = routes.slice(presentationOnlyIndex, retryHandlerEnd > presentationOnlyIndex ? retryHandlerEnd : undefined);
   assert.ok(retryHandler.includes('state.actionHistory.find((entry: any) => entry.id === actionId)'));
   assert.ok(retryHandler.includes('generateNarrativeOnly'));

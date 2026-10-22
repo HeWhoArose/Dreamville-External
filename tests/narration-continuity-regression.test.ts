@@ -122,6 +122,29 @@ test('narration continuity rejects information-seeking turns that stop at atmosp
 	assert.equal(readReport.valid, true);
 });
 
+test('narration continuity accepts a bounded evidence limitation for an observed beacon', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'narration_beacon_limitation_regression';
+	repository.seedStory(storyId);
+	const orchestrator = new MultiModelOrchestrator(repository);
+	const action = 'I observe the perimeter trying to determine why the beacon was lit.';
+	const intent = {
+		action: 'observe',
+		originalText: action,
+		interactionMode: 'PASSIVE_OBSERVATION',
+		observationIntent: true,
+		speechIntent: false,
+		informationGoal: 'determine why the beacon was lit',
+	};
+	const boundedAnswer = 'No evidence at the visible perimeter establishes who lit the beacon, and its source remains unknown from this vantage.';
+	const continuity = (orchestrator as any).validateNarrativeInformationContinuity(
+		boundedAnswer,
+		action,
+		intent,
+	);
+	assert.equal(continuity.valid, true, continuity.errorReason || 'an explicit evidence limitation should count as an honest result');
+});
+
 test('deterministic narration fallback preserves substance for movement-plus-inquiry actions', async () => {
 	const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
 	const storyId = 'narration_fallback_information_regression_' + Date.now();

@@ -719,8 +719,20 @@ export class ServerMockAuthority {
     const consequenceVerbOverlap = /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(params.narrativeText) && /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(consequenceText);
     const consequenceOverlap = liveNarrativeLexicalOverlap(params.narrativeText, consequenceText) >= 0.08;
     const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled)\b/i.test(params.narrativeText);
-    const actionFidelityValid = observationLike || (actionAnchor && (consequenceSignal || consequenceVerbOverlap));
-    const actionFidelityReason = actionFidelityValid ? undefined : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
+    const unresolvedSpatialTarget = (params.actionResolution.uncertainty || []).some((item) =>
+      /no canonical destination or visible target/i.test(String(item)),
+    );
+    const unsupportedSignalOriginClaim = unresolvedSpatialTarget && (
+      /\b(?:where|from which|at which)\b.{0,100}\b(?:beacon|signal|source)\b.{0,40}\b(?:originate|comes? from|is coming from|was lit|was activated|was triggered)\b/i.test(params.narrativeText) ||
+      /\b(?:arriv(?:e|es|ed|ing)|reach(?:es|ed|ing))\s+(?:the\s+)?(?:signal|source|settlement)\b/i.test(params.narrativeText)
+    );
+    const actionFidelityValid = !unsupportedSignalOriginClaim &&
+      (observationLike || (actionAnchor && (consequenceSignal || consequenceVerbOverlap)));
+    const actionFidelityReason = actionFidelityValid
+      ? undefined
+      : unsupportedSignalOriginClaim
+        ? 'Narration assigns an unverified origin or destination to a signal when no canonical spatial target is established.'
+        : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
     return { accepted: richness.decision === 'PASS' && pacing.valid && actionFidelityValid, richness, pacingValid: pacing.valid, pacingReason: pacing.reason, actionFidelity: { valid: actionFidelityValid, reason: actionFidelityReason } };
   }
   public async processCustomAction(

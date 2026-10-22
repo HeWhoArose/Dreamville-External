@@ -689,3 +689,56 @@ test('a picked-up starter-world object stays gone across a full repository resta
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('current situation omits time-incompatible sensory claims without mutating authored location data', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const ambientSensory = 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.';
+	const location = parkNode('loc_time_sensitive_threshold', {
+		name: 'Threshold of the Radiance',
+		description: 'A broad stone threshold overlooks the outer approaches to the citadel.',
+		ambientSensory,
+		archetype: 'GENERIC',
+	});
+	const world = worldFixture([location]);
+	const storyId = createStory(repository, world, location.id, '_temporal_sensory');
+
+	const clock = repository.getWorldClock(storyId);
+	const afternoonState = clock.exportState();
+	clock.importState({
+		...afternoonState,
+		timestamp: { ...afternoonState.timestamp, year: 42, month: 10, day: 14, hour: 17, minute: 42, second: 0 },
+		currentDayPhase: 'Afternoon',
+	});
+	const afternoon = CurrentSituationBuilder.build({
+		storyId,
+		worldRepo: repository,
+		playerAction: 'I rush towards the signal.',
+	});
+	const afternoonSensory = [
+		afternoon.location.ambientSensory || '',
+		...(afternoon.sceneEvidence.sensory || []),
+	].join(' ');
+
+	assert.doesNotMatch(afternoonSensory, /first light|daybreak|dawn|sunrise|morning/i);
+	assert.doesNotMatch(afternoonSensory, /Visual:|Sounds:|Scent:|Tactile:/i);
+	assert.match(afternoonSensory, /distant atmosphere/i);
+	assert.match(afternoonSensory, /native vegetation/i);
+	assert.match(afternoonSensory, /firm earth/i);
+	assert.equal(repository.getGeographyGraph(storyId).getNode(location.id)?.ambientSensory, ambientSensory,
+		'projection must not rewrite the canonical authored sensory field');
+
+	const dawnState = clock.exportState();
+	clock.importState({
+		...dawnState,
+		timestamp: { ...dawnState.timestamp, hour: 7, minute: 0, second: 0 },
+		currentDayPhase: 'Dawn',
+	});
+	const dawn = CurrentSituationBuilder.build({
+		storyId,
+		worldRepo: repository,
+		playerAction: 'I look across the threshold.',
+	});
+	assert.match(dawn.location.ambientSensory || '', /first light/i,
+		'valid dawn imagery remains available when the canonical clock agrees');
+});

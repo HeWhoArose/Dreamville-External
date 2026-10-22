@@ -13,6 +13,7 @@ import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
 import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
+import { normalizeSceneSensoryForTime } from '../domain/sceneSensoryPresentation';
 
 function parseLooseOpeningResponse(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
 	const cleaned = String(rawText || '')
@@ -877,7 +878,10 @@ export class OpeningSceneService {
 		// for changing time in the world.
 		const openingClock = time.period || time.formattedHeader;
 		const sceneAnchor =
-			OpeningSceneService.sanitizeOpeningSensoryAnchor(location.ambientSensory || '', openingClock) ||
+			OpeningSceneService.sanitizeOpeningSensoryAnchor(
+				normalizeSceneSensoryForTime(location.ambientSensory, openingClock),
+				openingClock,
+			) ||
 			OpeningSceneService.sanitizeOpeningSensoryAnchor(location.description || '', openingClock) ||
 			'The immediate surroundings offer no further established sensory detail.';
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>

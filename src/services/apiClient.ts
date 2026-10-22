@@ -82,7 +82,7 @@ const fetch = async (url: RequestInfo | URL, init?: RequestInit): Promise<Respon
   // prevents the client from receiving the response. Blindly replaying POST /action
   // then executes that action twice. Recovery for this endpoint must first inspect the
   // committed Story Run; only presentation-only regeneration is safe to retry.
-  const canonicalActionSubmission = method === 'POST' && requestUrl.split('?')[0].replace(/\\/$/, '').endsWith('/action');
+  const canonicalActionSubmission = method === 'POST' && requestUrl.split('?')[0].replace(/\/$/, '').endsWith('/action');
 
   let attempts = 0;
   const maxAttempts = 4;

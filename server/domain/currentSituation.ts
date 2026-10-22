@@ -24,7 +24,6 @@ export function projectAmbientSensoryForWorldTime(value: unknown, phase: DayPhas
 		.filter(Boolean);
 
 	const dawnPhases = new Set<DayPhase>(['Predawn', 'Dawn']);
-	const daylightPhases = new Set<DayPhase>(['Predawn', 'Dawn', 'Morning', 'Afternoon', 'Dusk']);
 	const duskPhases = new Set<DayPhase>(['Dusk', 'Night']);
 
 	const compatible = clauses.filter((clause) => {

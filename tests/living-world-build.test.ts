@@ -742,3 +742,34 @@ test('current situation omits time-incompatible sensory claims without mutating 
 	assert.match(dawn.location.ambientSensory || '', /first light/i,
 		'valid dawn imagery remains available when the canonical clock agrees');
 });
+
+
+test('opening context filters stale temporal sensory cues instead of reintroducing raw authored prose', () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const ambientSensory = 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.';
+  const location = parkNode('loc_opening_time_sensitive_threshold', {
+    name: 'Threshold of the Radiance',
+    description: 'A broad stone threshold overlooks the outer approaches to the citadel.',
+    ambientSensory,
+    archetype: 'GENERIC',
+  });
+  const world = worldFixture([location]);
+  const storyId = createStory(repository, world, location.id, '_opening_temporal_sensory');
+  const clock = repository.getWorldClock(storyId);
+  const state = clock.exportState();
+  clock.importState({
+    ...state,
+    timestamp: { ...state.timestamp, year: 42, month: 10, day: 14, hour: 17, minute: 42, second: 0 },
+    currentDayPhase: 'Afternoon',
+  });
+
+  const opening = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: repository });
+  const openingText = opening.assembledText + '\\n' + JSON.stringify(opening.chunks);
+
+  assert.doesNotMatch(openingText, /first light|daybreak|sunrise|Visual:|Sounds:|Scent:|Tactile:/i);
+  assert.match(openingText, /distant atmosphere/i);
+  assert.match(openingText, /native vegetation/i);
+  assert.match(openingText, /firm earth/i);
+  assert.equal(repository.getGeographyGraph(storyId).getNode(location.id)?.ambientSensory, ambientSensory,
+    'opening projection must not rewrite canonical authored sensory data');
+});

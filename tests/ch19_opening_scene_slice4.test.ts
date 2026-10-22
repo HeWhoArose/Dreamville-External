@@ -962,4 +962,9 @@ test('Deterministic opening fallback respects protagonist, side-character, and f
   const freeRoamFacts = { ...baseFacts, world: { ...baseFacts.world, narrativeProfile: { mode: 'FREE_ROAM' } } };
   const freeRoam = OpeningSceneService.synthesizeDeterministicOpening(freeRoamFacts, 'mode_free');
   assert.match(freeRoam.narrativeText, /There is no prescribed main quest/i);
+
+  // Deterministic fallback is player-facing prose, never a raw context dump.
+  assert.doesNotMatch(protagonist.narrativeText, /No visible occupants are currently established in the canonical scene projection/i);
+  assert.doesNotMatch(protagonist.narrativeText, /\b(?:Visual|Sounds|Scent|Tactile)\s*:/i);
+  assert.doesNotMatch(protagonist.narrativeText, /first light|daybreak|dawn|sunrise|morning/i);
 });

@@ -58,6 +58,7 @@ const NARRATIVE_INFORMATION_NONANSWER_PATTERN =
 
 const NARRATIVE_INTERNAL_META_LEAK_PATTERNS: RegExp[] = [
 	/\b(?:the )?125[- ]turn (?:integration stress test|stress test|integration test)(?: cycle| run| session)?\b/i,
+	/\bNo visible occupants are (?:currently )?established in the canonical scene projection\b/i,
 	/\b(?:integration|stress) test(?:ing)? (?:cycle|run|session)\b/i,
 	/\b(?:the )?(?:canonical|authoritative) (?:world )?state (?:report|evaluation|check|verification|assertion|checkpoint)\b/i,
 	/\b(?:active|selected|primary|fallback) provider (?:is|was|remains) (?:Gemini|Groq|OpenRouter|[A-Za-z0-9._:-]+)\b/i,

@@ -86,3 +86,20 @@ test('past-action edits remain distinct from presentation-only narration regener
   assert.ok(view.includes('(entry.narrativeResponse || entry.narrativeError)'), 'retry must remain available when fail-closed validation clears narration but keeps a retryable error');
   assert.ok(view.includes('editPastAction(entry'));
 });
+
+test('ambiguous action recovery never resubmits a committed world action', () => {
+  const app = read('src/App.tsx');
+  const client = read('src/services/apiClient.ts');
+
+  assert.ok(app.includes('const handleRecoverLastAction = async'));
+  assert.ok(app.includes('apiClient.getGameState(activeStoryId)'), 'recovery must inspect server-authoritative history first');
+  assert.ok(app.includes('apiClient.regenerateNarration({'), 'recovery should retry narration for the confirmed action');
+  assert.ok(app.includes('onRetryLastAction={handleRecoverLastAction}'));
+  assert.ok(app.includes('It was not resubmitted.'));
+  assert.equal(app.includes('handleCustomAction(failedStoryAction)'), false, 'the global retry must never blindly replay the physical action');
+
+  assert.ok(client.includes('canonicalActionSubmission'));
+  assert.ok(client.includes('!canonicalActionSubmission'), 'gateway retries must exclude non-idempotent action submissions');
+  assert.ok(client.includes('outcome may already be committed'));
+});
+

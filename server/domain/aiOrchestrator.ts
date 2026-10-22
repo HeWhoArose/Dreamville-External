@@ -37,6 +37,7 @@ import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBud
 import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -7781,7 +7782,7 @@ export class MultiModelOrchestrator {
 
     const currentSceneFactualContext = [
       params.situation.location.description,
-      params.situation.location.ambientSensory,
+      normalizeSceneSensoryForTime(params.situation.location.ambientSensory, params.situation.worldTime),
       params.situation.activeDialogue ? 'Active dialogue: ' + params.situation.activeDialogue.speakerName + ': ' + params.situation.activeDialogue.text : '',
       ...params.situation.visibleEvents
         .filter((event) => event.locationId === params.situation.location.id)
@@ -8181,7 +8182,7 @@ export class MultiModelOrchestrator {
       `Location name: ${currentSituation.location.name}`,
       currentSituation.location.regionId ? `Region: ${currentSituation.location.regionId}` : '',
       currentSituation.location.description ? `Canonical description: ${currentSituation.location.description}` : '',
-      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
+      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${normalizeSceneSensoryForTime(currentSituation.location.ambientSensory, currentSituation.worldTime)}` : '',
       `Canonical world time: ${currentSituation.worldTime}`,
       `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
       `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
@@ -8232,7 +8233,7 @@ export class MultiModelOrchestrator {
         }));
     const currentSceneFactualContext = [
       currentSituation.location.description,
-      currentSituation.location.ambientSensory,
+      normalizeSceneSensoryForTime(currentSituation.location.ambientSensory, currentSituation.worldTime),
       currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
       ...currentSituation.visibleEvents.map((event) => event.summary),
       ...currentSituation.relevantLore.map((fact) => `Authorized lore: ${fact.subjectEntityId} ${fact.predicate} ${fact.objectValue}`),

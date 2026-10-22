@@ -239,6 +239,9 @@ test('deterministic opening converts sensory metadata to player-facing, time-con
 	assert.match(normalized, /atmospheric sounds/i);
 	assert.match(normalized, /scent of native vegetation/i);
 	assert.match(normalized, /firm earth holds beneath your feet/i);
+	const atNight = sanitizeAnchor('Visual: First light over the tower.', 'Cycle 42 • 23:15 • Night');
+	assert.match(atNight, /the available light over the tower/i);
+	assert.doesNotMatch(atNight, /\bfirst light\b/i);
 	assert.doesNotMatch(normalized, /\bfirst light\b|Visual:|Sounds?:|Scent:|Tactile:/i);
 
 	const withDiagnostic = sanitizeNarrative(

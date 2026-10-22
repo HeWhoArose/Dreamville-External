@@ -377,7 +377,7 @@ export const App: React.FC = () => {
     // Send a stable ID with the request and retain it for an uncertain-response
     // retry. The server's canonical command ledger rejects mismatched replays and
     // does not reapply a command that already committed.
-    const payload = { ...action, commandId, storyId: (action as any).storyId || activeStoryId } as ActionRequest;
+    const payload = { ...action, commandId, storyId: (action as any).storyId || activeStoryId } as unknown as ActionRequest;
     setNetworkError(null);
     setIsProcessingAction(true);
     if ((action as any).type === 'CUSTOM_ACTION') {

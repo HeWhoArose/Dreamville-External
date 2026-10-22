@@ -452,9 +452,13 @@ export function resolveGroundedObservation(
   const signalIntent = /\b(?:beacon|distress signal|signal light|signal|flare|warning light)\b/.test(normalized);
   const signalCauseQuestion = signalIntent && /\b(?:why|reason|cause|purpose|lit|activated|triggered|sent|source|origin|who|what happened)\b/.test(normalized);
   const contextClues = [
-    ...establishedContext.map((entry) => String(entry || '').trim()).filter(Boolean),
-    ...((situation.sceneEvidence?.events || []).map((event) => event.summary).filter(Boolean)),
-  ].filter((entry, index, all) => all.indexOf(entry) === index).slice(0, 12);
+    ...establishedContext,
+    ...((situation.sceneEvidence?.events || []).map((event) => event.summary)),
+  ]
+    .map((entry) => String(entry || '').trim().replace(/[.!?]+$/g, ''))
+    .filter(Boolean)
+    .filter((entry, index, all) => all.indexOf(entry) === index)
+    .slice(0, 12);
   if (signalCauseQuestion) {
     const establishedSignalClues = contextClues.filter((entry) =>
       /\b(?:beacon|distress signal|signal|flare|warning|void corruption|corruption)\b/i.test(entry),

@@ -966,7 +966,7 @@ export class OpeningSceneService {
 			.replace(/\bRight now\s*:?/gi, '')
 			.replace(/\bYour turn\s*:?/gi, '')
 			.replace(/\bWhat do you do\??/gi, '')
-			.replace(/\s{2,}/g, ' ')
+			.replace(/[ \t]{2,}/g, ' ')
 			.trim();
 	}
 

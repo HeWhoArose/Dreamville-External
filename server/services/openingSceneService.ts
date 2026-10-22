@@ -868,16 +868,35 @@ export class OpeningSceneService {
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
-		const rawSceneAnchor = location.ambientSensory || location.description || '';
-		// Older world templates store sensory cues as labeled, time-specific fragments.
-		// They are data, not finished prose: normalize them before player-facing use.
-		const sceneAnchor = rawSceneAnchor
-			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*/gi, '')
-			.replace(/\bfirst light\b|\bdaybreak\b|\bdawn\b|\bsunrise\b|\bmorning\b/gi, 'soft')
-			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:/gi, '')
-			.replace(/\s+/g, ' ')
-			.trim()
-			.replace(/^(.*)$/s, (value) => value ? value.replace(/\.$/, '') + '.' : 'The air is still, and the ground is firm underfoot.');
+		const rawSceneAnchor = String(location.ambientSensory || location.description || '').trim();
+		// Older world templates store sensory cues as labeled fragments, not prose.
+		// Do not reuse a stale Visual cue such as "First light" against an afternoon
+		// clock. Convert the non-temporal sensory cues into restrained player-facing prose.
+		const readCue = (label: string): string => {
+			const match = rawSceneAnchor.match(new RegExp('(?:^|[.\\\\n]\\\\s*)' + label + '\\\\s*:\\\\s*([^\\\\n.]+)', 'i'));
+			return match?.[1]?.trim() || '';
+		};
+		const hasLabeledSensoryCues = /\\b(?:Visual|Sounds|Scent|Tactile)\\s*:/i.test(rawSceneAnchor);
+		const soundCue = readCue('Sounds');
+		const scentCue = readCue('Scent');
+		const tactileCue = readCue('Tactile');
+		const sceneAnchor = hasLabeledSensoryCues
+			? [
+				soundCue
+					? /^(?:distant atmosphere|atmosphere)$/i.test(soundCue)
+						? 'Distant sounds drift across the area.'
+						: 'You hear ' + soundCue.charAt(0).toLowerCase() + soundCue.slice(1).replace(/[.!?]+$/, '') + '.'
+					: '',
+				scentCue
+					? 'The air carries the scent of ' + scentCue.replace(/^the scent of\\s*/i, '').toLowerCase().replace(/[.!?]+$/, '') + '.'
+					: '',
+				tactileCue
+					? /^firm earth$/i.test(tactileCue)
+						? 'The ground is firm beneath your feet.'
+						: 'Nearby surfaces feel ' + tactileCue.toLowerCase().replace(/[.!?]+$/, '') + '.'
+					: '',
+			].filter(Boolean).join(' ') || location.description || 'The surroundings are quiet, and the footing is steady.'
+			: rawSceneAnchor;
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);

@@ -2,11 +2,43 @@ import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { WorldActivityDirector } from './worldActivityDirector';
 import type { DurableMemory } from './memoryOpportunityEngine';
 import type { EntityCard, EntityKind } from './entityCard';
-import type { KnowledgeFact, RouteEdge, WorldTimestamp, LocationSceneObject } from './types';
+import type { DayPhase, KnowledgeFact, RouteEdge, WorldTimestamp, LocationSceneObject } from './types';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { LocalSpatialState } from './playerLifecycleState';
 import { describeAmbientActivity } from './locationArchetypes';
+
+/**
+ * Ambient sensory authoring can outlive a world's clock phase. Project only
+ * time-compatible cues into the narrator-facing scene context; never mutate
+ * canonical location data to make old prose appear current.
+ */
+export function projectAmbientSensoryForWorldTime(value: unknown, phase: DayPhase): string | undefined {
+	const raw = typeof value === 'string' ? value.trim() : '';
+	if (!raw) return undefined;
+
+	const clauses = raw
+		.replace(/\b(?:Visual|Sounds?|Scent|Smell|Tactile|Touch)\s*:\s*/gi, '')
+		.split(/(?<=[.!?])\s+|[\r\n]+/)
+		.map((clause) => clause.trim())
+		.filter(Boolean);
+
+	const dawnPhases = new Set<DayPhase>(['Predawn', 'Dawn']);
+	const duskPhases = new Set<DayPhase>(['Dusk', 'Night']);
+
+	const compatible = clauses.filter((clause) => {
+		if (/\b(?:first light|daybreak|dawn|sunrise)\b/i.test(clause) && !dawnPhases.has(phase)) return false;
+		if (/\bmorning\b/i.test(clause) && phase !== 'Morning') return false;
+		if (/\b(?:midday|noon|high sun|afternoon)\b/i.test(clause) && phase !== 'Afternoon') return false;
+		if (/\b(?:sunset|dusk|twilight|evening light|evening sky)\b/i.test(clause) && !duskPhases.has(phase)) return false;
+		if (/\b(?:nightfall|moonlight|moonlit|midnight|after dark|at night|night sky|starry night|stars overhead)\b/i.test(clause) && phase !== 'Night' && !duskPhases.has(phase)) return false;
+		if (/\b(?:daylight|sunshine|sunlit|sunbeam|sunny)\b/i.test(clause) && phase === 'Night') return false;
+		return true;
+	});
+
+	const projected = compatible.join(' ').replace(/\s+/g, ' ').trim();
+	return projected || undefined;
+}
 
 
 export interface CurrentLocationContext {
@@ -631,7 +663,9 @@ export class CurrentSituationBuilder {
 		const player = repository.getPlayerLifecycle(params.storyId);
 		const viewerActorId = params.viewerActorId || player?.actorId || run?.protagonist?.characterId || `player_actor_${params.storyId}`;
 		const locationId = params.locationIdOverride || player?.locationId || run?.currentLocationId || run?.startingLocationId;
-		const timestamp = repository.getWorldClock(params.storyId).getTimestamp();
+		const clock = repository.getWorldClock(params.storyId);
+		const timestamp = clock.getTimestamp();
+		const currentDayPhase = clock.getState().currentDayPhase;
 		const worldId = String(run?.worldId || '');
 		const geography = repository.getGeographyGraph(params.storyId);
 		const location = locationId ? geography.getNode(locationId) : undefined;
@@ -753,12 +787,13 @@ export class CurrentSituationBuilder {
 			});
 		}
 
+		const projectedAmbientSensory = projectAmbientSensoryForWorldTime(safeLocation.ambientSensory, currentDayPhase);
 		const currentLocation: CurrentLocationContext = {
 			id: safeLocation.id,
 			name: safeLocation.name,
 			regionId: safeLocation.regionId,
 			description: safeLocation.description,
-			ambientSensory: safeLocation.ambientSensory,
+			ambientSensory: projectedAmbientSensory,
 			accessible: hasCanonicalLocation ? safeLocation.accessible : false,
 			discovered: hasCanonicalLocation ? (player ? true : safeLocation.discovered) : false,
 			parentLocationId: safeLocation.parentLocationId,
@@ -1041,9 +1076,7 @@ export class CurrentSituationBuilder {
 				objects: sceneObjects.slice(0, 32),
 				entities: limitedNearbyEntities.filter((entity) => entity.visibleToPlayer).slice(0, 16),
 				events: visibleEvents.slice(0, 16),
-				sensory: [
-					safeLocation.ambientSensory,
-				].map(normalizeText).filter(Boolean).slice(0, 8),
+				sensory: [projectedAmbientSensory].map(normalizeText).filter(Boolean).slice(0, 8),
 				structures: sceneObjects
 					.filter((object) => object.kind === 'STRUCTURE' || object.kind === 'ENVIRONMENTAL_FEATURE')
 					.map((object) => object.name)

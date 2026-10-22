@@ -421,6 +421,35 @@ test('grounded observation answers the crowded-place request from canonical occu
   assert.doesNotMatch(unknownObservation.text || '', /bustling|crowded with people/i);
 });
 
+test('investigating an established distress signal returns its known lead and an honest unknown-cause boundary', () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const location = parkNode('loc_signal_perimeter', {
+    name: 'Threshold of the Radiance',
+    description: 'A broad stone threshold overlooks the outer approaches to Elysium Solar Citadel.',
+    ambientSensory: 'The air carries the scent of native vegetation.',
+    archetype: 'GENERIC',
+  });
+  const world = worldFixture([location]);
+  const storyId = createStory(repository, world, location.id);
+  const situation = CurrentSituationBuilder.build({
+    storyId,
+    worldRepo: repository,
+    playerAction: 'I observe the perimeter trying to find for what reason why the beacon was lit.',
+  });
+  const observation = resolveGroundedObservation(
+    situation,
+    'I observe the perimeter trying to find for what reason why the beacon was lit.',
+    ['A distress signal from a nearby settlement hints that the same void corruption has resurfaced.'],
+  );
+
+  assert.equal(observation.relevant, true);
+  assert.match(observation.text || '', /distress signal from a nearby settlement/i);
+  assert.match(observation.text || '', /void corruption has resurfaced/i);
+  assert.match(observation.text || '', /cause remains unknown/i);
+  assert.match(observation.limitation || '', /cause is not established/i);
+  assert.doesNotMatch(observation.text || '', /the beacon was lit because/i);
+});
+
 test('unknown NPC names stay out of player-facing projections and prompts until identity is learned', () => {
   const repository = new InMemoryWorldRepository({ disablePersistence: true });
   const market = parkNode('loc_identity_market', { name: 'Lantern Market', description: 'A market.', archetype: 'MARKET' });
@@ -659,4 +688,88 @@ test('a picked-up starter-world object stays gone across a full repository resta
     else process.env.DREAMBOOK_PERSISTENCE_PATH = previous;
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+
+test('current situation omits time-incompatible sensory claims without mutating authored location data', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const ambientSensory = 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.';
+	const location = parkNode('loc_time_sensitive_threshold', {
+		name: 'Threshold of the Radiance',
+		description: 'A broad stone threshold overlooks the outer approaches to the citadel.',
+		ambientSensory,
+		archetype: 'GENERIC',
+	});
+	const world = worldFixture([location]);
+	const storyId = createStory(repository, world, location.id, '_temporal_sensory');
+
+	const clock = repository.getWorldClock(storyId);
+	const afternoonState = clock.exportState();
+	clock.importState({
+		...afternoonState,
+		timestamp: { ...afternoonState.timestamp, year: 42, month: 10, day: 14, hour: 17, minute: 42, second: 0 },
+		currentDayPhase: 'Afternoon',
+	});
+	const afternoon = CurrentSituationBuilder.build({
+		storyId,
+		worldRepo: repository,
+		playerAction: 'I rush towards the signal.',
+	});
+	const afternoonSensory = [
+		afternoon.location.ambientSensory || '',
+		...(afternoon.sceneEvidence.sensory || []),
+	].join(' ');
+
+	assert.doesNotMatch(afternoonSensory, /first light|daybreak|dawn|sunrise|morning/i);
+	assert.doesNotMatch(afternoonSensory, /Visual:|Sounds:|Scent:|Tactile:/i);
+	assert.match(afternoonSensory, /distant atmosphere/i);
+	assert.match(afternoonSensory, /native vegetation/i);
+	assert.match(afternoonSensory, /firm earth/i);
+	assert.equal(repository.getGeographyGraph(storyId).getNode(location.id)?.ambientSensory, ambientSensory,
+		'projection must not rewrite the canonical authored sensory field');
+
+	const dawnState = clock.exportState();
+	clock.importState({
+		...dawnState,
+		timestamp: { ...dawnState.timestamp, hour: 7, minute: 0, second: 0 },
+		currentDayPhase: 'Dawn',
+	});
+	const dawn = CurrentSituationBuilder.build({
+		storyId,
+		worldRepo: repository,
+		playerAction: 'I look across the threshold.',
+	});
+	assert.match(dawn.location.ambientSensory || '', /first light/i,
+		'valid dawn imagery remains available when the canonical clock agrees');
+});
+
+
+test('opening context filters stale temporal sensory cues instead of reintroducing raw authored prose', () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const ambientSensory = 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.';
+  const location = parkNode('loc_opening_time_sensitive_threshold', {
+    name: 'Threshold of the Radiance',
+    description: 'A broad stone threshold overlooks the outer approaches to the citadel.',
+    ambientSensory,
+    archetype: 'GENERIC',
+  });
+  const world = worldFixture([location]);
+  const storyId = createStory(repository, world, location.id, '_opening_temporal_sensory');
+  const clock = repository.getWorldClock(storyId);
+  const state = clock.exportState();
+  clock.importState({
+    ...state,
+    timestamp: { ...state.timestamp, year: 42, month: 10, day: 14, hour: 17, minute: 42, second: 0 },
+    currentDayPhase: 'Afternoon',
+  });
+
+  const opening = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: repository });
+  const openingText = opening.assembledText + '\\n' + JSON.stringify(opening.chunks);
+
+  assert.doesNotMatch(openingText, /first light|daybreak|sunrise|Visual:|Sounds:|Scent:|Tactile:/i);
+  assert.match(openingText, /distant atmosphere/i);
+  assert.match(openingText, /native vegetation/i);
+  assert.match(openingText, /firm earth/i);
+  assert.equal(repository.getGeographyGraph(storyId).getNode(location.id)?.ambientSensory, ambientSensory,
+    'opening projection must not rewrite canonical authored sensory data');
 });

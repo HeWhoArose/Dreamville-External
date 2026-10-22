@@ -584,6 +584,13 @@ export interface OpeningScene {
   };
   startingSituation: string;
   narrativeText: string;
+  /** Identifies the source that actually produced the displayed opening text. */
+  narrativeGeneration?: {
+    source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+    providerId?: string;
+    modelId?: string;
+    fallbackReason?: string;
+  };
   structuredEvents: StructuredNarrativeEvent[];
   generatedAt: string;
   idempotencyKey: string;

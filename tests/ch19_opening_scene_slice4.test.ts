@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { worldRepository, InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { CurrentSituationBuilder } from '../server/domain/currentSituation';
+import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
 import { serverMockAuthority } from '../server/mockEngine/serverMockAuthority';
 import { MultiModelOrchestrator, DeterministicMockAdapter, type ModelRegistryRecord } from '../server/domain/aiOrchestrator';
 import { WorldTemplate, ConfirmedCharacter } from '../src/types';
@@ -949,17 +951,132 @@ test('Deterministic opening fallback respects protagonist, side-character, and f
   const protagonist = OpeningSceneService.synthesizeDeterministicOpening(baseFacts, 'mode_protagonist', {
     goal: 'Find Sir Edric, the retired knight who knows the path to restoring lost honor.',
   });
-  assert.match(protagonist.narrativeText, /first lead is clear/i);
+  assert.match(protagonist.narrativeText, /A lead remains/i);
   assert.match(protagonist.narrativeText, /Find Sir Edric/i);
 
   const sideFacts = { ...baseFacts, world: { ...baseFacts.world, narrativeProfile: { mode: 'SIDE_CHARACTER' } } };
   const sideCharacter = OpeningSceneService.synthesizeDeterministicOpening(sideFacts, 'mode_side', {
     goal: 'Help the principal knight uncover who forged the dishonorable order.',
   });
-  assert.match(sideCharacter.narrativeText, /principal actor's current aim/i);
-  assert.match(sideCharacter.narrativeText, /your response and loyalties remain your decision/i);
+  assert.match(sideCharacter.narrativeText, /Beyond this moment/i);
+  assert.match(sideCharacter.narrativeText, /your response and loyalties are your own/i);
 
   const freeRoamFacts = { ...baseFacts, world: { ...baseFacts.world, narrativeProfile: { mode: 'FREE_ROAM' } } };
   const freeRoam = OpeningSceneService.synthesizeDeterministicOpening(freeRoamFacts, 'mode_free');
-  assert.match(freeRoam.narrativeText, /There is no prescribed main quest/i);
+  assert.match(freeRoam.narrativeText, /what deserves your attention is yours to decide/i);
+});
+
+
+test('deterministic opening fallback removes sensory labels, clock contradictions, and engine diagnostics', () => {
+  const facts: any = {
+    world: { id: 'world_opening_sanitize', title: 'Elysium', narrativeProfile: { mode: 'PROTAGONIST' } },
+    character: {
+      name: 'Aelion Vane',
+      background: 'A wanderer who once tried to escape the void corruption.',
+      role: 'Wanderer / Seeker',
+      startingSituation: 'A distress signal from a nearby settlement hints that the same void corruption has resurfaced.',
+      capabilities: [], conditions: [], equipment: [],
+    },
+    location: {
+      id: 'loc_radiance_threshold',
+      name: 'Threshold of the Radiance',
+      region: 'Elysium Solar Citadel Outskirts',
+      description: 'A broad stone threshold overlooks the outer approaches to Elysium Solar Citadel.',
+      ambientSensory: 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.',
+      visibleEntities: [],
+      sceneObjects: [],
+    },
+    time: {
+      cycle: 42, period: 'Afternoon', era: 'Autumn',
+      formattedHeader: 'Cycle 42 • Month 10 • Day 14 • 17:42 • Afternoon • Autumn',
+    },
+    knowledge: [],
+  };
+  const opening = OpeningSceneService.synthesizeDeterministicOpening(facts, 'opening_sanitize');
+  assert.match(opening.narrativeText, /Aelion Vane stands within Threshold of the Radiance/);
+  assert.match(opening.narrativeText, /broad stone threshold/i);
+  assert.match(opening.narrativeText, /distress signal/i);
+  assert.match(opening.narrativeText, /cause remains unresolved/i);
+  assert.doesNotMatch(opening.narrativeText, /first light|daybreak|sunrise/i);
+  assert.doesNotMatch(opening.narrativeText, /Visual:|Sounds:|Scent:|Tactile:/i);
+  assert.doesNotMatch(opening.narrativeText, /canonical scene projection|this alone does not mean/i);
+  assert.doesNotMatch(opening.narrativeText, /Role:|Wanderer \/ Seeker/);
+  assert.doesNotMatch(opening.structuredEvents.map((event) => event.text).join(' '), /canonical scene projection|Visual:|first light/i);
+});
+
+
+test('an unresolved signal is not treated as a spatial target when the player rushes toward it', async () => {
+  const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
+  const storyId = 'unresolved_signal_movement_' + Date.now();
+  worldRepository.seedStory(storyId);
+  const beforePlayer = worldRepository.getPlayerLifecycle(storyId)!;
+  const beforeLocationId = beforePlayer.locationId;
+  const beforeSpatialState = JSON.stringify(beforePlayer.localSpatialState || null);
+  const orchestrator: any = worldRepository.getAiOrchestrator();
+  const originalGenerateNarrativeOnly = orchestrator.generateNarrativeOnly;
+  let seenCommittedOutcome = '';
+
+  orchestrator.generateNarrativeOnly = async (params: any) => {
+    seenCommittedOutcome = String(params?.committedOutcome || '');
+    return {
+      success: true,
+      source: 'AI_PRIMARY',
+      providerId: 'test-provider',
+      modelId: 'test-model',
+      turnPackage: {
+        narrative: ['The character hurries across the threshold, still within the same place.'],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+        visualCues: [],
+      },
+    };
+  };
+
+  try {
+    const result: any = await serverMockAuthority.processCustomAction(
+      {
+        type: 'CUSTOM_ACTION',
+        storyId,
+        actionText: 'I rush towards the signal.',
+      } as any,
+      'unresolved_signal_movement_command_' + Date.now(),
+      { bypassCapabilityAdvisor: true } as any,
+    );
+
+    const afterPlayer = worldRepository.getPlayerLifecycle(storyId)!;
+    assert.equal(afterPlayer.locationId, beforeLocationId, 'the unresolved signal must not become a synthetic location');
+    assert.equal(JSON.stringify(afterPlayer.localSpatialState || null), beforeSpatialState, 'no canonical proximity may be committed without a grounded target');
+    assert.equal(
+      (result.actionResolution?.canonicalStateChanges || []).some((change: any) => change.kind === 'SPATIAL'),
+      false,
+      'the action must not claim a canonical spatial-state change',
+    );
+    assert.match(seenCommittedOutcome, /no canonical destination or visible target is established/i);
+    assert.match(seenCommittedOutcome, /active location remains/i);
+
+    const loggedAction = serverMockAuthority.getDynamicStoryState(storyId).actionHistory.find(
+      (entry: any) => entry.id === result.actionId,
+    );
+    assert.ok(loggedAction?.actionResolution, 'the canonical action resolution should be logged for continuity review');
+    const actionText = 'I rush towards the signal.';
+    const situation = CurrentSituationBuilder.build({
+      storyId,
+      worldRepo: worldRepository,
+      playerAction: actionText,
+    });
+    const continuityReview = serverMockAuthority.evaluateLiveNarrativeQuality({
+      narrativeText: 'Aelion Vane runs towards the signal, drawing them deeper into the outer reaches of the citadel outskirts where the subtle beacon originates.',
+      playerAction: actionText,
+      actionResolution: loggedAction.actionResolution,
+      situation,
+      intent: PlayerIntentInterpreter.deterministic(actionText, situation),
+    });
+    assert.equal(continuityReview.actionFidelity.valid, false, 'narration must not assign an unverified origin to the signal');
+    assert.match(continuityReview.actionFidelity.reason || '', /unverified origin or destination/i);
+  } finally {
+    orchestrator.generateNarrativeOnly = originalGenerateNarrativeOnly;
+  }
 });

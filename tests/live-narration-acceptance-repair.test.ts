@@ -78,3 +78,31 @@ test('narrative richness recognises bounded investigative limits as an action re
 	assert.match(source, /insufficient evidence/);
 	assert.match(source, /the reason is unclear/);
 });
+
+test('story action network retry reuses the original idempotency identity', async () => {
+	const fs = await import('node:fs/promises');
+	const app = await fs.readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+	const route = await fs.readFile(new URL('../server/api/gameRoutes.ts', import.meta.url), 'utf8');
+
+	assert.match(app, /failedStoryActionCommandId/);
+	assert.match(app, /const commandId = retryCommandId \|\|/);
+	assert.match(app, /idempotencyKey: commandId/);
+	assert.match(app, /handleCustomAction\(failedStoryAction, failedStoryActionCommandId \|\| undefined\)/);
+	assert.match(route, /const requestedCommandId =\s*\(req\.headers\['x-command-id'\][\s\S]*?req\.body\?\.commandId/);
+	assert.match(route, /idempotencyKey: req\.body\?\.idempotencyKey/);
+});
+
+test('narration retry remains presentation-only for an existing committed action', async () => {
+	const fs = await import('node:fs/promises');
+	const view = await fs.readFile(new URL('../src/components/StoryView.tsx', import.meta.url), 'utf8');
+	const route = await fs.readFile(new URL('../server/api/gameRoutes.ts', import.meta.url), 'utf8');
+	const start = route.indexOf("gameRouter.post('/action/narrate/regenerate'");
+	const end = route.indexOf("gameRouter.post('/action/advice'", start);
+	assert.ok(start >= 0 && end > start, 'narration regeneration route boundaries should exist');
+	const regenerateRoute = route.slice(start, end);
+
+	assert.match(view, /apiClient\.regenerateNarration\(\s*\{\s*storyId,\s*actionId: entry\.id/);
+	assert.match(regenerateRoute, /state\.actionHistory\.find\(\(entry: any\) => entry\.id === actionId\)/);
+	assert.doesNotMatch(regenerateRoute, /processCustomAction|processAction\(/);
+	assert.match(regenerateRoute, /action\.narrativeResponse = generated\.turnPackage\.narrative\.join/);
+});

@@ -9847,6 +9847,13 @@ export class MultiModelOrchestrator {
               let emergencyLiteraryReview: LiteraryReview | undefined;
               let emergencyNarrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
               if (isNarrativeTask && narrativePlan) {
+                emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  turnPackage: emergencyTurnPackage,
+                  previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                });
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
                   intent: playerIntent,
@@ -9887,6 +9894,13 @@ export class MultiModelOrchestrator {
                     emergencyTurnPackage = reviewed.turnPackage;
                     emergencyNarrativeReview = reviewed.review;
                     emergencyLiteraryReview = emergencyLiterary;
+                    emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                      intent: playerIntent,
+                      situation: currentSituation,
+                      plan: narrativePlan,
+                      turnPackage: emergencyTurnPackage,
+                      previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                    });
                   }
                 }
               }
@@ -10025,6 +10039,7 @@ export class MultiModelOrchestrator {
               narrativePlan,
               narrativeReview: emergencyNarrativeReview,
               literaryReview: emergencyLiteraryReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,

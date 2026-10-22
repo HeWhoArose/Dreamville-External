@@ -124,6 +124,7 @@ export const App: React.FC = () => {
   const [storyActionTips, setStoryActionTips] = useState<ActionTip[]>([]);
   const [isRefreshingStoryActionTips, setIsRefreshingStoryActionTips] = useState(false);
   const [failedStoryAction, setFailedStoryAction] = useState<string | null>(null);
+  const [failedStoryActionPriorIds, setFailedStoryActionPriorIds] = useState<string[]>([]);
   const [combatTransition, setCombatTransition] = useState<CombatTransitionState | null>(null);
   const actionSeqRef = useRef<number>(0);
 
@@ -372,6 +373,7 @@ export const App: React.FC = () => {
     setIsProcessingAction(true);
     if ((action as any).type === 'CUSTOM_ACTION') {
       setFailedStoryAction(null);
+      setFailedStoryActionPriorIds((viewState?.actionHistory || []).map((entry: any) => String(entry.id)));
     }
     try {
       const payload = { ...action, storyId: (action as any).storyId || activeStoryId };
@@ -392,6 +394,10 @@ export const App: React.FC = () => {
       }
     } catch (err: any) {
       if (currentSeq === actionSeqRef.current) {
+        // A failed response may still carry the authoritative post-action state.
+        // Keep it visible so recovery can regenerate narration for a committed turn
+        // instead of making the player submit the physical action a second time.
+        if (err?.data?.viewState) setViewState(err.data.viewState);
         if (err?.status === 409 && err?.data?.advice) {
           setPendingActionAdvice(err.data.advice as ActionAdvice);
           setFailedStoryAction(null);
@@ -581,6 +587,50 @@ export const App: React.FC = () => {
         }
       },
     );
+  };
+
+  const handleRecoverLastAction = async () => {
+    if (!failedStoryAction || isProcessingAction) return;
+    setIsProcessingAction(true);
+    setNetworkError(null);
+    try {
+      // Refresh the server-authoritative timeline first. A timed-out POST may have
+      // committed even though the browser never received its response.
+      const latestState = await apiClient.getGameState(activeStoryId);
+      setViewState(latestState);
+      const priorIds = new Set(failedStoryActionPriorIds);
+      const committedAction = (latestState.actionHistory || []).find((entry: any) =>
+        !priorIds.has(String(entry.id)) &&
+        String(entry.description || '').trim() === failedStoryAction.trim()
+      );
+
+      if (!committedAction) {
+        setFailedStoryAction(null);
+        setNetworkError('I could not confirm that this action was uncommitted. It was not resubmitted. Check the latest story history before trying it again.');
+        return;
+      }
+
+      if (committedAction.narrativeResponse && !committedAction.narrativeError) {
+        setFailedStoryAction(null);
+        setNetworkError(null);
+        return;
+      }
+
+      // This endpoint changes presentation only. The canonical action, time,
+      // inventory and world events are not executed again.
+      const regenerated = await apiClient.regenerateNarration({
+        storyId: activeStoryId,
+        actionId: committedAction.id,
+      });
+      if (regenerated.viewState) setViewState(regenerated.viewState);
+      setFailedStoryAction(null);
+      setNetworkError(null);
+    } catch (error: any) {
+      if (error?.data?.viewState) setViewState(error.data.viewState);
+      setNetworkError(error?.data?.errorReason || error?.message || 'Could not recover the latest action state. No action was resubmitted.');
+    } finally {
+      setIsProcessingAction(false);
+    }
   };
 
   const handleAcceptActionAdvice = async (advice: ActionAdvice) => {
@@ -775,9 +825,7 @@ export const App: React.FC = () => {
           onRefreshSuggestions={() => refreshStoryActionTips(true)}
           isRefreshingSuggestions={isRefreshingStoryActionTips}
           actionError={failedStoryAction ? networkError : null}
-          onRetryLastAction={() => {
-            if (failedStoryAction) void handleCustomAction(failedStoryAction);
-          }}
+          onRetryLastAction={handleRecoverLastAction}
           onAcceptActionAdvice={handleAcceptActionAdvice}
           onRejectActionAdvice={handleRejectActionAdvice}
           isProcessingAction={isProcessingAction}

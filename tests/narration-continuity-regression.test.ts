@@ -245,11 +245,11 @@ test('deterministic opening converts sensory metadata to player-facing, time-con
 	assert.doesNotMatch(normalized, /\bfirst light\b|Visual:|Sounds?:|Scent:|Tactile:/i);
 
 	const withDiagnostic = sanitizeNarrative(
-		'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.\n\nThe distress signal remains unresolved.',
+		'The character watches the perimeter.\n\nNo visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.\n\nThe distress signal remains unresolved.',
 	);
 	assert.doesNotMatch(withDiagnostic, /canonical scene projection|this alone does not mean the location is abandoned/i);
 	assert.match(withDiagnostic, /The distress signal remains unresolved/);
-	assert.match(withDiagnostic, /\n\n/, 'sanitization must preserve paragraph breaks');
+	assert.match(withDiagnostic, /The character watches the perimeter\.\n\nThe distress signal remains unresolved/, 'removing diagnostics must retain the surrounding paragraphs');
 });
 
 test('causal observation of a canonical distress-signal lead returns a grounded bounded answer', () => {

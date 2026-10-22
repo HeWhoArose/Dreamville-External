@@ -2236,8 +2236,8 @@ The moment does not end so much as shift, leaving the scene open to whatever the
         const activeLoc =
           worldRepository.getGeographyGraph().getAllNodes().find(n => n.id === state.activeLocationId) || worldRepository.getGeographyGraph().getAllNodes()[0];
         message = `Inspected surroundings at ${activeLoc.name}.`;
-        const presentationFeedback = activeLoc.ambientSensory || activeLoc.description || activeLoc.name;
-        authoritativeFeedback = `Server emitted ambient sensory narrative: "${presentationFeedback}"`;
+        const presentationFeedback = normalizeSceneSensoryForTime(activeLoc.ambientSensory, worldRepository.getWorldClock(targetStoryId).getState().currentDayPhase) || activeLoc.description || activeLoc.name;
+        authoritativeFeedback = `You take in the immediate surroundings: ${presentationFeedback}`;
         logEntry = {
           id: actionId,
           timestamp: now,

@@ -994,7 +994,8 @@ test('deterministic opening strips structured sensory labels and time-of-day con
 	assert.doesNotMatch(opening.narrativeText, /Visual:|Sounds:|Scent:|Tactile:/i);
 	assert.doesNotMatch(opening.narrativeText, /first light|daybreak|sunrise/i);
 	assert.doesNotMatch(opening.narrativeText, /canonical scene projection|canonical occupancy/i);
-	assert.match(opening.narrativeText, /Uneven ground extends toward the outer reaches/i);
+	assert.match(opening.narrativeText, /late-afternoon light over Elysium Solar Citadel/i);
+	assert.match(opening.narrativeText, /Firm earth holds beneath your feet/i);
 	assert.match(opening.narrativeText, /No one is immediately visible nearby/i);
 	assert.doesNotMatch(JSON.stringify(opening.structuredEvents), /Visual:|Sounds:|Scent:|Tactile:|first light/i);
 });

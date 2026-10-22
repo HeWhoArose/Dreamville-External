@@ -18,6 +18,7 @@ let originalExecuteTaskGeneration: any;
 let originalAdvise: any;
 let originalGetTipsForAction: any;
 let generationCalls = 0;
+let lastSceneContext = '';
 
 function narrativeResult(text: string) {
   return {
@@ -60,8 +61,9 @@ before(async () => {
   originalGetTipsForAction = storyActionAdvisor.getTipsForAction;
   generationCalls = 0;
 
-  orchestrator.generateNarrativeOnly = async () => {
+  orchestrator.generateNarrativeOnly = async (params: any) => {
     generationCalls += 1;
+    lastSceneContext = String(params?.sceneContext || '');
     if (generationCalls === 1) {
       // Environment-only prose must be rejected by the normal live-turn quality gate.
       return narrativeResult('A faint hum lingers over the threshold. The afternoon air is still, and pale clouds hang above the distant skyline.');
@@ -128,6 +130,8 @@ test('retrying rejected narration changes presentation only and never commits th
   assert.equal(actionResponse.status, 200, 'the gameplay action should commit even when narration is rejected');
   const actionResult: any = await actionResponse.json();
   assert.ok(actionResult.actionId, 'the committed action must have a stable action ID');
+  assert.doesNotMatch(lastSceneContext, /first light|daybreak|sunrise|Visual:|Sounds:|Scent:|Tactile:/i,
+    'live narration context must receive the time-safe sensory projection rather than stale authored cues');
 
   const committedState = serverMockAuthority.getSanitizedViewState(storyId);
   const committedIds = (committedState.actionHistory || []).map((entry: any) => entry.id);

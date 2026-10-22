@@ -901,7 +901,8 @@ export class OpeningSceneService {
 		const characterContext = [character.background].filter(Boolean).join(' ');
 		const p2 = [characterContext, visibleObjectText, visiblePeopleText].filter(Boolean).join(' ').trim();
 		const authoredGoal = typeof agenda?.goal === 'string' && agenda.goal.trim() ? agenda.goal.trim() : '';
-		const hasSignalLead = /\b(?:distress signal|beacon|signal)\b/i.test(String(character.startingSituation || ''));
+		const startingSituation = String(character.startingSituation || '').trim().replace(/[.!?]+$/g, '');
+		const hasSignalLead = /\b(?:distress signal|beacon|signal)\b/i.test(startingSituation);
 		const p3 = narrativeMode === 'SIDE_CHARACTER'
 			? authoredGoal
 				? `Beyond this moment, ${authoredGoal} remains unresolved; your response and loyalties are your own.`
@@ -911,8 +912,10 @@ export class OpeningSceneService {
 				: authoredGoal
 					? `A lead remains: ${authoredGoal}. What you do with it is yours to decide.`
 					: hasSignalLead
-						? 'The signal’s cause remains unresolved. Its warning is reason enough to investigate, but it does not yet explain what happened.'
-						: 'The immediate situation remains unresolved, and the next step is yours to choose.';
+						? `${startingSituation}. The signal’s cause remains unresolved; this lead does not yet establish who activated it or why.`
+						: startingSituation
+							? `${startingSituation}. The immediate cause remains unresolved, and the next step is yours to choose.`
+							: 'The immediate situation remains unresolved, and the next step is yours to choose.';
 
 		return {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,

@@ -1207,14 +1207,36 @@ export class ServerMockAuthority {
 
     const conditionStateBeforeAction = conditionEngine.getActorState(actorId);
 
+    const focusTarget = resolutionIntent.explicitTargets.find((target) =>
+      resolutionSituation.nearbyEntities.some((entity) =>
+        entity.id === target.id && entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive
+      )
+    );
+    // Intra-location proximity changes require a grounded, currently visible
+    // entity target. Words like "towards the signal" are not a canonical
+    // destination or entity by themselves; do not mutate proximity to NEAR.
     const spatialMovementIntent = Boolean(resolutionIntent.movementIntent) &&
+      Boolean(focusTarget) &&
       !player?.isTraveling &&
       currentLocationId === player?.locationId &&
       /\b(?:closer|toward|towards|approach|near|beside|next to|forward)\b/i.test(String(freeformText));
+    if (resolutionIntent.movementIntent && !focusTarget && !resolutionIntent.locationTarget?.id && !player?.isTraveling) {
+      const movementTargetName = String(resolutionIntent.locationTarget?.name || '').trim();
+      const namedSceneTarget = resolutionSituation.sceneObjects.some((object) => {
+        const targetTokens = movementTargetName.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3);
+        const objectName = object.name.toLowerCase();
+        return targetTokens.length > 0 && targetTokens.some((token) => objectName.includes(token));
+      });
+      if (!namedSceneTarget) {
+        committedOutcome = [
+          committedOutcome,
+          `The character hurries within ${resolutionSituation.location.name} toward ${movementTargetName || 'the intended direction'}, but no canonical destination or visible target is established for that reference. Do not narrate arrival, a completed approach, or entry into another location; the active location remains ${resolutionSituation.location.name}. `,
+        ].filter(Boolean).join(' ').trim();
+        actionResolution.actualEffect += ' Movement was attempted, but no canonical destination or visible target was resolved.';
+        actionResolution.uncertainty.push('No canonical destination or visible target supports a claim of arrival or completed approach.');
+      }
+    }
     if (spatialMovementIntent && (!storyCheck || storyCheck.success)) {
-      const focusTarget = resolutionIntent.explicitTargets.find((target) =>
-        resolutionSituation.nearbyEntities.some((entity) => entity.id === target.id)
-      );
       const normalizedAction = String(freeformText).toLowerCase();
       const proximityBand =
         /\b(?:contact|touch|touching|grab|hold)\b/.test(normalizedAction) ? 'CONTACT' :

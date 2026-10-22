@@ -983,6 +983,7 @@ export class OpeningSceneService {
 			.replace(/\bRight now\s*:?/gi, '')
 			.replace(/\bYour turn\s*:?/gi, '')
 			.replace(/\bWhat do you do\??/gi, '')
+			.replace(/\bNo visible occupants are (?:currently )?established in the canonical scene projection[^.!?]*(?:[.!?]|$)/gi, '')
 			.trim();
 	}
 

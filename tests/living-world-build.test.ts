@@ -421,6 +421,22 @@ test('grounded observation answers the crowded-place request from canonical occu
   assert.doesNotMatch(unknownObservation.text || '', /bustling|crowded with people/i);
 });
 
+test('beacon investigation uses the established distress lead and does not invent its cause', () => {
+  const action = 'I observe the perimeter trying to find for what reason why the beacon was lit.';
+  const lead = 'A distress signal from a nearby settlement hints that the same void corruption has resurfaced.';
+  const observation = resolveGroundedObservation({} as any, action, lead);
+
+  assert.equal(observation.relevant, true);
+  assert.match(observation.text || '', /distress signal from a nearby settlement/i);
+  assert.match(observation.text || '', /does not establish who activated the beacon/i);
+  assert.match(observation.text || '', /source and purpose remain unknown/i);
+  assert.match(observation.limitation || '', /cause and activator are not established/i);
+  assert.doesNotMatch(observation.text || '', /the beacon was lit by|the corruption activated/i);
+
+  const noLead = resolveGroundedObservation({} as any, action);
+  assert.equal(noLead.relevant, false, 'without a canonical lead, the resolver must not fabricate a signal explanation');
+});
+
 test('unknown NPC names stay out of player-facing projections and prompts until identity is learned', () => {
   const repository = new InMemoryWorldRepository({ disablePersistence: true });
   const market = parkNode('loc_identity_market', { name: 'Lantern Market', description: 'A market.', archetype: 'MARKET' });

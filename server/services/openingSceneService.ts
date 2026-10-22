@@ -426,6 +426,22 @@ export class OpeningSceneService {
 			},
 			startingSituation: rawOpeningFacts.character.startingSituation || 'Awakened into the world.',
 			narrativeText: generatedText,
+			narrativeGeneration: {
+				// Attribute the delivered text, not the model that may have produced a
+				// rejected candidate before the canonical deterministic fallback won.
+				source: generationMeta?.source === 'DETERMINISTIC_FALLBACK'
+					? 'DETERMINISTIC_FALLBACK'
+					: generationMeta?.source === 'AI_FALLBACK'
+						? 'AI_FALLBACK'
+						: 'AI_PRIMARY',
+				providerId: generationMeta?.source === 'DETERMINISTIC_FALLBACK'
+					? 'provider_local_story_fallback'
+					: generationMeta?.providerId,
+				modelId: generationMeta?.source === 'DETERMINISTIC_FALLBACK'
+					? 'local-story-fallback'
+					: generationMeta?.modelId,
+				fallbackReason: generationMeta?.fallbackReason,
+			},
 			structuredEvents: generatedEvents,
 			generatedAt: new Date().toISOString(),
 			idempotencyKey: `open_${storyId}_${run.worldId}_v2`,

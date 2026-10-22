@@ -102,10 +102,50 @@ export class OpeningSceneService {
 		OpeningSceneService.simulateFailureFlag = flag;
 	}
 
+	private static sanitizePersistedOpeningIfNeeded(
+		storyId: string,
+		run: any,
+		repo: WorldRepository,
+	): OpeningScene {
+		const opening = run.openingScene as OpeningScene;
+		let changed = false;
+		const sanitizedNarrative = OpeningSceneService.sanitizeNarrativeText(opening.narrativeText || '');
+		if (sanitizedNarrative !== opening.narrativeText) {
+			opening.narrativeText = sanitizedNarrative;
+			changed = true;
+		}
+
+		const previousEvents = Array.isArray(opening.structuredEvents) ? opening.structuredEvents : [];
+		const sanitizedEvents = previousEvents.map((event: any) => {
+			let text = OpeningSceneService.sanitizeNarrativeText(String(event?.text || ''));
+			if (!text) {
+				// Legacy sensory-only events can become empty once debug labels are removed.
+				// Keep the event usable without inventing new world facts.
+				text = event?.type === 'location'
+					? opening.startingLocationName || 'The current location'
+					: 'The starting situation remains unresolved.';
+			}
+			if (text !== event?.text) changed = true;
+			return { ...event, text };
+		});
+		if (sanitizedEvents.length !== previousEvents.length) changed = true;
+		if (changed) {
+			opening.structuredEvents = sanitizedEvents;
+			run.openingScene = opening;
+			repo.registerStoryRun(run);
+			// Keep the legacy action-history projection aligned with the sanitized opening.
+			if (repo === worldRepository) {
+				serverMockAuthority.recordOpeningScene(storyId, opening);
+			}
+		}
+		return opening;
+	}
+
 	public static getOpeningScene(storyId: string, repo: WorldRepository = worldRepository): OpeningScene | null {
 		if (!storyId) return null;
 		const run = repo.getStoryRun(storyId);
-		return run?.openingScene || null;
+		if (!run?.openingScene) return null;
+		return OpeningSceneService.sanitizePersistedOpeningIfNeeded(storyId, run, repo);
 	}
 
 	public static async generateOpeningScene(options: GenerateOpeningSceneOptions): Promise<OpeningScene> {
@@ -124,7 +164,7 @@ export class OpeningSceneService {
 
 		const run = worldRepo.getStoryRun(storyId);
 		if (!run) throw new Error(`StoryRun with ID "${storyId}" does not exist in repository.`);
-		if (run.openingScene && !forceRegenerate) return run.openingScene;
+		if (run.openingScene && !forceRegenerate) return OpeningSceneService.sanitizePersistedOpeningIfNeeded(storyId, run, worldRepo);
 
 		// Seed canonical occupants before the opening projection is assembled. The
 		// same idempotent producer is used by ordinary live turns; a fresh public

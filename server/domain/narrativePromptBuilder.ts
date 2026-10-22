@@ -16,6 +16,7 @@ import { SceneCompositionEngine, type SceneCompositionContract } from './sceneCo
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 import { NarrativeEpisodeProjectionEngine, type NarrativeEpisodeProjection } from './narrativeEpisodeProjection';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
+import { normalizeSceneSensoryForTime } from './sceneSensoryPresentation';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -119,7 +120,8 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		'Location: ' + (situation.location?.name || 'Unknown Location') + ' (' + (situation.location?.id || 'unknown') + ')',
 		'Region: ' + (situation.location?.regionId || 'Unknown Region'),
 		'Location description: ' + (situation.location?.description || ''),
-		situation.location?.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
+		'Canonical time for sensory language: ' + (situation.worldTime || 'Unknown Time'),
+		situation.location?.ambientSensory ? 'Ambient: ' + normalizeSceneSensoryForTime(situation.location.ambientSensory, situation.worldTime) : '',
 		'Visible entities: ' + visibleEntities,
 		'Canonical visible scene objects: ' + visibleObjects,
 		'Visible current-scene events (canonical or projected): ' + visibleSceneEvents,

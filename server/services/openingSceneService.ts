@@ -283,6 +283,9 @@ export class OpeningSceneService {
 			}
 		}
 
+		// Sanitize both model output and deterministic fallback. The fallback is still
+		// player-facing text and must obey the same presentation hygiene rules.
+		generatedText = OpeningSceneService.sanitizeNarrativeText(generatedText);
 		generatedText = OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts);
 
 		// =========================================================================
@@ -868,7 +871,10 @@ export class OpeningSceneService {
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
-		const sceneAnchor = location.ambientSensory || location.description;
+		// Ambient sensory inputs may be structured fields (for example, "Visual: First light...").
+		// Strip those labels and their values before they can leak into player-facing prose;
+		// temporal details in authored prose must not override the canonical world clock.
+		const sceneAnchor = OpeningSceneService.sanitizeNarrativeText(location.ambientSensory || location.description || '').replace(/\s+/g, ' ').trim();
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
@@ -888,7 +894,7 @@ export class OpeningSceneService {
 					: '';
 				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
 			}).join(' ')
-			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
+			: 'No one is immediately visible nearby, and the current view does not establish whether anyone else is present.';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
 			character.background,
@@ -911,7 +917,7 @@ export class OpeningSceneService {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,
 			structuredEvents: [
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.ambientSensory || `No visible occupants are established at ${location.name}.`), timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (sceneAnchor || `No one is immediately visible at ${location.name}.`), timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
 				{
 					id: `evt_open_${storyId}_3`,

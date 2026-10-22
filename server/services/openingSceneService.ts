@@ -875,10 +875,11 @@ export class OpeningSceneService {
 		// Convert them into safe player-facing prose and remove sentence-level time claims
 		// that contradict the canonical opening clock. Sensory metadata is not an authority
 		// for changing time in the world.
-		const sceneAnchor = OpeningSceneService.sanitizeOpeningSensoryAnchor(
-			location.ambientSensory || location.description || '',
-			time.period || time.formattedHeader,
-		);
+		const openingClock = time.period || time.formattedHeader;
+		const sceneAnchor =
+			OpeningSceneService.sanitizeOpeningSensoryAnchor(location.ambientSensory || '', openingClock) ||
+			OpeningSceneService.sanitizeOpeningSensoryAnchor(location.description || '', openingClock) ||
+			'The immediate surroundings offer no further established sensory detail.';
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);

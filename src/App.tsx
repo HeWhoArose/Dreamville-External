@@ -605,7 +605,8 @@ export const App: React.FC = () => {
       );
 
       if (!committedAction) {
-        setFailedStoryAction(null);
+        // Keep the recovery notice visible. The only safe next step is to inspect
+        // history manually; do not turn this ambiguous outcome into another POST.
         setNetworkError('I could not confirm that this action was uncommitted. It was not resubmitted. Check the latest story history before trying it again.');
         return;
       }

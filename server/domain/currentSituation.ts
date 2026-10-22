@@ -18,8 +18,8 @@ export function projectAmbientSensoryForWorldTime(value: unknown, phase: DayPhas
 	if (!raw) return undefined;
 
 	const clauses = raw
-		.replace(/\\b(?:Visual|Sounds?|Scent|Smell|Tactile|Touch)\\s*:\\s*/gi, '')
-		.split(/(?<=[.!?])\\s+|[\\r\\n]+/)
+		.replace(/\b(?:Visual|Sounds?|Scent|Smell|Tactile|Touch)\s*:\s*/gi, '')
+		.split(/(?<=[.!?])\s+|[\r\n]+/)
 		.map((clause) => clause.trim())
 		.filter(Boolean);
 
@@ -27,16 +27,16 @@ export function projectAmbientSensoryForWorldTime(value: unknown, phase: DayPhas
 	const duskPhases = new Set<DayPhase>(['Dusk', 'Night']);
 
 	const compatible = clauses.filter((clause) => {
-		if (/\\b(?:first light|daybreak|dawn|sunrise)\\b/i.test(clause) && !dawnPhases.has(phase)) return false;
-		if (/\\bmorning\\b/i.test(clause) && phase !== 'Morning') return false;
-		if (/\\b(?:midday|noon|high sun|afternoon)\\b/i.test(clause) && phase !== 'Afternoon') return false;
-		if (/\\b(?:sunset|dusk|twilight|evening light|evening sky)\\b/i.test(clause) && !duskPhases.has(phase)) return false;
-		if (/\\b(?:nightfall|moonlight|moonlit|midnight|after dark|at night|night sky|starry night|stars overhead)\\b/i.test(clause) && phase !== 'Night' && !duskPhases.has(phase)) return false;
-		if (/\\b(?:daylight|sunshine|sunlit|sunbeam|sunny)\\b/i.test(clause) && phase === 'Night') return false;
+		if (/\b(?:first light|daybreak|dawn|sunrise)\b/i.test(clause) && !dawnPhases.has(phase)) return false;
+		if (/\bmorning\b/i.test(clause) && phase !== 'Morning') return false;
+		if (/\b(?:midday|noon|high sun|afternoon)\b/i.test(clause) && phase !== 'Afternoon') return false;
+		if (/\b(?:sunset|dusk|twilight|evening light|evening sky)\b/i.test(clause) && !duskPhases.has(phase)) return false;
+		if (/\b(?:nightfall|moonlight|moonlit|midnight|after dark|at night|night sky|starry night|stars overhead)\b/i.test(clause) && phase !== 'Night' && !duskPhases.has(phase)) return false;
+		if (/\b(?:daylight|sunshine|sunlit|sunbeam|sunny)\b/i.test(clause) && phase === 'Night') return false;
 		return true;
 	});
 
-	const projected = compatible.join(' ').replace(/\\s+/g, ' ').trim();
+	const projected = compatible.join(' ').replace(/\s+/g, ' ').trim();
 	return projected || undefined;
 }
 

@@ -967,4 +967,18 @@ test('Deterministic opening fallback respects protagonist, side-character, and f
   assert.doesNotMatch(protagonist.narrativeText, /No visible occupants are currently established in the canonical scene projection/i);
   assert.doesNotMatch(protagonist.narrativeText, /\b(?:Visual|Sounds|Scent|Tactile)\s*:/i);
   assert.doesNotMatch(protagonist.narrativeText, /first light|daybreak|dawn|sunrise|morning/i);
+
+  const legacySensoryFacts = {
+    ...baseFacts,
+    location: {
+      ...baseFacts.location,
+      ambientSensory: 'Visual: First light over Elysium Solar Citadel. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.',
+    },
+  };
+  const legacyOpening = OpeningSceneService.synthesizeDeterministicOpening(legacySensoryFacts, 'legacy_sensory');
+  assert.match(legacyOpening.narrativeText, /Distant sounds drift across the area/i);
+  assert.match(legacyOpening.narrativeText, /scent of native vegetation/i);
+  assert.match(legacyOpening.narrativeText, /ground is firm beneath your feet/i);
+  assert.doesNotMatch(legacyOpening.narrativeText, /first light|daybreak|dawn|sunrise|morning/i);
+  assert.doesNotMatch(legacyOpening.narrativeText, /Visual:|Sounds:|Scent:|Tactile:/i);
 });

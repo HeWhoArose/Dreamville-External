@@ -93,5 +93,5 @@ test('past-action edits remain distinct from presentation-only narration regener
   assert.ok(retryHandler.includes('generateNarrativeOnly'));
   assert.equal(retryHandler.includes('serverMockAuthority.processAction('), false, 'retry must not re-commit the player action');
 
-  assert.ok(client.includes('shouldRetryTransientHttpResponse(response.status, contentType, responsePreview)'));
+  assert.ok(client.includes('shouldRetryTransientHttpResponse(response.status, contentType, responsePreview, method)'));
 });

@@ -1028,6 +1028,15 @@ export class ServerMockAuthority {
         storyCheck.consequence = consequence;
         committedOutcome += ' ' + consequence.summary;
       }
+      // A check may replace the initial outcome string; reattach any verified
+      // scene interaction/observation result after that replacement so the
+      // narrator receives both the check result and established evidence.
+      if (sceneResolution.attempted && sceneResolution.feedback) {
+        committedOutcome += ' Scene interaction: ' + sceneResolution.feedback;
+      }
+      if (groundedObservation.relevant && groundedObservation.text) {
+        committedOutcome += ' Grounded observation: ' + groundedObservation.text;
+      }
     }
     // Do not overwrite an evidence-backed observation/search result with the
     // generic no-check action description. The committed outcome is the contract

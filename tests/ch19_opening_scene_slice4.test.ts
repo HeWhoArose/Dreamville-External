@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { worldRepository, InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { CurrentSituationBuilder } from '../server/domain/currentSituation';
+import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
 import { serverMockAuthority } from '../server/mockEngine/serverMockAuthority';
 import { MultiModelOrchestrator, DeterministicMockAdapter, type ModelRegistryRecord } from '../server/domain/aiOrchestrator';
 import { WorldTemplate, ConfirmedCharacter } from '../src/types';
@@ -1054,6 +1056,26 @@ test('an unresolved signal is not treated as a spatial target when the player ru
     );
     assert.match(seenCommittedOutcome, /no canonical destination or visible target is established/i);
     assert.match(seenCommittedOutcome, /active location remains/i);
+
+    const loggedAction = serverMockAuthority.getDynamicStoryState(storyId).actionHistory.find(
+      (entry: any) => entry.id === result.actionId,
+    );
+    assert.ok(loggedAction?.actionResolution, 'the canonical action resolution should be logged for continuity review');
+    const actionText = 'I rush towards the signal.';
+    const situation = CurrentSituationBuilder.build({
+      storyId,
+      worldRepo: worldRepository,
+      playerAction: actionText,
+    });
+    const continuityReview = serverMockAuthority.evaluateLiveNarrativeQuality({
+      narrativeText: 'Aelion Vane runs towards the signal, drawing them deeper into the outer reaches of the citadel outskirts where the subtle beacon originates.',
+      playerAction: actionText,
+      actionResolution: loggedAction.actionResolution,
+      situation,
+      intent: PlayerIntentInterpreter.deterministic(actionText, situation),
+    });
+    assert.equal(continuityReview.actionFidelity.valid, false, 'narration must not assign an unverified origin to the signal');
+    assert.match(continuityReview.actionFidelity.reason || '', /unverified origin or destination/i);
   } finally {
     orchestrator.generateNarrativeOnly = originalGenerateNarrativeOnly;
   }

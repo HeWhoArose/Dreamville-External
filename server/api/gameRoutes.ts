@@ -10,6 +10,7 @@ import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine, OPENING_CONTEXT_HARD_TOKEN_BUDGET } from '../domain/workingContextEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
+import { normalizeSceneSensoryForTime } from '../domain/sceneSensoryPresentation';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { NarrativeResearchPipeline } from '../domain/narrativeResearchPipeline';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
@@ -700,7 +701,10 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
         run?.startingSituation?.hook,
         location?.name,
         location?.description,
-        location?.ambientSensory,
+        normalizeSceneSensoryForTime(
+          location?.ambientSensory,
+          `${worldRepository.getWorldClock(storyId).getState().currentDayPhase} ${formatCanonicalTimestamp(worldRepository.getWorldClock(storyId).getTimestamp())}`,
+        ),
       ].filter(Boolean).join(' '),
       continuationDirective: presentationDirective,
     } as any);

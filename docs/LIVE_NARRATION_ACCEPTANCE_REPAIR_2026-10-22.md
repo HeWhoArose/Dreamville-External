@@ -29,7 +29,7 @@ This repair addresses the concrete live Story failure report for Aelion Vane at 
 - Provider-backed success is not established by mocked/unit tests. The reported Gemini timeout and expired InclusionAI key are external runtime/configuration failures and still need to be checked in the deployed environment.
 - The narrative retry route is source-audited as presentation-only, but the exact mobile UI interaction from the supplied transcript has not been replayed against a live session here.
 - The prose “moves deeper toward the signal” does not itself prove a canonical location transition. The current prompt contract requires the player to remain at the canonical location unless the authoritative game state commits movement. A final movement-specific live acceptance check remains necessary.
-- CI has not yet been run for this branch. Run `npm run lint`, `npm test`, `npm run build`, and `npm run verify:contracts` before merge. At time of writing, no Actions run was returned for this branch; the repository workflows are configured for `main`/PRs targeting `main`, so creating a PR is the expected CI trigger.
+- **CI status (verified 2026-10-22):** GitHub Actions run [39830114925](https://github.com/HeWhoArose/Dreamville-External/actions/runs/39830114925) completed successfully for commit `04333efe2e64fde5dfd0fe88386ca46c4a036bef`. Its job explicitly passed `npm install --no-audit --no-fund`, `npm run lint`, `npm test`, and `npm run build`. The run did **not** execute `npm run verify:contracts`; that remains a separate required check before merge. The live provider-backed Story UI and mobile retry sequence remain unverified.
 
 ## Acceptance checklist
 
@@ -39,5 +39,6 @@ This repair addresses the concrete live Story failure report for Aelion Vane at 
 - [ ] Retry of a narration error changes only presentation and does not create a second action, advance time, duplicate inventory, or alter canonical state.
 - [ ] Retry after an uncertain HTTP outcome reuses the same command identity and the canonical action is applied once.
 - [ ] Provider errors remain visible and correctly classified; no fake narration is returned as if an AI model generated it.
-- [ ] Full TypeScript check, all tests, release contract verification, and production build pass in CI.
+- [x] CI TypeScript/lint check, full `npm test`, and production build passed for commit `04333efe2e64fde5dfd0fe88386ca46c4a036bef` (Actions run 39830114925).
+- [ ] Run `npm run verify:contracts` separately; it was not part of the successful workflow above.
 - [ ] Replay the same actions through the deployed Story UI with a healthy provider configuration and inspect the persisted world state.

@@ -1067,7 +1067,7 @@ export class OpeningSceneService {
 			.replace(/\bWhat do you do\??/gi, '')
 			.replace(/No visible occupants are currently established in the canonical scene projection[^.]*\.?/gi, '')
 			.replace(/This alone does not mean the location is abandoned\.?/gi, '')
-			.replace(/\s{2,}/g, ' ')
+			.replace(/[ \t]{2,}/g, ' ')
 			.trim();
 	}
 

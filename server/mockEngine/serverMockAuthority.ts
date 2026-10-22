@@ -1233,6 +1233,9 @@ export class ServerMockAuthority {
         entity.id === target.id && entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive
       )
     );
+    const movementActionText = String(freeformText);
+    const movementAttemptIntent = Boolean(resolutionIntent.movementIntent) ||
+      /\b(?:rush|run|hurry|move|walk|head|go|advance|make my way)\b.{0,72}\b(?:toward|towards|to|into|through|closer|forward)\b/i.test(movementActionText);
     // Intra-location proximity changes require a grounded, currently visible
     // entity target. Words like "towards the signal" are not a canonical
     // destination or entity by themselves; do not mutate proximity to NEAR.
@@ -1240,8 +1243,8 @@ export class ServerMockAuthority {
       Boolean(focusTarget) &&
       !player?.isTraveling &&
       currentLocationId === player?.locationId &&
-      /\b(?:closer|toward|towards|approach|near|beside|next to|forward)\b/i.test(String(freeformText));
-    if (resolutionIntent.movementIntent && !focusTarget && !resolutionIntent.locationTarget?.id && !player?.isTraveling) {
+      /\b(?:closer|toward|towards|approach|near|beside|next to|forward)\b/i.test(movementActionText);
+    if (movementAttemptIntent && !focusTarget && !resolutionIntent.locationTarget?.id && !player?.isTraveling) {
       const movementTargetName = String(resolutionIntent.locationTarget?.name || '').trim();
       const namedSceneTarget = resolutionSituation.sceneObjects.some((object) => {
         const targetTokens = movementTargetName.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3);

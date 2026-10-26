@@ -110,15 +110,26 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+    let buildPromise: Promise<unknown> | null = null;
     if (!isProduction && !hasDist) {
-      const { build } = await import('vite');
-      console.log('[Dreamville Preview] DISABLE_HMR=true detected; building static frontend bundle.');
-      await build({
-        clearScreen: false,
-        logLevel: 'warn',
-      });
-      console.log('[Dreamville Preview] Static frontend bundle ready.');
+      buildPromise = (async () => {
+        const { build } = await import('vite');
+        console.log('[Dreamville Preview] DISABLE_HMR=true detected; building static frontend bundle.');
+        await build({
+          clearScreen: false,
+          logLevel: 'warn',
+        });
+        console.log('[Dreamville Preview] Static frontend bundle ready.');
+      })();
     }
+
+    app.use(async (req, res, next) => {
+      if (buildPromise) {
+        await buildPromise;
+        buildPromise = null;
+      }
+      next();
+    });
 
     app.use(
       express.static(distPath, {

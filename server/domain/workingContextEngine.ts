@@ -8,6 +8,13 @@ import { NarrativeContinuityEngine, type NarrativeResearchPacket } from './narra
 import { CurrentSituationBuilder, type CurrentSituation, type NearbyEntityContext, type VisibleEventContext } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
+import {
+  normalizeLocationSensory,
+  rollOpeningSituationType,
+  deriveStartingActivity,
+  describeOpeningSituationType,
+  type OpeningSituationType,
+} from './openingSituationModel';
 
 export interface WorkingContextPacket {
   scene: string;
@@ -92,7 +99,17 @@ export interface AssembledOpeningContext {
   epistemicallySanitized: boolean;
   rawOpeningFacts: {
     world: { id: string; title: string; genre?: string; tone?: string; rulesetId?: string; dndRulesMode?: DndRulesMode; narrativeProfile?: NarrativeProfile; summary?: string; setting?: string };
-    character: { name: string; role?: string; background?: string; capabilities: string[]; conditions: string[]; startingSituation?: string; equipment: string[] };
+    character: {
+      name: string;
+      role?: string;
+      background?: string;
+      capabilities: string[];
+      conditions: string[];
+      startingSituation?: string;
+      startingActivity?: string;
+      situationType?: OpeningSituationType;
+      equipment: string[];
+    };
     location: {
       id: string;
       name: string;
@@ -1363,8 +1380,23 @@ export class WorkingContextEngine {
     const locNode = geography.getNode(startingLocId);
     const locName = locNode?.name || run.startingLocation?.name || startingLocId;
     const locDesc = locNode?.description || run.startingLocation?.description || `The opening lands of ${world?.title || run.worldId}.`;
-    const locSensory = locNode?.ambientSensory || run.startingLocation?.ambientSensory || 'A quiet, watchful atmosphere fills the surroundings.';
     const locRegion = locNode?.regionId || run.startingLocation?.region || 'Frontier';
+    const timestamp = clock.getTimestamp();
+    const periodName = clock.getState().currentDayPhase;
+    const locSensory = normalizeLocationSensory(
+      locNode?.ambientSensory || run.startingLocation?.ambientSensory,
+      {
+        locationName: locName,
+        region: locRegion,
+        description: locDesc,
+        period: periodName,
+        hour: timestamp.hour,
+        minute: timestamp.minute,
+        archetype: (locNode as any)?.archetype || run.startingLocation?.archetype,
+        genreTags: Array.isArray(world?.genreTags) ? world.genreTags : (world?.genre ? [String(world.genre)] : []),
+        toneTags: Array.isArray(world?.toneTags) ? world.toneTags : (world?.tone ? [String(world.tone)] : []),
+      }
+    );
 
     // Opening generation uses the same canonical, epistemically-filtered scene
     // projection as live turns. The caller seeds ambient population first; this
@@ -1407,7 +1439,32 @@ export class WorkingContextEngine {
     const charBackground = run.characterBackground || run.protagonist?.background?.history || '';
     const charPersonality = run.characterPersonality || (Array.isArray(run.protagonist?.personality?.traits) ? run.protagonist.personality.traits.join(', ') : '');
     const charMotivations = run.characterMotivations || (Array.isArray(run.protagonist?.motivations?.goals) ? run.protagonist.motivations.goals.join(', ') : '');
-    const situationHook = run.startingSituation?.hook || run.startingSituation?.summary || run.initialScene || `Awakened in ${locName}.`;
+    const rawSituation = typeof run.startingSituation === 'object' && run.startingSituation !== null
+      ? run.startingSituation
+      : { summary: typeof run.startingSituation === 'string' ? run.startingSituation : '' };
+    const situationHook = rawSituation.summary || rawSituation.hook || run.initialScene || '';
+    const situationType = rollOpeningSituationType({
+      worldId: run.worldId,
+      worldTitle: world?.title,
+      characterId: run.activeCharacterId,
+      characterName: charName,
+      characterRole: charRole,
+      locationId: startingLocId,
+      locationName: locName,
+      explicitSituationType: rawSituation.situationType,
+    });
+    const equipList = run.characterEquipment || [];
+    const startingActivity = deriveStartingActivity({
+      characterName: charName,
+      role: charRole,
+      background: charBackground,
+      equipment: equipList,
+      locationName: locName,
+      locationDescription: locDesc,
+      situationType,
+      existingActivity: rawSituation.activity || (player?.currentActivity && player.currentActivity !== 'idle' ? player.currentActivity : undefined),
+      existingSituationSummary: situationHook,
+    });
 
     // 3. Protagonist conditions (e.g. lycanthropy form, injuries)
     const injuryStrings: string[] = player?.injuries?.map((i: any) => `${i.name || i.description || 'Injury'} [${i.severity || 'minor'}]`) || [];
@@ -1449,17 +1506,14 @@ export class WorkingContextEngine {
     const actorId = player?.actorId || `player_actor_${storyId}`;
     const actorCaps = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
     const capDescriptions = actorCaps.map((c) => `${c.name} [${c.powerTier}]: ${c.description}`);
-    const equipList = run.characterEquipment || [];
 
     // 5. Epistemic filter: only public or explicitly actor-acquired knowledge
     const safeKnowledge = knowledgeFacts
       .map((f) => `[${f.predicate}]: ${f.objectValue}`);
 
     // 6. Chronology
-    const timestamp = clock.getTimestamp();
     const formattedHeader = clock.getFormattedLocationTimeHeader(locName, timestamp);
     const eraName = world?.defaultEra || (run as any)?.worldTime?.era || 'Age of Shadows';
-    const periodName = clock.getState().currentDayPhase;
 
     const resolvedNarrativeMode = narrativeProfile?.mode || run?.storyMode || 'PROTAGONIST';
 
@@ -1538,8 +1592,8 @@ export class WorkingContextEngine {
         id: `chunk_${storyId}_b1_situation`,
         band: 'B1_CRITICAL',
         label: 'STARTING_SITUATION_HOOK',
-        content: `Immediate Starting Situation & Hook: ${situationHook}`,
-        estimatedTokens: WorkingContextEngine.estimateTokens(situationHook),
+        content: `Opening Situation Type: ${situationType} (${describeOpeningSituationType(situationType)}) | What Character Is Doing Now: ${startingActivity}${situationHook ? ` | Background Context / Optional Unsettled Note: ${situationHook}` : ''}`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(startingActivity + situationHook),
         isProtected: true,
         relevanceScore: 1.0,
       },
@@ -1616,7 +1670,9 @@ export class WorkingContextEngine {
             ...conditionList,
             conditionDefenseSummary,
           ].filter(Boolean),
-          startingSituation: situationHook,
+          startingSituation: situationHook || `${charName} is ${startingActivity} at ${locName}.`,
+          startingActivity,
+          situationType,
           equipment: equipList,
         },
         location: {

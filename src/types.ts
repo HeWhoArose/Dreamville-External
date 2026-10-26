@@ -565,6 +565,14 @@ export interface StructuredNarrativeEvent {
   timestamp?: string;
 }
 
+export type OpeningSituationType =
+  | 'ordinary_work'
+  | 'travel_or_arrival'
+  | 'market_or_social'
+  | 'quiet_aftermath'
+  | 'small_discovery'
+  | 'pressure_event';
+
 export interface OpeningScene {
 	narrativeProfile?: NarrativeProfile;
 	dndRulesMode?: DndRulesMode;
@@ -583,10 +591,18 @@ export interface OpeningScene {
     formattedTime: string;
   };
   startingSituation: string;
+  startingActivity?: string;
+  situationType?: OpeningSituationType;
   narrativeText: string;
   structuredEvents: StructuredNarrativeEvent[];
   generatedAt: string;
   idempotencyKey: string;
+  narrativeGeneration?: {
+    source?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+    providerId?: string;
+    modelId?: string;
+    fallbackReason?: string;
+  };
 }
 
 /**
@@ -2344,6 +2360,9 @@ export interface StartingSituationConfig {
   hook: string;
   initialConditions: string;
   whyHereNow: string;
+  activity?: string;
+  situationType?: OpeningSituationType;
+  unsettled?: string;
 }
 
 export interface CharacterPortraitAsset {

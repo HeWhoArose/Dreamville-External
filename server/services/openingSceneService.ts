@@ -13,6 +13,14 @@ import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
 import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
+import {
+	normalizeLocationSensory,
+	rollOpeningSituationType,
+	deriveStartingActivity,
+	deriveUnsettledDetail,
+	describeOpeningSituationType,
+	enforceOpeningProseHygiene,
+} from '../domain/openingSituationModel';
 
 function parseLooseOpeningResponse(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
 	const cleaned = String(rawText || '')
@@ -170,17 +178,39 @@ export class OpeningSceneService {
 
 		try {
 			const narrator = worldRepo.getAiOrchestrator();
+			const openingSituationType = rawOpeningFacts.character.situationType || rollOpeningSituationType({
+				worldId: rawOpeningFacts.world.id,
+				worldTitle: rawOpeningFacts.world.title,
+				characterName: rawOpeningFacts.character.name,
+				characterRole: rawOpeningFacts.character.role,
+				locationId: rawOpeningFacts.location.id,
+				locationName: rawOpeningFacts.location.name,
+			});
+			const openingStartingActivity = rawOpeningFacts.character.startingActivity || deriveStartingActivity({
+				characterName: rawOpeningFacts.character.name,
+				role: rawOpeningFacts.character.role,
+				background: rawOpeningFacts.character.background,
+				equipment: rawOpeningFacts.character.equipment,
+				locationName: rawOpeningFacts.location.name,
+				locationDescription: rawOpeningFacts.location.description,
+				situationType: openingSituationType,
+				existingSituationSummary: rawOpeningFacts.character.startingSituation,
+			});
+
 			const systemInstruction = [
 				'You are the primary narrator for a persistent interactive RPG.',
 				'The supplied context is canonical and player-visible only; never invent hidden facts, unseen NPC knowledge, future events, or mechanics.',
-				'Write the opening as the first passage of a living novel, not as a status report or a menu.',
-				'Use the character, location, time, current situation, relevant memories, world facts, and immediate narrative research to create a specific scene.',
-				'Prioritize concrete sensory details and physical relationships between things over generic adjectives.',
-				'Do not use labels such as Visual:, Sounds:, Scent:, Tactile:, Right now, Your turn, or What do you do.',
-				'Do not tell the player what they could choose. End on an unresolved in-world beat, observation, reaction, pressure, or visible opportunity that naturally invites action without a menu.',
+				'Write the opening as the first passage of a living novel, not as a status report, character sheet dump, or menu.',
+				'Answer four plain questions clearly across the passage: (1) where and when the character is, (2) what the character is doing right now, (3) what is normal and happening around them, and (4) what, if anything, is unsettled.',
+				'Prioritize concrete sensory details matched to the time of day and physical relationships between things over generic adjectives.',
+				'Do not use labels such as Visual:, Sounds:, Auditory:, Scent:, Tactile:, Right now, Your turn, or What do you do.',
+				'Never leak internal grounding rules (such as "No visible occupants are currently established in the canonical scene projection") and never paste raw character sheet fields or raw capability descriptions.',
+				'Do not repeat the starting situation hook across multiple paragraphs.',
+				'A lead is optional unless an explicit authored story agenda requires one: for ordinary-life starts, what is unsettled may be small or absent so the player is not forced into a mandatory quest.',
+				'Do not tell the player what they could choose. End on an in-world beat, observation, routine moment, or visible opportunity that naturally invites action without a menu.',
 				'Use 3 developed paragraphs when the context supports it. Keep the opening roughly 140–240 words.',
 				'Preserve the selected narrative mode exactly; these modes must have meaningfully different openings.',
-				'PROTAGONIST: make the player the central actor and establish a clear first lead or next-step objective grounded in the character background, starting situation, world facts, or authored agenda. If the context gives a named person, place, duty, debt, rival, mentor, or unresolved problem, make that lead legible. Do not invent secret canon or force a choice; end with a concrete in-world opening the player can act on.',
+				'PROTAGONIST: make the player the central actor grounded in their current activity. If an authored agenda or explicit problem is present, make that lead legible; otherwise allow a small or optional lead appropriate to the opening situation type without inventing a crisis.',
 				'SIDE_CHARACTER: establish that a principal character other than the player has the central goal. Explain what they are trying to accomplish and why the player is present or connected, then end on a meaningful decision, request, disagreement, or opportunity for the player. Do not take the player’s decision for them.',
 				'FREE_ROAM: establish the physical situation and interesting people or activity, but do not assign a mandatory main quest or imply there is one correct path. Preserve open-ended agency.',
 				'Describe the people and physical activity around the character, not just lighting, scenery, or sensory metaphors. Once the scene is grounded, do not repeat environmental description unless it changes or matters to the action.',
@@ -191,23 +221,25 @@ export class OpeningSceneService {
 				'CANONICAL OPENING CONTEXT:',
 				workingContext.assembledText,
 				'',
+				'OPENING SITUATION TYPE & STARTING ACTIVITY:',
+				`Situation Type: ${openingSituationType} — ${describeOpeningSituationType(openingSituationType)}`,
+				`Starting Activity (what the character is doing right now): ${openingStartingActivity}`,
+				'',
 				'NARRATIVE RESEARCH:',
 				JSON.stringify(researchPacket),
 				'',
 				'AUTHORED STORY AGENDA (if present; do not invent one):',
 				JSON.stringify(authoredAgendaContext),
 				'',
-				'OPENING REQUIREMENTS:',
-				'- Establish where and when the player is without repeating metadata as headings.',
-				'- Show the protagonist as physically situated in the current environment.',
-				'- Substance first, flourish second: communicate what is happening now and why the moment matters before atmosphere.',
-				'- Use only relevant visible details from the current situation and research.',
-				'- Introduce one concrete unresolved pressure or point of attention supported by canon.',
-				'- For PROTAGONIST, identify a clear first lead grounded in the supplied backstory, starting situation, or authored story agenda; if the canonical setup is too thin, state the nearest grounded lead without inventing a named quest-giver or secret.',
+				'OPENING REQUIREMENTS (FOUR PLAIN ANSWERS):',
+				'1. WHERE AND WHEN: Establish where and when the character is with natural sensory detail matched to the time of day, without metadata headings or Visual:/Sounds: labels.',
+				'2. DOING NOW: Show the protagonist actively engaged in their starting activity right now.',
+				'3. NORMAL AROUND THEM: Show what is normal around them (visible people, routine local activity, and surroundings) without leaking internal engine caveats.',
+				'4. WHAT IF ANYTHING IS UNSETTLED: State what, if anything, is unsettled. A lead can be small or absent in ordinary-life starts unless an authored agenda specifies one. Do not repeat the same hook sentence more than once.',
+				'- For PROTAGONIST, ground the opening in the starting activity; only foreground an urgent lead when supported by the authored story agenda or situation type.',
 				'- For SIDE_CHARACTER, use the authored agenda or starting situation to make the principal character’s goal clear and give the player a real response or decision to make; do not substitute the player for the principal actor.',
 				'- For FREE_ROAM, provide visible opportunities but no prescribed main objective.',
-				'- Show who is physically present and what they are doing when that information is available; avoid filler about sunlight, shoes, ground texture, or machinery hum.',
-				'- Do not invent a quest objective solely to make the opening dramatic.',
+				'- Do not dump raw ability names/tiers or invent a quest objective solely to make the opening dramatic.',
 			].join('\n');
 
 			const response = await narrator.executeTaskGeneration(
@@ -407,6 +439,44 @@ export class OpeningSceneService {
 			};
 		}
 
+		if (isDeterministicOpening && generatedText.trim().length > 0) {
+			const fallbackHygiene = enforceOpeningProseHygiene(generatedText, {
+				startingSituation: rawOpeningFacts.character.startingSituation,
+				capabilities: rawOpeningFacts.character.capabilities,
+			});
+			generatedText = OpeningSceneService.sanitizeFixtureLeaks(
+				OpeningSceneService.sanitizeNarrativeText(fallbackHygiene.cleanedText),
+				rawOpeningFacts,
+			);
+			qualityAudit = {
+				...qualityAudit,
+				issues: [...qualityAudit.issues, ...fallbackHygiene.issues],
+			};
+			generationMeta = {
+				...generationMeta,
+				qualityAudit,
+			};
+		}
+
+		const resolvedSituationType = rawOpeningFacts.character.situationType || rollOpeningSituationType({
+			worldId: rawOpeningFacts.world.id,
+			worldTitle: rawOpeningFacts.world.title,
+			characterName: rawOpeningFacts.character.name,
+			characterRole: rawOpeningFacts.character.role,
+			locationId: rawOpeningFacts.location.id,
+			locationName: rawOpeningFacts.location.name,
+		});
+		const resolvedStartingActivity = rawOpeningFacts.character.startingActivity || deriveStartingActivity({
+			characterName: rawOpeningFacts.character.name,
+			role: rawOpeningFacts.character.role,
+			background: rawOpeningFacts.character.background,
+			equipment: rawOpeningFacts.character.equipment,
+			locationName: rawOpeningFacts.location.name,
+			locationDescription: rawOpeningFacts.location.description,
+			situationType: resolvedSituationType,
+			existingSituationSummary: rawOpeningFacts.character.startingSituation,
+		});
+
 		const openingScene: OpeningScene = {
 			storyId,
 			worldId: run.worldId,
@@ -424,11 +494,19 @@ export class OpeningSceneService {
 				era: rawOpeningFacts.time.era,
 				formattedTime: rawOpeningFacts.time.formattedHeader,
 			},
-			startingSituation: rawOpeningFacts.character.startingSituation || 'Awakened into the world.',
+			startingSituation: rawOpeningFacts.character.startingSituation || `${rawOpeningFacts.character.name} is ${resolvedStartingActivity} at ${rawOpeningFacts.location.name}.`,
+			startingActivity: resolvedStartingActivity,
+			situationType: resolvedSituationType,
 			narrativeText: generatedText,
 			structuredEvents: generatedEvents,
 			generatedAt: new Date().toISOString(),
 			idempotencyKey: `open_${storyId}_${run.worldId}_v2`,
+			narrativeGeneration: {
+				source: generationMeta?.source || 'DETERMINISTIC_FALLBACK',
+				providerId: generationMeta?.providerId,
+				modelId: generationMeta?.modelId,
+				fallbackReason: generationMeta?.fallbackReason,
+			},
 		};
 
 		run.openingScene = openingScene;
@@ -868,61 +946,113 @@ export class OpeningSceneService {
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
-		const sceneAnchor = location.ambientSensory || location.description;
+		const situationType = character.situationType || rollOpeningSituationType({
+			worldId: facts.world.id,
+			worldTitle: facts.world.title,
+			characterName: character.name,
+			characterRole: character.role,
+			locationId: location.id,
+			locationName: location.name,
+		});
+		const startingActivity = character.startingActivity || deriveStartingActivity({
+			characterName: character.name,
+			role: character.role,
+			background: character.background,
+			equipment: character.equipment,
+			locationName: location.name,
+			locationDescription: location.description,
+			situationType,
+			existingSituationSummary: character.startingSituation,
+		});
+
+		const sceneAnchor = normalizeLocationSensory(location.ambientSensory || location.description, {
+			locationName: location.name,
+			region: location.region,
+			description: location.description,
+			period: time.period,
+			genreTags: facts.world.genre ? [facts.world.genre] : [],
+			toneTags: facts.world.tone ? [facts.world.tone] : [],
+		});
+
 		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
 			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
 		).slice(0, 4);
 		const visibleSceneObjects = (location.sceneObjects || [])
 			.filter((object) => object.visibleToPlayer && object.kind !== 'HAZARD')
 			.slice(0, 4);
-		const visibleObjectText = visibleSceneObjects.length
-			? 'In plain view: ' + visibleSceneObjects.map((object) => object.name).join(', ') + '.'
+
+		// 1. Plain Answer 1: Where and when (grounded in place and time of day, no Visual:/Sounds: labels)
+		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
+
+		// 2. Plain Answer 2 & 3: What the character is doing right now + what is normal around them
+		// Never dump raw capability descriptions or leak internal occupancy rules.
+		const rolePhrase = character.role && !character.role.toLowerCase().includes('protagonist')
+			? ` with the practiced habits of a ${character.role.toLowerCase()}`
 			: '';
-		// The deterministic fallback is player-facing narration: it must use the
-		// epistemic label, not a canonical name the viewer has not learned.
-		const visiblePeopleText = visiblePeople.length
+		const doingNowSentence = `${character.name} is ${startingActivity}${rolePhrase}.`;
+
+		const visiblePeopleSentence = visiblePeople.length
 			? visiblePeople.map((entity) => {
 				const label = entity.displayName || entity.name;
 				const roleSuffix = entity.role && !label.toLowerCase().includes(entity.role.toLowerCase())
 					? ' (' + entity.role + ')'
 					: '';
-				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`;
+				return `${label}${roleSuffix}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is nearby'}.`;
 			}).join(' ')
-			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
-		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
-		const characterContext = [
-			character.background,
-			character.role ? 'Role: ' + character.role : '',
-			character.capabilities?.slice(0, 3).join(', '),
-		].filter(Boolean).join(' ');
-		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}${visibleObjectText ? visibleObjectText + ' ' : ''}${visiblePeopleText}`;
+			: location.ambientActivity
+				? String(location.ambientActivity).trim()
+				: `Around ${location.name}, the everyday pace of ${location.region || 'the surroundings'} continues without disturbance.`;
+
+		const visibleObjectSentence = visibleSceneObjects.length
+			? `Nearby, ${visibleSceneObjects.map((object) => object.name).join(', ')} can be seen.`
+			: '';
+
+		const p2 = [doingNowSentence, visiblePeopleSentence, visibleObjectSentence].filter(Boolean).join(' ');
+
+		// 3. Plain Answer 4: What, if anything, is unsettled (optional lead, no repeated hook)
 		const authoredGoal = typeof agenda?.goal === 'string' && agenda.goal.trim() ? agenda.goal.trim() : '';
+		const unsettled = deriveUnsettledDetail({
+			situationType,
+			startingSituation: character.startingSituation,
+			startingActivity,
+			locationName: location.name,
+			visibleEntitiesCount: visiblePeople.length,
+			authoredGoal,
+		});
+
 		const p3 = narrativeMode === 'SIDE_CHARACTER'
 			? authoredGoal
 				? `The principal actor's current aim is ${authoredGoal}. You are connected to this unfolding situation, but your response and loyalties remain your decision.`
-				: 'The wider story centers on another principal actor and their goal; your place in that story is real, but your response remains your decision.'
+				: 'The wider story centers on another principal actor and their goal; your place in that story is real, but your response and loyalties remain your decision.'
 			: narrativeMode === 'FREE_ROAM'
 				? 'There is no prescribed main quest here. People have their own purposes, visible opportunities may be pursued or ignored, and the direction of the journey is yours to choose.'
 				: authoredGoal
 					? `Your first lead is clear: ${authoredGoal}. It gives you a place to begin, not a decision you must make; how you pursue it remains yours.`
-					: `Your first lead is the unresolved matter already established: ${character.startingSituation || 'the situation unfolding around you'}. Begin there, and let your choices determine what follows.`;
+					: unsettled.unsettledSentence;
+
+		const rawComposed = `${p1}\n\n${p2}\n\n${p3}`;
+		const hygiene = enforceOpeningProseHygiene(rawComposed, {
+			startingSituation: character.startingSituation,
+			capabilities: character.capabilities,
+		});
+		const cleanedText = OpeningSceneService.sanitizeNarrativeText(hygiene.cleanedText);
 
 		return {
-			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,
+			narrativeText: cleanedText,
 			structuredEvents: [
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.ambientSensory || `No visible occupants are established at ${location.name}.`), timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleSentence : sceneAnchor, timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_2`, type: 'action', text: doingNowSentence, timestamp: time.formattedHeader },
 				{
 					id: `evt_open_${storyId}_3`,
-					type: narrativeMode === 'FREE_ROAM' ? 'normal' : 'quest',
+					type: narrativeMode === 'FREE_ROAM' || (!authoredGoal && !unsettled.hasLead) ? 'normal' : 'quest',
 					text: narrativeMode === 'FREE_ROAM'
 						? 'Several opportunities may be pursued or ignored; no single path is prescribed.'
 						: narrativeMode === 'SIDE_CHARACTER'
 							? 'The principal actor’s objective remains unresolved, and the player’s response is open.'
 							: authoredGoal
 								? `A first lead is established: ${authoredGoal}`
-								: 'The starting situation remains unresolved.',
+								: unsettled.unsettledSentence,
 					timestamp: time.formattedHeader,
 				},
 			],

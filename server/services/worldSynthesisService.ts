@@ -5,6 +5,7 @@ import { WorldTemplate, WorldSynthesisInput } from '../../src/types';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
 import { expandLocationStructure, normalizeLocationArchetype } from '../domain/locationArchetypes';
+import { normalizeLocationSensory } from '../domain/openingSituationModel';
 
 export interface StructuredWorldRule {
   ruleId: string;
@@ -193,7 +194,7 @@ The JSON schema must strictly be:
         "name": "Location Name",
         "description": "Atmospheric description of location.",
         "coordinates": {"x": number, "y": number},
-        "ambientSensory": "Visual: ... Auditory: ...",
+        "ambientSensory": "Natural, label-free sensory prose for this specific place in late afternoon (do NOT use 'Visual:' or 'Auditory:' prefixes)",
         "archetype": "CITADEL" | "URBAN_DISTRICT" | "RESIDENTIAL_STREET" | "MARKET" | "INN" | "GUILD_HALL" | "TEMPLE" | "HARBOR" | "ALLEY" | "PARK" | "SEWER" | "WORKPLACE" | "RESTRICTED_SITE" | "ABANDONED_SITE" | "WILDERNESS" | "GENERIC",
         "sceneObjects": [
           {
@@ -512,13 +513,25 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       locations = rawLocs.map((l: any, idx: number) => {
         const locationId = String(l?.id || `loc_${timestamp}_${idx}`);
         const archetype = normalizeLocationArchetype(l?.archetype) || undefined;
+        const locName = l?.name || l?.title || `Location ${idx + 1}`;
+        const locDesc = l?.description || `Location in ${setting}`;
         return {
           ...(l && typeof l === 'object' ? l : {}),
           id: locationId,
-          name: l?.name || l?.title || `Location ${idx + 1}`,
-          description: l?.description || `Location in ${setting}`,
+          name: locName,
+          description: locDesc,
           coordinates: l?.coordinates || { x: 40 + idx * 20, y: 50 },
-          ambientSensory: l?.ambientSensory || `Visual: ${l?.name || 'Location'}.`,
+          ambientSensory: normalizeLocationSensory(l?.ambientSensory, {
+            locationName: locName,
+            region: setting,
+            description: locDesc,
+            period: 'Afternoon',
+            hour: 17,
+            minute: 42,
+            archetype,
+            genreTags,
+            toneTags,
+          }),
           provenance: l?.provenance || 'authored',
           ...(archetype ? { archetype } : {}),
           // No generated defaults for authored geography: the caller's intent is
@@ -739,16 +752,25 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
         seen.add(id);
         const name = String(raw.name || raw.title || `Location ${idx + 1}`);
         const structured = expandLocationStructure(raw, { locationId: id, generateDefaults: true });
+        const description = String(raw.description || `A location in ${setting || 'the world'}.`);
         return {
           ...JSON.parse(JSON.stringify(raw)),
           id,
           name,
           regionId: raw.regionId || raw.region || setting || 'Region Unestablished',
-          description: String(raw.description || `A location in ${setting || 'the world'}.`),
+          description,
           coordinates: raw.coordinates && typeof raw.coordinates === 'object'
             ? raw.coordinates
             : { x: 40 + (idx % 5) * 12, y: 45 + Math.floor(idx / 5) * 12 },
-          ambientSensory: String(raw.ambientSensory || `Visual: ${name}. Sounds: Ordinary ambient sound. Scent: Unremarkable. Tactile: Stable footing.`),
+          ambientSensory: normalizeLocationSensory(raw.ambientSensory, {
+            locationName: name,
+            region: raw.regionId || raw.region || setting,
+            description,
+            period: 'Afternoon',
+            hour: 17,
+            minute: 42,
+            archetype: structured.archetype,
+          }),
           accessible: raw.accessible !== undefined ? Boolean(raw.accessible) : true,
           provenance: raw.provenance || 'generated',
           ...structured,
@@ -826,31 +848,34 @@ As regional tensions rise, rival factions maneuver for influence over critical r
     // establishes structured archetypes, scene objects, environment, and
     // occupancy so provider failure cannot leave the player with empty set
     // dressing that the narrator cannot accurately describe.
+    const loc1Name = `The ${primary} ${pickOne(rng, ['Citadel', 'Nexus', 'Sanctuary', 'Spire', 'Heartland', 'Keep'])}`;
+    const loc2Name = `${secondary} ${pickOne(rng, ['Outpost', 'Watch', 'Terrace', 'Ridge', 'Quarry', 'Crossing'])}`;
+    const loc3Name = `The ${pickOne(rng, ['Sunken', 'Whispering', 'Shattered', 'Veiled', 'Silent', 'Hallowed'])} ${pickOne(rng, ['Hollows', 'Glade', 'Chasm', 'Vault', 'Canyon', 'Ruins'])}`;
     const locations = [
       {
         id: `loc_1_${primaryKey}`,
-        name: `The ${primary} ${pickOne(rng, ['Citadel', 'Nexus', 'Sanctuary', 'Spire', 'Heartland', 'Keep'])}`,
+        name: loc1Name,
         description: `The central seat of power and epicenter of ${primary.toLowerCase()} phenomena in ${setting}.`,
         coordinates: { x: 45, y: 50 },
-        ambientSensory: `Visual: Formations of ${primary.toLowerCase()} under ambient illumination. Auditory: Low continuous humming resonating across corridors.`,
+        ambientSensory: `Slanting late-afternoon light settles across ${loc1Name}, where a low hum carries through the corridors and the stonework holds the day's warmth.`,
         archetype: 'CITADEL' as const,
         provenance: 'generated' as const,
       },
       {
         id: `loc_2_${secondaryKey}`,
-        name: `${secondary} ${pickOne(rng, ['Outpost', 'Watch', 'Terrace', 'Ridge', 'Quarry', 'Crossing'])}`,
+        name: loc2Name,
         description: `A fortified regional station monitoring the volatile perimeter of ${setting}.`,
         coordinates: { x: 75, y: 35 },
-        ambientSensory: `Visual: Weathered observation parapets overlooking uncharted zones. Auditory: Shifting winds and distant seismic echoes.`,
+        ambientSensory: `Late-afternoon wind moves along the weathered parapets of ${loc2Name}, carrying grit and the steady clatter of watch gear.`,
         archetype: 'WORKPLACE' as const,
         provenance: 'generated' as const,
       },
       {
         id: `loc_3_depths`,
-        name: `The ${pickOne(rng, ['Sunken', 'Whispering', 'Shattered', 'Veiled', 'Silent', 'Hallowed'])} ${pickOne(rng, ['Hollows', 'Glade', 'Chasm', 'Vault', 'Canyon', 'Ruins'])}`,
+        name: loc3Name,
         description: `An isolated anomaly zone where deep secrets and concentrated ${primary.toLowerCase()} energies remain hidden.`,
         coordinates: { x: 25, y: 70 },
-        ambientSensory: `Visual: Dense atmospheric haze reflecting shimmering luminescence. Auditory: Faint intermittent resonance in the still air.`,
+        ambientSensory: `Cool afternoon shadow pools across ${loc3Name}, where damp air and faint mineral scent cling to the uneven ground.`,
         archetype: 'WILDERNESS' as const,
         provenance: 'generated' as const,
       }

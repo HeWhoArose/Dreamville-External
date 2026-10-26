@@ -1407,7 +1407,7 @@ export class ServerMockAuthority {
         actionResolution,
         committedOutcome,
         hardTokenBudget: 700,
-        timeoutMs: 15000,
+        timeoutMs: 30000,
         maxRetries: 1,
         recentTurns: this.getDynamicStoryState(targetStoryId).actionHistory
           .filter((entry) => entry.id !== baseResult?.actionId && Boolean(entry.narrativeResponse || entry.description))
@@ -1425,7 +1425,9 @@ export class ServerMockAuthority {
           run?.startingSituation?.hook,
           location?.name,
           location?.description,
-          location?.ambientSensory,
+          location?.ambientSensory && !/^\s*Visual:\s*First light over\b/i.test(String(location.ambientSensory))
+            ? location.ambientSensory
+            : undefined,
         ].filter(Boolean).join(' '),
         continuationDirective: (options as any)?.narrationDirective
           ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective
@@ -1597,7 +1599,7 @@ export class ServerMockAuthority {
           ].filter(Boolean).join('\\n');
           const rewriteSystem = 'You are Dreamville’s live-turn narrative quality editor. Rewrite only the presentation of the already-committed turn. Canonical mechanics, world state, epistemic boundaries, and player agency are immutable. The result must contain a clear action -> consequence/reaction beat.';
           const reviewResponse = await worldRepository.getAiOrchestrator().executeTaskGeneration('narrative.review', rewritePrompt, rewriteSystem, {
-            timeoutMs: 12000,
+            timeoutMs: 20000,
             maxTokens: 900,
             contextTokens: Math.min(12000, Math.ceil(rewritePrompt.length / 4)),
             validateResponse: (text) => parseLiveNarrativeReview(text)

@@ -7589,9 +7589,19 @@ export class MultiModelOrchestrator {
       Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
       Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
     };
+    // Strip quoted dialogue and relational/past/future/idiomatic time references
+    // (e.g. "closed before dawn", "since morning", "until midnight", "dawn of")
+    // so historical or conversational mentions are not mistaken for present-scene sky claims.
+    const strippedOutput = output
+      .replace(/["“”'][^"“”']*["“”']/g, ' ')
+      .replace(
+        /\b(?:before|since|until|till|by|from|after|at|prior\s+to|back\s+at|earlier\s+this|this\s+past|this|last|next|tomorrow|yesterday|every|each|wait\s+for|waiting\s+for|closed\s+at|opened\s+at|arrived\s+at|left\s+at|met\s+at|begin\s+at|begins\s+at|began\s+at|start\s+at|starts\s+at|started\s+at|end\s+at|ends\s+at|ended\s+at)\s+(?:the\s+)?(?:first\s+light|daybreak|dawn|predawn|sunrise|early\s+morning|morning|midday|noon|afternoon|dusk|sunset|late\s+evening|night|midnight)\b/gi,
+        ' ',
+      )
+      .replace(/\b(?:dawn\s+of|dawns?\s+on|dawned\s+on|from\s+dawn\s+to\s+dusk|day\s+and\s+night|night\s+and\s+day)\b/gi, ' ');
     // Match temporal markers as words/phrases, not arbitrary substrings. For example,
     // "knight" should not assert that the scene occurs at "night".
-    const normalizedOutput = ` ${output.replace(/[^a-z0-9]+/g, ' ').trim()} `;
+    const normalizedOutput = ` ${strippedOutput.replace(/[^a-z0-9]+/g, ' ').trim()} `;
     const contradiction = (forbiddenByPhase[state.currentDayPhase] || []).find((token) =>
       normalizedOutput.includes(` ${token} `),
     );
@@ -8069,7 +8079,7 @@ export class MultiModelOrchestrator {
     }
 
     const hardTokenBudget = params.hardTokenBudget ?? 700;
-    const timeoutMs = params.timeoutMs ?? 15000;
+    const timeoutMs = params.timeoutMs ?? 30000;
     const turnAiCallBudget = new AiTurnCallBudget();
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
@@ -8644,9 +8654,16 @@ export class MultiModelOrchestrator {
     const initialStoryBeatContinuity = params.actionResolution
       ? this.validateNarrativeStoryBeat(finalNarrationText, storyBeat)
       : { valid: true as const };
+    const initialSemanticReview = SemanticNarrativeReview.review({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: richnessEvaluationPlan,
+      turnPackage: validation.turnPackage,
+    });
     const qualityGateTriggersRewrite =
       environmentExcess ||
       finalNarrativeRichnessEvaluation.decision === 'IMPROVE' ||
+      initialSemanticReview.decision !== 'ACCEPT' ||
       (params.actionResolution !== undefined && !finalActionModeContinuity.valid) ||
       (params.actionResolution !== undefined && !initialStoryBeatContinuity.valid);
     if (qualityGateTriggersRewrite && (params.maxRetries ?? 0) >= 1) {
@@ -8679,6 +8696,16 @@ export class MultiModelOrchestrator {
           '',
           'PRESENTATION QUALITY REVIEW:',
           NarrativeRichnessEvaluator.buildRewriteGuidance(finalNarrativeRichnessEvaluation),
+          initialSemanticReview.decision !== 'ACCEPT'
+            ? [
+                'SEMANTIC REVIEW ISSUES TO FIX:',
+                ...initialSemanticReview.violations.map((v) => `- [${v.code}] ${v.message}`),
+                ...initialSemanticReview.missingRequirements.map((r) => `- Required: ${r}`),
+                ...(initialSemanticReview.unsupportedClaims.length
+                  ? [`- Remove unsupported concrete claims not in canonical scene: ${initialSemanticReview.unsupportedClaims.join(', ')}`]
+                  : []),
+              ].join('\n')
+            : '',
           environmentExcess
             ? 'The original narration spends too many sentences on environment-only description. Cut environment-only exposition to at most ' + NARRATIVE_ENV_EXCESS_SENTENCE_BUDGET + ' sentences. What is happening, who is acting, what the player can observe changing, and any immediate stakes take priority over atmosphere. The protagonist must appear as an actor in the scene, reacting, observing, or preparing a next observable step — not as a camera.'
             : '',
@@ -8768,11 +8795,15 @@ export class MultiModelOrchestrator {
             const rewriteStoryBeatContinuity = params.actionResolution
               ? this.validateNarrativeStoryBeat(rewriteNarration, storyBeat)
               : { valid: true as const };
+            const originalNeedsMandatoryFix =
+              initialSemanticReview.decision !== 'ACCEPT' ||
+              environmentExcess ||
+              (params.actionResolution !== undefined && (!finalActionModeContinuity.valid || !initialStoryBeatContinuity.valid));
             if (
               rewriteNarration.trim().length > 0 &&
               !rewriteEnvironmentExcess &&
               rewriteStoryBeatContinuity.valid &&
-              postRewriteEvaluation.overallScore > finalNarrativeRichnessEvaluation.overallScore
+              (originalNeedsMandatoryFix || postRewriteEvaluation.overallScore > finalNarrativeRichnessEvaluation.overallScore)
             ) {
               validation.turnPackage = rewriteValidation.turnPackage;
               finalNarrationText = rewriteNarration;
@@ -8902,6 +8933,68 @@ export class MultiModelOrchestrator {
         error: 'Narration failed final validation because the active narrative plan was unavailable.',
       };
     }
+    const preFinalSemanticReview = SemanticNarrativeReview.review({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: richnessEvaluationPlan,
+      turnPackage: validation.turnPackage,
+    });
+    if (
+      preFinalSemanticReview.decision === 'REWRITE' &&
+      !preFinalSemanticReview.violations.some((violation) => violation.severity === 'HIGH')
+    ) {
+      const repairClauses: string[] = [];
+      if (preFinalSemanticReview.violations.some((v) => v.code === 'MISSING_MOVEMENT')) {
+        repairClauses.push(
+          playerIntent.locationTarget?.name
+            ? `You move toward ${playerIntent.locationTarget.name} from ${currentSituation.location.name}.`
+            : `You shift position carefully within ${currentSituation.location.name}.`,
+        );
+      }
+      if (preFinalSemanticReview.violations.some((v) => v.code === 'MISSING_OBSERVATION')) {
+        const visibleEvent = currentSituation.visibleEvents[0]?.summary;
+        const visibleEntity = currentSituation.nearbyEntities.find((entity) => entity.visibleToPlayer && entity.kind !== 'PLAYER');
+        repairClauses.push(
+          visibleEvent
+            ? `Listening and watching closely, you notice ${visibleEvent.replace(/[.!?]+$/, '')}.`
+            : visibleEntity
+              ? `Watching and listening closely, you observe ${visibleEntity.displayName || visibleEntity.name} nearby, though nothing further is immediately clear.`
+              : `You listen and watch closely across ${currentSituation.location.name}, noticing no further immediate sound or movement beyond what is already visible.`,
+        );
+      }
+      if (preFinalSemanticReview.violations.some((v) => v.code === 'MISSING_INFORMATION')) {
+        const leadTopic = richnessEvaluationPlan.informationToReveal[0]?.topic || currentSituation.visibleEvents[0]?.summary;
+        repairClauses.push(
+          leadTopic
+            ? `What you can discern centers on ${leadTopic.replace(/[.!?]+$/, '')}, though the details remain unverified.`
+            : 'Nothing more definite can be confirmed from the immediate scene alone.',
+        );
+      }
+      if (repairClauses.length > 0 && validation.turnPackage.narrative.length > 0) {
+        const repairedNarrative = [...validation.turnPackage.narrative];
+        repairedNarrative[repairedNarrative.length - 1] = `${repairedNarrative[repairedNarrative.length - 1].trim()} ${repairClauses.join(' ')}`.trim();
+        const candidateTurnPackage: StructuredTurnPackage = {
+          ...validation.turnPackage,
+          narrative: repairedNarrative,
+        };
+        const candidateCheck = this.validateNarrativeCandidate({
+          storyId,
+          playerAction,
+          intent: playerIntent,
+          situation: currentSituation,
+          plan: richnessEvaluationPlan,
+          storyBeat,
+          turnPackage: candidateTurnPackage,
+          repository: worldRepo,
+          pacingContract: narrativePacingContract,
+        });
+        if (candidateCheck.valid) {
+          validation.turnPackage = candidateTurnPackage;
+          finalNarrationText = repairedNarrative.join(' ');
+        }
+      }
+    }
+
     const finalCandidateValidation = this.validateNarrativeCandidate({
       storyId,
       playerAction,

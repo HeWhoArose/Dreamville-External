@@ -33,6 +33,11 @@ import type { RulesProfile } from '../../src/types';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
+import {
+  normalizeLocationSensory,
+  rollOpeningSituationType,
+  deriveStartingActivity,
+} from '../domain/openingSituationModel';
 import type { NarrativeProfile } from '../../src/types';
 import { UniverseRuntimeService } from '../domain/universeRuntimeService';
 import type { UniverseCampaignState, UniverseMemoryRecord } from '../domain/universeRuntimeService';
@@ -718,6 +723,14 @@ export class InMemoryWorldRepository implements WorldRepository {
       const worldGeography = world.geography || {};
       const rawNodes = worldGeography.nodes || worldGeography.locations || worldGeography.zones || world.startingStarts || [];
 
+      // Initialize canonical WorldClock first so place sensory defaults match the canonical time of day
+      const clock = new WorldClock(world.defaultEra || 'Age of Discovery');
+      this.worldClocks.set(storyId, clock);
+      const clockState = clock.getState();
+      const clockTimestamp = clock.getTimestamp();
+      const worldGenreTags = Array.isArray(world.genreTags) ? world.genreTags : (world.genre ? [String(world.genre)] : []);
+      const worldToneTags = Array.isArray(world.toneTags) ? world.toneTags : (world.tone ? [String(world.tone)] : []);
+
       let startingLocationId = char.startingLocation?.locationId;
       const registeredNodes: any[] = [];
 
@@ -750,9 +763,20 @@ export class InMemoryWorldRepository implements WorldRepository {
             coordinates: isObj && nodeItem.coordinates ? nodeItem.coordinates : { x: defaultX, y: defaultY },
             accessible: isObj && nodeItem.accessible !== undefined ? Boolean(nodeItem.accessible) : true,
             discovered: nodeId === startingLocationId, // Epistemic isolation: only starting location discovered initially
-            ambientSensory: isObj && typeof nodeItem.ambientSensory === 'string'
-              ? nodeItem.ambientSensory
-              : `Visual: Distinct environment of ${name}. Sounds: Ambient murmurs. Scent: Fresh air. Tactile: Stable terrain.`,
+            ambientSensory: normalizeLocationSensory(
+              isObj && typeof nodeItem.ambientSensory === 'string' ? nodeItem.ambientSensory : undefined,
+              {
+                locationName: name,
+                region: regionId,
+                description,
+                period: clockState.currentDayPhase,
+                hour: clockTimestamp.hour,
+                minute: clockTimestamp.minute,
+                archetype: isObj && nodeItem.archetype ? String(nodeItem.archetype) : undefined,
+                genreTags: worldGenreTags,
+                toneTags: worldToneTags,
+              }
+            ),
             // Authored visible props are canonical scene evidence; dropping them
             // here makes CurrentSituationBuilder and SemanticNarrativeReview
             // reject valid observation prose as if those props had been invented.
@@ -833,15 +857,31 @@ export class InMemoryWorldRepository implements WorldRepository {
         if (!startingLocationId) {
           startingLocationId = `loc_${storyId}_start`;
         }
+        const startNodeName = char.startingLocation?.name || world.setting || `${world.title} Capital`;
+        const startNodeRegion = char.startingLocation?.region || world.title;
+        const startNodeDesc = char.startingLocation?.description || world.description || `Starting area in ${world.title}.`;
         const startNode = {
           id: startingLocationId,
-          name: char.startingLocation?.name || world.setting || `${world.title} Capital`,
-          regionId: char.startingLocation?.region || world.title,
-          description: char.startingLocation?.description || world.description || `Starting area in ${world.title}.`,
+          name: startNodeName,
+          regionId: startNodeRegion,
+          description: startNodeDesc,
           coordinates: char.startingLocation?.coordinates || { x: 50, y: 50 },
           accessible: char.startingLocation?.accessible !== undefined ? Boolean(char.startingLocation.accessible) : true,
           discovered: true,
-          ambientSensory: char.startingLocation?.ambientSensory || `Visual: First light over ${world.title}. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.`,
+          ambientSensory: normalizeLocationSensory(
+            char.startingLocation?.ambientSensory,
+            {
+              locationName: startNodeName,
+              region: startNodeRegion,
+              description: startNodeDesc,
+              period: clockState.currentDayPhase,
+              hour: clockTimestamp.hour,
+              minute: clockTimestamp.minute,
+              archetype: char.startingLocation?.archetype ? String(char.startingLocation.archetype) : undefined,
+              genreTags: worldGenreTags,
+              toneTags: worldToneTags,
+            }
+          ),
           provenance: 'generated' as const,
           ...(char.startingLocation?.population && typeof char.startingLocation.population === 'object'
             ? { population: JSON.parse(JSON.stringify(char.startingLocation.population)) }
@@ -859,10 +899,6 @@ export class InMemoryWorldRepository implements WorldRepository {
       }
 
       this.geographies.set(storyId, geographyGraph);
-
-      // 6. Chronology: Brand-new WorldClock with Era, turn 0
-      const clock = new WorldClock(world.defaultEra || 'Age of Discovery');
-      this.worldClocks.set(storyId, clock);
 
       // 7. Protagonist Actor & Lifecycle
       const actorId = `player_actor_${storyId}`;
@@ -902,19 +938,6 @@ export class InMemoryWorldRepository implements WorldRepository {
           }
         : null;
 
-      const player = new PlayerLifecycleState({
-        actorId,
-        name: char.identity.name,
-        locationId: startingLocationId,
-        discoveredLocationIds: [startingLocationId], // Strict epistemic boundary
-        lastUpdatedTime: clock.getTimestamp().totalElapsedSeconds,
-        currentActivity: 'idle',
-        activeJourney: null,
-        injuries: initialInjuries,
-        transformationRecord: activeForm,
-      });
-      this.playerLifecycles.set(storyId, player);
-
       // 8. Inventory & Equipment Paper Doll
       const invEngine = new InventoryItemEngine();
       this.inventoryEngines.set(storyId, invEngine);
@@ -927,6 +950,50 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(Array.isArray(char.startingEquipment?.tools) ? char.startingEquipment.tools : []),
         ...(Array.isArray(char.startingEquipment?.consumables) ? char.startingEquipment.consumables : []),
       ];
+
+      const startLocNodeForActivity = geographyGraph.getNode(startingLocationId);
+      const startLocNameForActivity = startLocNodeForActivity?.name || char.startingLocation?.name || startingLocationId;
+      const rawSituationObj =
+        typeof char.startingSituation === 'object' && char.startingSituation !== null
+          ? char.startingSituation
+          : { summary: typeof char.startingSituation === 'string' ? char.startingSituation : '' };
+      const resolvedSituationType = rollOpeningSituationType({
+        worldId: world.worldId,
+        worldTitle: world.title,
+        characterId: char.characterId,
+        characterName: char.identity?.name,
+        characterRole: char.role?.profession || char.role?.archetype,
+        locationId: startingLocationId,
+        locationName: startLocNameForActivity,
+        explicitSituationType: rawSituationObj.situationType,
+      });
+      const resolvedStartingActivity = deriveStartingActivity({
+        characterName: char.identity?.name || 'Protagonist',
+        role: char.role?.profession || char.role?.archetype,
+        background: char.background?.history,
+        equipment: [
+          ...equippedItems.map((e: any) => (typeof e === 'string' ? e : e?.name)),
+          ...inventoryItems.map((i: any) => (typeof i === 'string' ? i : i?.name)),
+        ].filter(Boolean),
+        locationName: startLocNameForActivity,
+        locationDescription: startLocNodeForActivity?.description || char.startingLocation?.description,
+        situationType: resolvedSituationType,
+        existingActivity: rawSituationObj.activity,
+        existingSituationSummary: rawSituationObj.summary || rawSituationObj.hook,
+      });
+
+      const player = new PlayerLifecycleState({
+        actorId,
+        name: char.identity.name,
+        locationId: startingLocationId,
+        discoveredLocationIds: [startingLocationId], // Strict epistemic boundary
+        lastUpdatedTime: clock.getTimestamp().totalElapsedSeconds,
+        currentActivity: resolvedStartingActivity || 'idle',
+        activeJourney: null,
+        injuries: initialInjuries,
+        transformationRecord: activeForm,
+      });
+      this.playerLifecycles.set(storyId, player);
 
       let itemDefCounter = 0;
 
@@ -1329,7 +1396,13 @@ export class InMemoryWorldRepository implements WorldRepository {
         ])),
         startingState: JSON.parse(JSON.stringify(char.startingState || {})),
         startingLocation: JSON.parse(JSON.stringify(char.startingLocation || {})),
-        startingSituation: JSON.parse(JSON.stringify(char.startingSituation || {})),
+        startingSituation: JSON.parse(JSON.stringify({
+          ...(typeof char.startingSituation === 'object' && char.startingSituation !== null
+            ? char.startingSituation
+            : { summary: typeof char.startingSituation === 'string' ? char.startingSituation : '' }),
+          activity: resolvedStartingActivity,
+          situationType: resolvedSituationType,
+        })),
         plannedEvents,
         eventStates,
         createdAt: new Date().toISOString(),

@@ -7,6 +7,7 @@ import type { WorldRepository } from '../repositories/worldRepository';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { LocalSpatialState } from './playerLifecycleState';
 import { describeAmbientActivity } from './locationArchetypes';
+import { normalizeLocationSensory } from './openingSituationModel';
 
 
 export interface CurrentLocationContext {
@@ -753,12 +754,21 @@ export class CurrentSituationBuilder {
 			});
 		}
 
+		const normalizedAmbientSensory = safeLocation.ambientSensory
+			? normalizeLocationSensory(String(safeLocation.ambientSensory), {
+				locationName: safeLocation.name,
+				description: safeLocation.description,
+				archetype: safeLocation.archetype,
+				hour: timestamp.hour,
+			})
+			: undefined;
+
 		const currentLocation: CurrentLocationContext = {
 			id: safeLocation.id,
 			name: safeLocation.name,
 			regionId: safeLocation.regionId,
 			description: safeLocation.description,
-			ambientSensory: safeLocation.ambientSensory,
+			ambientSensory: normalizedAmbientSensory,
 			accessible: hasCanonicalLocation ? safeLocation.accessible : false,
 			discovered: hasCanonicalLocation ? (player ? true : safeLocation.discovered) : false,
 			parentLocationId: safeLocation.parentLocationId,
@@ -1042,7 +1052,7 @@ export class CurrentSituationBuilder {
 				entities: limitedNearbyEntities.filter((entity) => entity.visibleToPlayer).slice(0, 16),
 				events: visibleEvents.slice(0, 16),
 				sensory: [
-					safeLocation.ambientSensory,
+					normalizedAmbientSensory,
 				].map(normalizeText).filter(Boolean).slice(0, 8),
 				structures: sceneObjects
 					.filter((object) => object.kind === 'STRUCTURE' || object.kind === 'ENVIRONMENTAL_FEATURE')

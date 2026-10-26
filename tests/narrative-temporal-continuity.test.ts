@@ -36,3 +36,26 @@ test('temporal continuity guard matches time-of-day markers as words, not substr
   assert.equal(contradiction.valid, false);
   assert.match(contradiction.errorReason || '', /morning/i);
 });
+
+test('temporal continuity guard permits relational and conversational time references while rejecting present-scene contradictions', () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'temporal_relational_reference_regression';
+  repository.seedStory(storyId);
+  const orchestrator = new MultiModelOrchestrator(repository);
+
+  const relational = (orchestrator as any).validateNarrativeTemporalContinuity(
+    'You ask the guard what happened, and he explains that the eastern gate was closed before dawn and has remained sealed since morning.',
+    repository,
+    storyId,
+  );
+  assert.equal(relational.valid, true, relational.errorReason || 'relational past/future references should be permitted');
+
+  const presentContradiction = (orchestrator as any).validateNarrativeTemporalContinuity(
+    'Dawn light spills across the stone courtyard as you step forward.',
+    repository,
+    storyId,
+  );
+  assert.equal(presentContradiction.valid, false);
+  assert.match(presentContradiction.errorReason || '', /dawn/i);
+});
+

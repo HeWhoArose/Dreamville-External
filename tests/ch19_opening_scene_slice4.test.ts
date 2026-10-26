@@ -963,3 +963,163 @@ test('Deterministic opening fallback respects protagonist, side-character, and f
   const freeRoam = OpeningSceneService.synthesizeDeterministicOpening(freeRoamFacts, 'mode_free');
   assert.match(freeRoam.narrativeText, /There is no prescribed main quest/i);
 });
+
+test('Opening situation types, four plain answers, sensory defaults, and fallback hygiene gate', async () => {
+  const {
+    OPENING_SITUATION_TYPES,
+    rollOpeningSituationType,
+    buildPlaceSensoryDetail,
+    enforceOpeningProseHygiene,
+  } = await import('../server/domain/openingSituationModel');
+  const { characterGenesisService } = await import('../server/services/characterGenesisService');
+
+  // 1. Six opening situation types with 1-in-6 crisis (pressure_event) and 5-in-6 ordinary-life starts
+  assert.equal(OPENING_SITUATION_TYPES.length, 6);
+  const counts: Record<string, number> = {};
+  for (let i = 0; i < 600; i++) {
+    const rolled = rollOpeningSituationType({ seedOverride: i });
+    counts[rolled] = (counts[rolled] || 0) + 1;
+  }
+  assert.equal(counts.pressure_event, 100, 'Crisis/pressure_event openings must be 1 in 6');
+  const ordinaryTotal =
+    (counts.ordinary_work || 0) +
+    (counts.travel_or_arrival || 0) +
+    (counts.market_or_social || 0) +
+    (counts.quiet_aftermath || 0) +
+    (counts.small_discovery || 0);
+  assert.equal(ordinaryTotal, 500, 'Ordinary-life starts must be 5 in 6');
+
+  // 2. Real sensory detail matched to place and time of day (no "Visual: First light over <world title>" at 17:42 Afternoon)
+  const afternoonSensory = buildPlaceSensoryDetail({
+    locationName: 'Pinewatch Ridge',
+    region: 'Northern Marches',
+    description: 'A pine-covered ridge trail with snare lines.',
+    period: 'Afternoon',
+    hour: 17,
+    minute: 42,
+  });
+  assert.match(afternoonSensory, /Pinewatch Ridge/, 'Sensory detail must name the place, not the world title');
+  assert.doesNotMatch(afternoonSensory, /First light/i, 'Afternoon sensory detail at 17:42 must not say First light');
+  assert.doesNotMatch(afternoonSensory, /\b(?:Visual|Sounds|Auditory|Scent|Tactile)\s*:/i, 'Sensory detail must not use Visual:/Sounds: labels');
+
+  // 3. WorldRepository default location sensory and CharacterGenesis starting activity
+  const repo = new InMemoryWorldRepository({ disablePersistence: true });
+  const worldNoSensory: WorldTemplate = {
+    worldId: 'world_sensory_default_test',
+    worldManifestVersion: 1,
+    title: 'Chronicles of Ironvale',
+    description: 'A frontier valley of timber towns and old watchroads.',
+    genreTags: ['Fantasy'],
+    toneTags: ['Grounded'],
+    mediumTags: ['Text Adventure'],
+    defaultEra: 'Third Reckoning',
+    setting: 'Ironvale',
+    canonMode: 'Original',
+    rulesetId: 'FULL_DND',
+    capabilities: [],
+    geography: {
+      nodes: [
+        {
+          id: 'loc_mill_yard',
+          name: 'Old Mill Yard',
+          region: 'Lower Valley',
+          description: 'A timber yard beside the millrace where locals stack cut cedar.',
+          coordinates: { x: 40, y: 50 },
+        } as any,
+      ],
+      connections: [],
+    },
+    historyTimeline: [],
+    canonKnowledge: [],
+    startingHooks: [],
+  };
+  repo.saveWorldTemplate(worldNoSensory);
+
+  const draft = await characterGenesisService.extractCharacterDraft({
+    worldId: 'world_sensory_default_test',
+    conceptDescription: 'Rowan Hale, a local trapper and woodsman who checks snare lines and trades pelts at the mill.',
+    allowDeterministicFallback: true,
+  }, worldNoSensory);
+
+  assert.ok(draft.startingSituation.activity, 'Character genesis must supply a concrete starting activity');
+  assert.ok(
+    OPENING_SITUATION_TYPES.includes(draft.startingSituation.situationType as any),
+    'Character genesis must assign a valid opening situation type'
+  );
+
+  const confirmed = characterGenesisService.confirmCharacter(draft, worldNoSensory);
+  // Add raw capabilities to verify they are never dumped verbatim into opening prose
+  confirmed.capabilities = [
+    {
+      id: 'cap_snare_craft',
+      name: 'Snarecraft Mastery',
+      category: 'Physical',
+      activationMode: 'passive',
+      powerTier: 'Minor',
+      baseEnergyCost: 5,
+      baseStrainCost: 0,
+      minVesselCapacityRequired: 0,
+      description: 'Raw mechanical ability text that must never be pasted into paragraph two.',
+      provenance: 'CHARACTER_GENESIS',
+    },
+  ];
+  confirmed.startingSituation = {
+    summary: 'Sorting pelts before the wagon leaves for the river crossing.',
+    activity: 'checking the tension on his snare wire beside the stacked cedar',
+    situationType: 'ordinary_work',
+    hook: 'Sorting pelts before the wagon leaves for the river crossing.',
+    initialConditions: 'Late afternoon in the mill yard.',
+    whyHereNow: 'Routine work at the yard.',
+  };
+
+  const { storyId } = repo.createStoryRunFromConfirmedCharacter({
+    worldId: 'world_sensory_default_test',
+    confirmedCharacter: confirmed,
+  });
+
+  const node = repo.getGeographyGraph(storyId).getNode('loc_mill_yard');
+  assert.ok(node?.ambientSensory, 'Geography node must have ambientSensory');
+  assert.doesNotMatch(node!.ambientSensory!, /First light over Chronicles of Ironvale/i);
+  assert.doesNotMatch(node!.ambientSensory!, /\b(?:Visual|Sounds|Scent|Tactile)\s*:/i);
+  assert.match(node!.ambientSensory!, /Old Mill Yard/);
+
+  const ctx = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: repo });
+  const fallback = OpeningSceneService.synthesizeDeterministicOpening(ctx.rawOpeningFacts, storyId, null);
+
+  // 4. Verify no leaked internals, no raw ability dump, no Visual:/Sounds:, no repeated hook, and optional lead
+  assert.doesNotMatch(
+    fallback.narrativeText,
+    /No visible occupants are currently established in the canonical scene projection/i,
+    'Internal grounding rule must never appear as player-facing prose'
+  );
+  assert.doesNotMatch(
+    fallback.narrativeText,
+    /Raw mechanical ability text that must never be pasted/i,
+    'Raw capability descriptions must not be dumped into the opening prose'
+  );
+  assert.doesNotMatch(
+    fallback.narrativeText,
+    /\bRole:\s/i,
+    'Character sheet Role: label must not be dumped into opening prose'
+  );
+  assert.doesNotMatch(
+    fallback.narrativeText,
+    /Your first lead is the unresolved matter already established/i,
+    'Ordinary-work starts without an authored goal must not force a mandatory first lead sentence'
+  );
+  assert.match(
+    fallback.narrativeText,
+    /checking the tension on his snare wire/i,
+    'Fallback composer must use the starting activity supplied by character genesis'
+  );
+
+  const hookMatches = fallback.narrativeText.match(/Sorting pelts before the wagon leaves for the river crossing/gi) || [];
+  assert.ok(hookMatches.length <= 1, 'Starting situation hook must not be repeated across multiple paragraphs');
+
+  const hygieneCheck = enforceOpeningProseHygiene(fallback.narrativeText, {
+    startingSituation: ctx.rawOpeningFacts.character.startingSituation,
+    capabilities: ctx.rawOpeningFacts.character.capabilities,
+  });
+  assert.equal(hygieneCheck.valid, true, `Fallback prose must pass the shared hygiene gate: ${hygieneCheck.issues.join('; ')}`);
+});
+

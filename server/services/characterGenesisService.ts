@@ -1,4 +1,8 @@
 import { deterministicId } from '../domain/deterministicRng';
+import {
+  rollOpeningSituationType,
+  deriveStartingActivity,
+} from '../domain/openingSituationModel';
 import { worldRepository } from '../repositories/worldRepository';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import {
@@ -426,6 +430,8 @@ Return ONLY one JSON object matching this contract:
   },
   "startingSituation": {
     "summary": string,
+    "activity": string,
+    "situationType": "ordinary_work" | "travel_or_arrival" | "market_or_social" | "quiet_aftermath" | "small_discovery" | "pressure_event",
     "hook": string,
     "initialConditions": string,
     "whyHereNow": string
@@ -1035,13 +1041,49 @@ Rules:
       bodyRegions: normalizeBodyRegions(rawConditionState?.bodyRegions),
     };
 
+    const seededSituationType = rollOpeningSituationType({
+      worldId,
+      worldTitle: worldTemplate?.title,
+      characterName: identity.name,
+      characterRole: role.profession || role.archetype,
+      locationId: startingLocation.locationId,
+      locationName: startingLocation.name,
+      explicitSituationType: extracted.startingSituation?.situationType,
+    });
+    const derivedActivity = deriveStartingActivity({
+      characterName: identity.name,
+      role: role.profession || role.archetype,
+      background: background.history,
+      equipment: [
+        ...(startingEquipment.weapons || []),
+        ...(startingEquipment.tools || []),
+      ],
+      locationName: startingLocation.name,
+      locationDescription: startingLocation.description,
+      situationType: seededSituationType,
+      existingActivity: extracted.startingSituation?.activity,
+      existingSituationSummary: extracted.startingSituation?.summary,
+    });
+    const defaultHookForType =
+      seededSituationType === 'pressure_event'
+        ? `A pressing development at ${startingLocation.name} calls for a decision.`
+        : seededSituationType === 'small_discovery'
+        ? `A small detail at ${startingLocation.name} sits slightly out of place.`
+        : '';
+
     const startingSituation: StartingSituationConfig = userEditedFields.has('startingSituation') && existingDraft?.startingSituation
-      ? existingDraft.startingSituation
+      ? {
+          ...existingDraft.startingSituation,
+          activity: existingDraft.startingSituation.activity || derivedActivity,
+          situationType: existingDraft.startingSituation.situationType || seededSituationType,
+        }
       : {
-          summary: extracted.startingSituation?.summary || `Arriving under cover of dusk at ${startingLocation.name}.`,
-          hook: extracted.startingSituation?.hook || 'An urgent summons arrived bearing an unsealed crest.',
-          initialConditions: extracted.startingSituation?.initialConditions || 'Tension lingers in the air as guards inspect incoming travelers.',
-          whyHereNow: extracted.startingSituation?.whyHereNow || 'Seeking contact with an informant regarding recent unrest.',
+          summary: extracted.startingSituation?.summary || `${identity.name} is ${derivedActivity} at ${startingLocation.name}.`,
+          activity: derivedActivity,
+          situationType: seededSituationType,
+          hook: extracted.startingSituation?.hook !== undefined ? extracted.startingSituation.hook : defaultHookForType,
+          initialConditions: extracted.startingSituation?.initialConditions || `Everyday conditions hold across ${startingLocation.name}.`,
+          whyHereNow: extracted.startingSituation?.whyHereNow || `Carrying out routine ${role.profession || role.archetype || 'work'} in ${startingLocation.name}.`,
         };
 
     const portraitAsset: CharacterPortraitAsset = userEditedFields.has('portraitAsset') && existingDraft?.portraitAsset
@@ -3662,12 +3704,38 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
         name: firstLoc.name,
         region: firstLoc.region || 'Frontier',
       },
-      startingSituation: {
-        summary: `Arriving in ${firstLoc.name}, taking measure of the surroundings and strange local atmospheric currents.`,
-        hook: lower.includes('apocalyp') ? 'Ruinous anomalies pulse along the horizon as strange beasts prowl.' : 'An urgent summons arrives concerning local disruptions.',
-        initialConditions: 'Dense twilight descending across the landscape.',
-        whyHereNow: 'Seeking information on how to navigate this world and confront looming threats.',
-      },
+      startingSituation: (() => {
+        const procSituationType = rollOpeningSituationType({
+          worldId: worldTemplate?.worldId,
+          worldTitle: worldTemplate?.title,
+          characterName: name,
+          characterRole: profession || archetype,
+          locationId: firstLoc.id,
+          locationName: firstLoc.name,
+        });
+        const procActivity = deriveStartingActivity({
+          characterName: name,
+          role: profession || archetype,
+          background: history,
+          equipment: [...weapons, ...tools],
+          locationName: firstLoc.name,
+          situationType: procSituationType,
+        });
+        const procHook =
+          lower.includes('apocalyp') || procSituationType === 'pressure_event'
+            ? `Unsettled activity stirs near ${firstLoc.name}.`
+            : procSituationType === 'small_discovery'
+            ? `A small detail near ${firstLoc.name} catches ${name}'s eye.`
+            : '';
+        return {
+          summary: `${name} is ${procActivity} at ${firstLoc.name}.`,
+          activity: procActivity,
+          situationType: procSituationType,
+          hook: procHook,
+          initialConditions: `Afternoon light holds across ${firstLoc.name}.`,
+          whyHereNow: `Going about ${profession.toLowerCase()} business in ${firstLoc.name}.`,
+        };
+      })(),
       portraitAsset: {
         promptFallback: `Character identity poster portrait of ${name}, ${species} ${profession || 'character'} in the ${worldTemplate?.title || 'current'} setting. Face and defining physical features must be clearly readable; show a three-quarter bust or waist-up presentation with signature attire/equipment and a restrained character-focused background. Single character only; not a world poster, location poster, landscape, or scene illustration. Output: 1024 x 1024 pixels, 1:1 square. No poster text, UI, watermark, or arbitrary typography.`,
         emoji: this.getEmojiForRole(profession),

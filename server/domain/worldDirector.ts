@@ -17,6 +17,7 @@ export type WorldDirectorReadinessStatus =
 export interface WorldDirectorSceneObjectEvidence {
   id?: string;
   name?: string;
+  kind?: string;
   description?: string;
   tags?: string[];
   properties?: Record<string, unknown>;

@@ -651,6 +651,7 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
  */
 gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response) => {
   try {
+    const regenerationStartedAt = new Date();
     const storyId = resolveStoryId(req, true);
     const actionId = String(req.body?.actionId || '').trim();
     const forceModelId = typeof req.body?.forceModelId === 'string' ? req.body.forceModelId.trim() : undefined;
@@ -660,6 +661,71 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
     const state = serverMockAuthority.getDynamicStoryState(storyId);
     const action = state.actionHistory.find((entry: any) => entry.id === actionId);
     if (!action) return res.status(404).json({ success: false, code: 'ACTION_NOT_FOUND', errorReason: 'Committed action was not found in the active Story Run.' });
+
+    // Narration retries are presentation-only interactions, but they still change
+    // the player-visible story history. Capture them as AUXILIARY recorder entries
+    // so the original committed turn and every subsequent retry remain distinct.
+    const recordingStateBefore = captureCanonicalStateSnapshot(storyId, worldRepository);
+    const forensicSink: import('../domain/aiOrchestrator').NarrativeOnlyForensicSink = {};
+    const recordNarrationRegeneration = (params: {
+      success: boolean;
+      result: Record<string, unknown>;
+      generated?: any;
+      error?: string;
+    }) => {
+      try {
+        const completedAt = new Date();
+        const generated = params.generated;
+        worldRepository.recordStorySessionInteraction({
+          storyId,
+          kind: 'AUXILIARY',
+          source: 'NARRATION_REGENERATION',
+          startedAt: regenerationStartedAt.toISOString(),
+          completedAt: completedAt.toISOString(),
+          success: params.success,
+          rolledBack: false,
+          request: {
+            actionId,
+            playerAction: action.description,
+            editInstruction: editInstruction || null,
+          },
+          result: params.result,
+          ...(params.error ? { error: params.error } : {}),
+          turn: {
+            task: 'narrative.regenerate',
+            playerAction: action.description,
+            ...(forensicSink.playerIntent ? { playerIntent: forensicSink.playerIntent } : {}),
+            ...(forensicSink.forensicContext || {}),
+            ...(generated?.researchPacket ? { researchPacket: generated.researchPacket } : {}),
+            ...(generated?.researchAudit ? { researchAudit: generated.researchAudit } : {}),
+            ...(generated?.contextAudit ? { contextAudit: generated.contextAudit } : {}),
+            ...(generated?.turnPackage ? { turnPackage: generated.turnPackage } : {}),
+            ...(generated?.narrativeRichnessEvaluation ? { narrativeRichnessEvaluation: generated.narrativeRichnessEvaluation } : {}),
+            telemetry: {
+              path: 'narrative-regeneration',
+              success: params.success,
+              providerId: generated?.providerId,
+              modelId: generated?.modelId,
+              source: generated?.source,
+              fallbackReason: generated?.fallbackReason,
+              error: generated?.error || params.error,
+              narrativePlan: generated?.narrativePlan,
+              narrativeQualityAudit: generated?.narrativeQualityAudit,
+            },
+            attemptsTrail: generated?.attemptsTrail || [],
+          },
+          stateBefore: recordingStateBefore,
+          stateAfter: captureCanonicalStateSnapshot(storyId, worldRepository),
+        });
+      } catch (recordingError) {
+        // Session capture is observability only; it must never fail a retry.
+        console.error('[StorySessionRecorder] Failed to record narration regeneration.', {
+          storyId,
+          actionId,
+          error: recordingError instanceof Error ? recordingError.message : String(recordingError),
+        });
+      }
+    };
 
     const player = worldRepository.getPlayerLifecycle(storyId);
     const run = worldRepository.getStoryRun(storyId);
@@ -685,25 +751,38 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
     ].filter(Boolean).join(' ');
     const actionResolution = action.actionResolution;
 
-    const generated = await worldRepository.getAiOrchestrator().generateNarrativeOnly({
-      storyId,
-      playerAction: action.description,
-      actionResolution,
-      committedOutcome: checkOutcome,
-      forceModelId,
-      hardTokenBudget: 1100,
-      timeoutMs: 9000,
-      maxRetries: 1,
-      recentTurns,
-      sceneContext: [
-        run?.startingSituation?.summary,
-        run?.startingSituation?.hook,
-        location?.name,
-        location?.description,
-        location?.ambientSensory,
-      ].filter(Boolean).join(' '),
-      continuationDirective: presentationDirective,
-    } as any);
+    let generated: any;
+    let generationError: any;
+    try {
+      generated = await worldRepository.getAiOrchestrator().generateNarrativeOnly({
+        storyId,
+        playerAction: action.description,
+        forensicSink,
+        actionResolution,
+        committedOutcome: checkOutcome,
+        forceModelId,
+        hardTokenBudget: 1100,
+        timeoutMs: 9000,
+        maxRetries: 1,
+        recentTurns,
+        sceneContext: [
+          run?.startingSituation?.summary,
+          run?.startingSituation?.hook,
+          location?.name,
+          location?.description,
+          location?.ambientSensory,
+        ].filter(Boolean).join(' '),
+        continuationDirective: presentationDirective,
+      } as any);
+    } catch (error: any) {
+      generationError = error;
+      generated = {
+        success: false,
+        error: error?.message || 'Narration regeneration threw an error.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+      };
+    }
 
     if (!generated.success || !generated.turnPackage?.narrative?.length) {
       action.narrativeResponse = '';
@@ -717,6 +796,17 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
       };
       action.narrativeGeneration = undefined;
       action.visualCues = undefined;
+
+      recordNarrationRegeneration({
+        success: false,
+        generated,
+        error: generationError?.message,
+        result: {
+          actionId,
+          narrativeResponse: null,
+          narrativeError: action.narrativeError,
+        },
+      });
 
       console.warn('[NarrationUnavailable] Retry narration failed; no local prose fallback was used.', {
         storyId,
@@ -775,6 +865,16 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
       };
       worldRepository.saveStoryRun(savedRun);
     }
+
+    recordNarrationRegeneration({
+      success: true,
+      generated,
+      result: {
+        actionId,
+        narrativeResponse: action.narrativeResponse,
+        narrativeGeneration: action.narrativeGeneration,
+      },
+    });
 
     return res.json({
       success: true,

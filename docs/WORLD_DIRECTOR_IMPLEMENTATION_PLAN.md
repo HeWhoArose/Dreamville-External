@@ -346,11 +346,11 @@ Player-owned tasks:
 
 | Slice | Status | Evidence / next action |
 |---|---|---|
-| Main-source audit | IN PROGRESS | Initial current-source trace completed for WorldRepository, GeographyGraph, WorldActivityDirector, OpeningSceneService, WorkingContextEngine, CurrentSituationBuilder, NarrativePromptBuilder, and semantic review. Complete focused incident/observation trace before implementation. |
-| Plan and docs index | IN PROGRESS | Add this plan to docs and index on the feature branch; re-fetch and inspect. |
-| Investigation scene contract | NOT STARTED | Reproduce the missing victim/evidence case with a deterministic fixture. |
-| First implementation | NOT STARTED | Proceed only after the focused audit identifies the first responsible boundary. |
-| Automated regression/CI | NOT RUN FOR THIS BRANCH | No fresh run claimed. |
+| Main-source audit | IN PROGRESS | Confirmed existing owners and the gap between a starting-situation hook and required canonical incident/evidence records. Next: audit how incident/evidence records can be represented and committed without a parallel authority. |
+| Plan and docs index | COMMITTED | `docs/WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md` and `docs/README.md` index update committed on this feature branch; final content re-fetch verified. |
+| Investigation scene contract | PARTIAL | `tests/world-director.test.ts` covers the diagnostic contract for missing victim/evidence anchors, visible versus hidden/absent anchors, and non-investigation openings. A canonical incident-preparation contract is still needed. |
+| First implementation | IMPLEMENTED — DIAGNOSTIC SLICE | `server/domain/worldDirector.ts` assesses investigation-opening readiness; `OpeningSceneService` records the report in `runtimeState.openingNarrativeContext`. This does not yet create canonical victim/incident/evidence records or change player-facing narration. |
+| Automated regression/CI | PENDING | Draft PR #82 created to trigger repository verification. Results must be checked against exact head `abb0a2adf074257f0817b5cea5cf31a81f71e832`; no pass claimed yet. |
 | Player live test | DEFERRED TO PLAYER | Required after engineering provides the run checklist. |
 
 ## 13. Definition of Done

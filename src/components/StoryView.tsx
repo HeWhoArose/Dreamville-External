@@ -326,6 +326,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [sceneSourceActionId, setSceneSourceActionId] = useState<string | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [narrationBusyActionId, setNarrationBusyActionId] = useState<string | null>(null);
+  const narrationRegenerating = Boolean(narrationBusyActionId);
   const [narrationEditActionId, setNarrationEditActionId] = useState<string | null>(null);
   const [narrationEditInstruction, setNarrationEditInstruction] = useState('');
   const [narrationPickerOpen, setNarrationPickerOpen] = useState(false);
@@ -608,7 +609,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const handleSubmitAction = async (event: React.FormEvent) => {
     event.preventDefault();
     const actionText = typedAction.trim();
-    if (!actionText || isProcessingAction || isProcessingOoc) return;
+    if (!actionText || isProcessingAction || isProcessingOoc || narrationRegenerating) return;
 
     triggerHaptic('medium');
     playSfx('ui.click', 'LOW', 0.5);
@@ -643,7 +644,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   };
 
   const handleContinueStory = () => {
-    if (isProcessingAction || isProcessingOoc) return;
+    if (isProcessingAction || isProcessingOoc || narrationRegenerating) return;
     triggerHaptic('medium');
     playSfx('ui.click', 'LOW', 0.5);
     onCustomAction?.('Continue the story naturally from the current moment without introducing an out-of-character explanation.');
@@ -1057,14 +1058,14 @@ export const StoryView: React.FC<StoryViewProps> = ({
         {location.region && <span className="text-stone-700">· {location.region}</span>}
         <div className="ml-auto flex items-center gap-1.5">
           <button
-            disabled={isProcessingAction}
+            disabled={isProcessingAction || narrationRegenerating}
             onClick={onRequestInspect}
             className="rounded-lg px-2.5 py-1.5 text-stone-500 transition hover:bg-stone-900 hover:text-stone-200 disabled:opacity-50"
           >
             Inspect
           </button>
           <button
-            disabled={isProcessingAction}
+            disabled={isProcessingAction || narrationRegenerating}
             onClick={onRequestRest}
             className="rounded-lg px-2.5 py-1.5 text-stone-500 transition hover:bg-stone-900 hover:text-stone-200 disabled:opacity-50"
           >
@@ -1105,7 +1106,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
               {activeDialogue.choices.map((choice) => (
                 <button
                   key={choice.id}
-                  disabled={isProcessingAction}
+                  disabled={isProcessingAction || narrationRegenerating}
                   onClick={() => onSelectChoice(choice)}
                   className="group flex w-full items-start justify-between gap-4 rounded-xl border border-violet-400/10 bg-gradient-to-r from-white/[0.025] to-violet-500/[0.035] px-4 py-3 text-left transition hover:border-violet-400/25 hover:bg-violet-500/[0.07] disabled:opacity-50"
                 >
@@ -1162,8 +1163,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
             </div>
             {pendingActionAdvice.proposal && (
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0">
-                <button type="button" onClick={() => onAcceptActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="w-full rounded-lg bg-amber-200 px-3 py-2 text-xs font-semibold text-stone-950 transition hover:bg-amber-100 disabled:opacity-50 sm:w-auto">{pendingActionAdvice.proposal.acceptLabel}</button>
-                <button type="button" onClick={() => onRejectActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="w-full rounded-lg border border-stone-800 bg-stone-900 px-3 py-2 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-50 sm:w-auto">{pendingActionAdvice.proposal.rejectLabel}</button>
+                <button type="button" onClick={() => onAcceptActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction || narrationRegenerating} className="w-full rounded-lg bg-amber-200 px-3 py-2 text-xs font-semibold text-stone-950 transition hover:bg-amber-100 disabled:opacity-50 sm:w-auto">{pendingActionAdvice.proposal.acceptLabel}</button>
+                <button type="button" onClick={() => onRejectActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction || narrationRegenerating} className="w-full rounded-lg border border-stone-800 bg-stone-900 px-3 py-2 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-50 sm:w-auto">{pendingActionAdvice.proposal.rejectLabel}</button>
               </div>
             )}
             {!pendingActionAdvice.proposal && (
@@ -1248,7 +1249,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 <button
                   type="button"
                   onClick={combatTransition.precombatActionPending ? onEnterCombat : onEnterCombat}
-                  disabled={isProcessingAction || !onEnterCombat}
+                  disabled={isProcessingAction || narrationRegenerating || !onEnterCombat}
                   className="mt-4 rounded-xl bg-red-700 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 disabled:opacity-50"
                 >
                   {combatTransition.precombatActionPending ? 'Resolve opening action' : 'Enter tactical combat'}
@@ -1557,7 +1558,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
           <button
             type="button"
             onClick={handleContinueStory}
-            disabled={isProcessingAction || isProcessingOoc}
+            disabled={isProcessingAction || isProcessingOoc || narrationRegenerating}
             className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/10 px-3 py-1.5 text-[11px] font-semibold text-fuchsia-100 transition hover:bg-fuchsia-300/15 disabled:opacity-40"
             title="Ask the narrator to continue from the current moment"
           >
@@ -1727,7 +1728,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                       <button
                         type="button"
                         onClick={() => void onRefreshSuggestions?.()}
-                        disabled={isRefreshingSuggestions || isProcessingAction}
+                        disabled={isRefreshingSuggestions || isProcessingAction || narrationRegenerating}
                         className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-[9px] font-semibold text-stone-400 hover:text-stone-200 disabled:opacity-40"
                         aria-label="Refresh story suggestions"
                       >
@@ -1741,7 +1742,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                           key={tip.id}
                           type="button"
                           onClick={() => insertSuggestedAction(tip.actionText)}
-                          disabled={isProcessingAction}
+                          disabled={isProcessingAction || narrationRegenerating}
                           className="w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04] disabled:opacity-50"
                         >
                           <p className="text-xs font-semibold text-stone-200">{tip.title}</p>
@@ -1880,7 +1881,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
           <button
             type="button"
             onClick={isRecording ? stopRecording : startRecording}
-            disabled={isTranscribing || isProcessingAction || isProcessingOoc}
+            disabled={isTranscribing || isProcessingAction || isProcessingOoc || narrationRegenerating}
             aria-pressed={isRecording}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-50 ${
               isRecording
@@ -1908,7 +1909,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
             value={typedAction}
             rows={2}
             onChange={(event) => setTypedAction(event.target.value)}
-            disabled={isProcessingAction || isProcessingOoc || isRecording || isTranscribing}
+            disabled={isProcessingAction || isProcessingOoc || narrationRegenerating || isRecording || isTranscribing}
             aria-label={inputMode === 'OOC' ? 'Out-of-character message' : 'Story action'}
             aria-multiline="true"
             placeholder={
@@ -1918,6 +1919,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 ? 'Transcribing…'
                 : isProcessingOoc
                 ? 'DreamBook is answering…'
+                : narrationRegenerating
+                ? 'Retrying the narration…'
                 : isProcessingAction
                 ? 'The world is responding…'
                 : inputMode === 'OOC'
@@ -1929,7 +1932,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
           <button
             type="submit"
-            disabled={!typedAction.trim() || isProcessingAction || isProcessingOoc || isRecording || isTranscribing}
+            disabled={!typedAction.trim() || isProcessingAction || isProcessingOoc || narrationRegenerating || isRecording || isTranscribing}
             className="flex h-12 shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-300 to-fuchsia-300 px-5 text-sm font-semibold text-[#160b22] transition hover:from-violet-200 hover:to-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {isProcessingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -1952,7 +1955,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
               <button
                 type="button"
                 onClick={onRetryLastAction}
-                disabled={isProcessingAction || isProcessingOoc}
+                disabled={isProcessingAction || isProcessingOoc || narrationRegenerating}
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-red-200/20 px-3 text-[10px] font-semibold text-red-100 hover:bg-red-200/10 disabled:opacity-40"
                 aria-label="Retry the last failed story action"
               >

@@ -183,7 +183,7 @@ export class OpeningSceneService {
 
 		let generatedText = '';
 		let generatedEvents: StructuredNarrativeEvent[] = [];
-		let generationMeta: any = undefined;
+		let generationMeta: any = { sceneReadiness };
 
 		try {
 			const narrator = worldRepo.getAiOrchestrator();

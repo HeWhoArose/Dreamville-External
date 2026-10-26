@@ -146,6 +146,13 @@ function unresolvedExplicitMovementDestination(text: string): IntentLocationRefe
 	// Keep it name-only (no synthetic id); canonical resolution must still decide
 	// whether the destination exists and can be reached.
 	const name = movementDestination(text);
+	// Spatial prepositions also introduce targets of attention ("move toward the
+	// movement/noise") and manner phrases ("toward the movement in silence").
+	// These are not destinations. Treating them as locations makes semantic
+	// review demand that the narration repeat an accidental parser artifact.
+	if (name && /^(?:the\s+)?(?:movement|motion|noise|sound|voices?|activity|commotion|disturbance|figure|figures|shape|shapes|shadow|shadows|light|lights|scent|smell|trail|tracks?)\b/i.test(name)) {
+		return undefined;
+	}
 	return name ? { name, source: 'EXPLICIT' } : undefined;
 }
 

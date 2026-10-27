@@ -733,3 +733,16 @@ Exact-head CI at `87a0ee91382e0eea2041d8cad8b9d18bbd8b6071` passed all three wor
 
 This is still a pure planner over the scene-object adapter, not a production reconciliation coordinator. The per-owner merge callback must preserve unrelated fields; no canonical mutation, lifecycle deletion, knowledge revocation, or Chronicle erasure is performed. Next gate: corruption/restart recovery and then a transactional adapter integration test proving create → repeat → reconcile → conflict against real canonical owners. Phase 0 remains open.
 
+### 2.20 Snapshot recovery after a failed staged preparation (2026-10-27)
+
+Extended the staged-save-failure regression to corrupt the primary persistence file after rollback, reconstruct a fresh repository, and verify snapshot recovery does not resurrect the failed scene object or its uncommitted command event.
+
+Exact-head CI for `5aca8e6041b1fe008056b2817d209e4e660cb1b6` succeeded:
+- Dreamville Verification `40493636130`: **1,576 passed, 0 failed**, production build succeeded.
+- Dreamville Release Gate `40493636191`: **1,576 passed, 0 failed**, release checks and production build succeeded.
+- Additional Dreamville Verification `40493636104`: **1,576 passed, 0 failed**, production build succeeded.
+
+**Important remaining finding:** `PersistentGameStore.tryRecoverFromLatestSnapshot()` returns recovered snapshot data to the repository but does not repair the corrupted primary file. The test currently proves in-memory recovery and no resurrection of the failed preparation; it does not prove the primary file is repaired for subsequent process restarts. A later save can overwrite the primary, but may snapshot the corrupt file first. This recovery contract is not yet strong enough to close Phase 0.
+
+Next: add a safe atomic primary-file repair path that restores from a validated snapshot without taking a new snapshot of the corrupt primary, then test (1) the repaired primary parses on the next restart, (2) failed scene/event remain absent, and (3) a later successful staged commit remains recoverable. Continue to keep production World Director preparation writes disabled.
+

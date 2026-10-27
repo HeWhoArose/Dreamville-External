@@ -742,7 +742,19 @@ Exact-head CI for `5aca8e6041b1fe008056b2817d209e4e660cb1b6` succeeded:
 - Dreamville Release Gate `40493636191`: **1,576 passed, 0 failed**, release checks and production build succeeded.
 - Additional Dreamville Verification `40493636104`: **1,576 passed, 0 failed**, production build succeeded.
 
-**Important remaining finding:** `PersistentGameStore.tryRecoverFromLatestSnapshot()` returns recovered snapshot data to the repository but does not repair the corrupted primary file. The test currently proves in-memory recovery and no resurrection of the failed preparation; it does not prove the primary file is repaired for subsequent process restarts. A later save can overwrite the primary, but may snapshot the corrupt file first. This recovery contract is not yet strong enough to close Phase 0.
+**Primary-file repair is now implemented and verified.** `tryRecoverFromLatestSnapshot()` now repairs the primary file from the validated snapshot through a recovery temporary file and atomic rename. It does not create a new snapshot of the corrupt primary before replacing it. Snapshot pruning remains non-fatal after the repair commit point. If the repair write itself fails, the validated recovered data is still returned in memory and a warning is logged.
 
-Next: add a safe atomic primary-file repair path that restores from a validated snapshot without taking a new snapshot of the corrupt primary, then test (1) the repaired primary parses on the next restart, (2) failed scene/event remain absent, and (3) a later successful staged commit remains recoverable. Continue to keep production World Director preparation writes disabled.
+The regression now verifies that after a failed staged preparation:
+1. The primary file is corrupted.
+2. A fresh repository recovers from the valid snapshot and atomically repairs the primary file.
+3. The repaired primary parses as JSON.
+4. The failed scene object and its uncommitted command event remain absent.
+5. A later staged command commits successfully and survives a further repository reload.
+
+Exact-head CI for `7227ca7e4909c4e241869742e59fe70bb1f3e745` succeeded in all three workflows:
+- Dreamville Verification `40494227770`: **1,576 passed, 0 failed**, production build succeeded.
+- Dreamville Release Gate `40494227691`: **1,576 passed, 0 failed**, release checks and production build succeeded.
+- Additional Dreamville Verification `40494227805`: **1,576 passed, 0 failed**, production build succeeded.
+
+This closes the tested corruption/reload path for the failed-preparation fixture. It still does not establish fsync/power-loss durability, recovery of the very latest commit after the primary itself is later corrupted (snapshots are pre-write history), arbitrary OS process termination at every instruction, or cross-process concurrency safety. Phase 0 remains open; production scene-preparation writes stay disabled.
 

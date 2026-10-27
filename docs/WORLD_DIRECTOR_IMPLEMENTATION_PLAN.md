@@ -37,11 +37,20 @@ This is a source-level audit of current main inspected on 2026-10-26. It is not 
 - SemanticNarrativeReview rejects unsupported concrete claims rather than treating descriptive prose as an object registry.
 - ActionResolution, combat, spell, inventory, and spatial systems remain the owners of their respective mechanics/state changes.
 
-### 2.2 Main demonstrated design gap
+### 2.2 Source-traced gap: premise is not prepared incident state
 
-The starting situation is supplied to opening context as a hook/summary/activity, while the canonical scene projection obtains discrete environmental objects and visible entities from their own records. A premise such as “investigating a fresh murder scene” therefore does not itself guarantee a victim record, incident/evidence records, scene layout, or observation-specific information are present.
+**Current feature-branch source trace (2026-10-27; source review only, not live runtime evidence):**
 
-This is the central gap the World Director must close. Do not infer that all current scenes are missing these records: reproduce the defect with a focused fixture and report exactly which records are present, absent, or dropped.
+1. `CharacterGenesisService` builds `StartingSituationConfig` from extracted/user-edited summary, activity, situation type, hook, initial conditions, and why-here-now. It does not create a scenario-specific victim, incident, clue, or witness record as part of that construction.
+2. `WorldRepository.createStoryRunFromConfirmedCharacter()` deep-copies the starting situation into the StoryRun and records bootstrap Chronicle evidence (`ev_genesis_<storyId>`) whose summary is the generic “Awakened in <location>” and whose details are the initial scene hook. That Chronicle record preserves the hook as historical text; it is not a victim/entity card, location scene object, investigation incident, or structured clue.
+3. The same method clones world-authored `world.events` into `plannedEvents` with status `PLANNED`. Source inspection has not shown a bridge that interprets the character's starting-situation hook as one of those authored world events or commits an investigation incident from it.
+4. `OpeningSceneService` calls `WorldActivityDirector.ensureAmbientPopulation()` before projection. That producer is for eligible ambient occupants/activity, not incident preparation.
+5. `WorkingContextEngine.assembleOpeningContext()` delegates to `CurrentSituationBuilder.build()`. The latter projects location `sceneObjects`, ground inventory items, eligible entity cards/NPC lifecycles, and visible current-location events. It intentionally does not parse location prose or starting-situation text into discrete props/entities.
+6. `WorldDirector.assessOpeningSceneReadiness()` diagnoses missing investigation anchors, but is read-only and cannot repair this missing producer-to-canonical-state handoff.
+
+**Primary root-cause hypothesis now strongly supported by source:** the starting situation remains a narrative premise/history detail, while the canonical scene projection correctly requires concrete records from their owning authorities. There is no demonstrated scenario-specific preparation path connecting the premise to canonical incident/victim/evidence records. This explains why stricter anti-hallucination checks can be correct while the opening still lacks investigation substance.
+
+**Still required before Phase 0 exit:** add a focused deterministic fixture reproducing this exact boundary; inspect the available canonical entity/evidence/chronicle authorities and their lifecycle/persistence contracts; verify no existing scene/incident producer is called indirectly by another entry path; then identify the smallest owner-respecting integration point. This finding is not yet a full test-proven root cause for every reported scene or every entry path.
 
 ### 2.3 Fallback limitation
 
@@ -346,7 +355,7 @@ Player-owned tasks:
 
 | Slice | Status | Evidence / next action |
 |---|---|---|
-| Main-source audit | IN PROGRESS | Confirmed existing owners and the gap between a starting-situation hook and required canonical incident/evidence records. Next: audit how incident/evidence records can be represented and committed without a parallel authority. |
+| Main-source audit | ROOT-CAUSE HYPOTHESIS SOURCE-TRACED; PHASE 0 STILL OPEN | Current branch source confirms the starting-situation hook is copied into StoryRun and generic Chronicle bootstrap evidence, while canonical scene projection separately requires location sceneObjects, visible entity/NPC records, ground-item instances, and visible current-location events. World-authored events remain PLANNED; ambient population seeding is not incident preparation. No source path was found that turns the hook into a victim/incident/clue record. Next: focused deterministic reproduction and audit entity/evidence persistence authorities plus all indirect scene-preparation callers before final Phase 0 exit. No live-runtime claim. |
 | Plan and docs index | COMMITTED | `docs/WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md` and `docs/README.md` index update committed on this feature branch; final content re-fetch verified. |
 | Investigation scene contract | PARTIAL | `tests/world-director.test.ts` covers the diagnostic contract for missing victim/evidence anchors, visible versus hidden/absent anchors, and non-investigation openings. A canonical incident-preparation contract is still needed. |
 | First implementation | IMPLEMENTED — DIAGNOSTIC SLICE | `server/domain/worldDirector.ts` assesses investigation-opening readiness; `OpeningSceneService` records the report in `runtimeState.openingNarrativeContext`. This does not yet create canonical victim/incident/evidence records or change player-facing narration. |

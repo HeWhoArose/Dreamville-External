@@ -143,7 +143,7 @@ The first test is deliberately a **negative/control test**: an investigation hoo
 
 
 
-### 2.9 Canonical preparation ownership contract
+### 2.8 Canonical preparation ownership contract
 
 The source review establishes the following boundaries. World Director may coordinate requirements and return a preparation report, but must not become a parallel persistence authority.
 
@@ -475,7 +475,7 @@ Player-owned tasks:
 
 | Slice | Status | Evidence / next action |
 |---|---|---|
-| Main-source audit | GENERAL CONTRACT DOCUMENTED; REPRODUCER + EXACT-HEAD CI PASS; PHASE 0 OPEN | Source trace documents the premise-to-canonical-state gap and a general-purpose, composable scene contract (arrival, social, travel, exploration, combat, investigation, work/rest, empty scenes, retries/reload and fallback). Added a deterministic opening integration reproducer for missing investigation target/clue; exact-head CI explicitly reports 1,559 passed and 0 failed, including this test, with typecheck, production build, and release-contract verification green. Entry-path responsibilities are now source-traced for opening, ordinary turn, movement/time advance, combat, force regeneration, reload, and fallback. Remaining Phase 0 gates: settle canonical incident-preparation and persistence/lifecycle contracts; add World Director-specific reload/idempotence, destination-arrival, hidden/discovered evidence, and fallback parity tests. No canonical scene-preparation writes yet. |
+| Main-source audit | GENERAL CONTRACT DOCUMENTED; REPRODUCER + EXACT-HEAD CI PASS; PHASE 0 OPEN | Source trace documents the premise-to-canonical-state gap and a general-purpose, composable scene contract (arrival, social, travel, exploration, combat, investigation, work/rest, empty scenes, retries/reload and fallback). Added a deterministic opening integration reproducer for missing investigation target/clue; exact-head CI explicitly reports 1,559 passed and 0 failed, including this test, with typecheck, production build, and release-contract verification green. Entry-path responsibilities are now source-traced for opening, ordinary turn, movement/time advance, combat, force regeneration, reload, and fallback. The universal result and canonical-owner boundaries are now documented. Remaining Phase 0 gates: prove a transaction boundary/rollback strategy for cross-owner preparation; settle incident identity and lifecycle rules; add World Director-specific reload/idempotence, destination-arrival, hidden/discovered evidence, and fallback parity tests. No canonical scene-preparation writes yet. |
 | Plan and docs index | COMMITTED | `docs/WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md` and `docs/README.md` index update committed on this feature branch; final content re-fetch verified. |
 | Investigation scene contract | PARTIAL | `tests/world-director.test.ts` covers the diagnostic contract for missing victim/evidence anchors, visible versus hidden/absent anchors, and non-investigation openings. A canonical incident-preparation contract is still needed. |
 | First implementation | IMPLEMENTED — DIAGNOSTIC SLICE | `server/domain/worldDirector.ts` assesses investigation-opening readiness; `OpeningSceneService` records the report in `runtimeState.openingNarrativeContext`. This does not yet create canonical victim/incident/evidence records or change player-facing narration. |
@@ -489,7 +489,7 @@ World Director is complete only when every supported scene profile can be valida
 **End state:** DreamVille's narrator receives a world that is genuinely prepared, rather than being instructed to make a compelling scene out of missing facts.
 
 
-### 2.8 Entry-path audit and current automated validation (2026-10-27)
+### 2.9 Entry-path audit and current automated validation (2026-10-27)
 
 This audit records responsibilities observed in the current feature-branch source. “No World Director call found” means no call was present in the inspected path; it is not a claim that every indirect call in the application has been exhaustively ruled out.
 
@@ -521,4 +521,4 @@ This is automated CI evidence for the diagnostic slice at that head, not live-pr
 - **Canonical persistence-owner review:** PARTIAL. Repository, GeographyGraph scene-object, entity-card, current-event projection, and Chronicle boundaries are source-mapped, but no scenario-specific incident-preparation owner/contract has been selected or implemented.
 - **Entry-path responsibility map:** SOURCE-TRACED for opening, ordinary turn, movement/time advance, combat, force regeneration, reload, and deterministic fallback as tabulated above. Destination preparation parity and World Director-specific reload/idempotence are still unverified.
 - **General-purpose profile contract:** DOCUMENTED; no profile-specific canonical writes have been made.
-- **Phase 0 overall:** STILL OPEN. The remaining work is to settle the universal scene-preparation contract and persistence/lifecycle rules, then add tests for idempotence, reload, hidden/discovered evidence, destination arrival, and fallback parity before any canonical preparation writes.
+- **Phase 0 overall:** STILL OPEN. The universal result contract and canonical-owner map are documented, but transaction rollback, stable identity, lifecycle reconciliation, and persistence/idempotence tests remain open. Do not begin canonical preparation writes until these gates are demonstrated.

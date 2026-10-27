@@ -617,3 +617,40 @@ Commit `f61bcecf6d774886fefd1aa0ff4da6e722bc1581` adds the pure lifecycle policy
 
 Next: verify CI, then design a typed owner-adapter result that distinguishes created, already-owned/reconcilable, and conflicting records without mutating unrelated canon. Keep production writes disabled until adapter reconciliation and durable interruption/recovery tests pass.
 
+### 2.15 Conflict-safe owner decisions and atomic staged commit boundary (2026-10-27)
+
+The typed owner-decision prototype and persistence-boundary regression are now implemented and verified.
+
+**Pure owner-adapter decision contract**
+- Added `evaluateWorldDirectorOwnerRecord()`, which distinguishes a truly absent record from an existing unmarked/authored record. An absent record may be created; an existing record with no ownership marker is a conflict, not a creation opportunity.
+- A matching stable ID + current contract version + preparation key + role yields `RECONCILE_OWNED`; foreign IDs, unmarked records, foreign preparation keys/roles, and older contract versions yield `CONFLICT`.
+- Decisions expose explicit `mayCreate`/`mayUpdate` flags and hard-code `mayDelete: false`. This prevents the pure contract from authorizing deletion before per-owner lifecycle/retention policy is agreed.
+- The decision function is pure. It does not mutate GeographyGraph, EntityRegistry, KnowledgeFact storage, Chronicle, or canonical events.
+
+**Ownership metadata storage**
+- Scene-object `properties`, EntityCard `metadata`, and HistoricalEvidence `metadata` successfully round-trip structured `worldDirectorOwnership` markers alongside unrelated authored metadata.
+- Added optional `KnowledgeFact.metadata` for structured provenance/ownership extensions. The type comment explicitly states that metadata alone does not grant actor knowledge.
+- The staged file-backed regression now commits a scene object, its ownership marker, a shared knowledge fact with ownership metadata, and the canonical command event; after repository reconstruction, the scene object, fact metadata, and event must all survive.
+
+**Staged commit atomicity**
+- Found that the staged command path restored/persisted canonical state and appended/persisted its matching command event in separate operations. An interruption between them could leave prepared state durable without its deduplication event.
+- Added an explicit `force` option to `runWithPersistenceBatching()` so the canonical staged commit can enforce a single flush even under tests, where ordinary request batching is disabled.
+- The staged path now batches canonical snapshot restoration, staged orchestrator state transfer, and canonical event append into one repository persistence flush.
+- The regression instruments `PersistentGameStore.save()`, asserts one save for the staged commit, reconstructs the repository, and checks that the scene object and matching command event both survived.
+
+Exact-head CI for `95c0a88f01de27620c303106f61a58f59541eb64` succeeded in all three workflows:
+- Dreamville Verification `40489724203`: **1,571 passed, 0 failed**, production build succeeded.
+- Dreamville Release Gate `40489724211`: **1,571 passed, 0 failed**, release/type checks and production build succeeded.
+- Additional Dreamville Verification `40489724122`: **1,571 passed, 0 failed**, production build succeeded.
+
+#### Remaining boundaries — do not overclaim
+
+- The single-save test proves the staged commit is persisted as one complete file-store snapshot and survives reload. It does not simulate process termination at every filesystem instruction, prove fsync/power-loss durability, or prove cross-process/concurrent repository safety.
+- The canonical commit ledger remains repository-instance scoped; it is not a durable journal. Recovery from arbitrary mid-transaction interruption still needs an explicit tested contract.
+- Ownership metadata now has storage slots in the tested records, but **production owner adapters and reconciliation mutations are not wired**. The shared KnowledgeFact metadata extension is backward-compatible and does not replace Phase 8 actor-scoped acquisition.
+- The legacy marker-only `classifyWorldDirectorOwnership()` is not sufficient on its own to determine record absence; adapters must use the new existence-aware `evaluateWorldDirectorOwnerRecord()` contract.
+- Lifecycle state transitions remain proposed policy only. No deletion/hiding/revocation/Chronicle-erasure behavior is authorized.
+- Phase 0 remains **OPEN**. World Director stays diagnostic-only/read-only until owner adapters, reconciliation idempotence, interruption recovery, and opening/ordinary-turn/movement/combat entry-path parity are verified.
+
+Next: design explicit per-owner read/write adapters that preserve unrelated metadata and return the typed decision without mutation on conflicts. Then test create → repeat → reconcile → conflict behavior for each supported owner and add fault-injection/restart coverage before any production scene-preparation writes are enabled.
+

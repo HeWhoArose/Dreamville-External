@@ -52,6 +52,13 @@ This is a source-level audit of current main inspected on 2026-10-26. It is not 
 
 **Still required before Phase 0 exit:** add a focused deterministic fixture reproducing this exact boundary; inspect the available canonical entity/evidence/chronicle authorities and their lifecycle/persistence contracts; verify no existing scene/incident producer is called indirectly by another entry path; then identify the smallest owner-respecting integration point. This finding is not yet a full test-proven root cause for every reported scene or every entry path.
 
+**Additional concrete projection boundary found:**
+
+7. The generic bootstrap Chronicle record is not automatically a visible scene event. `CurrentSituationBuilder` builds `visibleEvents` from active dialogue, ambient activity events, and the recent canonical command-event tail scoped to the location; it does not turn HistoricalChronicleEngine bootstrap evidence into a current-location event.
+8. Entity visibility also has a corpse-representation constraint. NPC lifecycles marked dead project as `presence: 'absent'`; entity cards with `worldState.isAlive === false` or `presence === 'absent'` are discarded from `nearbyEntities`. Therefore a dead victim cannot safely be represented only as a dead NPC/entity card if the opening must visibly show a body. The scene needs a distinct canonical, player-visible physical representation (for example, an authored/committed body scene object linked to the victim record), or a carefully designed projection contract that preserves physical presence without treating the victim as alive. This must be tested before selecting the data model.
+9. Existing location archetype defaults provide generic scene props, not murder-specific props. Those defaults must not be mistaken for a prepared incident, and should not be overwritten to force a clue into every location.
+10. `WorldRepository.createStoryRunFromConfirmedCharacter()` does preserve authored location `sceneObjects`, `population`, `environment`, and `archetype` into the story GeographyGraph on this branch. The original authored-prop projection loss described in older grounding notes is therefore not the leading explanation for this branch's current target gap.
+
 ### 2.3 Fallback limitation
 
 The deterministic opening composer can render the character's activity, location/time, supplied sensory context, visible people, and visible scene objects. When those inputs are absent, its current generic ambient sentence can stand in for missing world content. The fallback cannot safely invent a victim, clue, witness, or layout from nothing.

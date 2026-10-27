@@ -430,7 +430,7 @@ Player-owned tasks:
 
 | Slice | Status | Evidence / next action |
 |---|---|---|
-| Main-source audit | GENERAL CONTRACT DOCUMENTED; REPRODUCER AWAITING EXECUTION; PHASE 0 OPEN | Source trace documents the premise-to-canonical-state gap and a general-purpose, composable scene contract (arrival, social, travel, exploration, combat, investigation, work/rest, empty scenes, retries/reload and fallback). Added a deterministic opening integration reproducer for a missing investigation target/clue; file was re-fetched and verified, but no CI workflow/status is exposed for its latest test commit, so test execution is NOT VERIFIED. Remaining Phase 0 gates: run the focused test + regressions; verify entity/scene-object/event/Chronicle/knowledge persistence owners; audit every relevant entry caller and record prepare-vs-project-vs-resolve responsibility. No canonical scene-preparation writes yet. |
+| Main-source audit | GENERAL CONTRACT DOCUMENTED; REPRODUCER + EXACT-HEAD CI PASS; PHASE 0 OPEN | Source trace documents the premise-to-canonical-state gap and a general-purpose, composable scene contract (arrival, social, travel, exploration, combat, investigation, work/rest, empty scenes, retries/reload and fallback). Added a deterministic opening integration reproducer for missing investigation target/clue; exact-head CI explicitly reports 1,559 passed and 0 failed, including this test, with typecheck, production build, and release-contract verification green. Entry-path responsibilities are now source-traced for opening, ordinary turn, movement/time advance, combat, force regeneration, reload, and fallback. Remaining Phase 0 gates: settle canonical incident-preparation and persistence/lifecycle contracts; add World Director-specific reload/idempotence, destination-arrival, hidden/discovered evidence, and fallback parity tests. No canonical scene-preparation writes yet. |
 | Plan and docs index | COMMITTED | `docs/WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md` and `docs/README.md` index update committed on this feature branch; final content re-fetch verified. |
 | Investigation scene contract | PARTIAL | `tests/world-director.test.ts` covers the diagnostic contract for missing victim/evidence anchors, visible versus hidden/absent anchors, and non-investigation openings. A canonical incident-preparation contract is still needed. |
 | First implementation | IMPLEMENTED — DIAGNOSTIC SLICE | `server/domain/worldDirector.ts` assesses investigation-opening readiness; `OpeningSceneService` records the report in `runtimeState.openingNarrativeContext`. This does not yet create canonical victim/incident/evidence records or change player-facing narration. |
@@ -442,3 +442,38 @@ Player-owned tasks:
 World Director is complete only when every supported scene profile can be validated against explicit requirements; the appropriate canonical records are prepared/reused and persisted; opening, action, research, and fallback paths see the same authorized facts; observations and interactions are meaningful and stateful; hidden facts remain hidden; repeated preparation is idempotent; automated regressions/CI pass; and the player has a clear live acceptance checklist.
 
 **End state:** DreamVille's narrator receives a world that is genuinely prepared, rather than being instructed to make a compelling scene out of missing facts.
+
+
+### 2.8 Entry-path audit and current automated validation (2026-10-27)
+
+This audit records responsibilities observed in the current feature-branch source. “No World Director call found” means no call was present in the inspected path; it is not a claim that every indirect call in the application has been exhaustively ruled out.
+
+| Entry path | Observed prepare / project / resolve responsibility | World Director status and remaining boundary |
+|---|---|---|
+| New opening | `OpeningSceneService.generateOpeningScene()` calls `WorldActivityDirector.ensureAmbientPopulation()`, assembles `WorkingContextEngine` context, then calls the read-only `WorldDirector.assessOpeningSceneReadiness()`; it saves the readiness report alongside opening narrative context. | Ambient occupancy is prepared; investigation incident/victim/clue state is not. The report diagnoses but does not block, repair, or mutate canon. |
+| Ordinary freeform turn | `serverMockAuthority` calls `WorldActivityDirector.ensureAmbientPopulation()` for the current location before building the `CurrentSituationBuilder` projection; the builder includes eligible ambient activity events. | Population/activity preparation exists, but the inspected ordinary-turn path does not call World Director incident preparation. This must be integrated only after the universal preparation contract and canonical owners are approved. |
+| Movement / time advance | The game route invokes the existing simulation/time-advance transaction; scene projection is built from the resulting current player/location and repository state. The inspected call sites did not show a World Director scene-preparation invocation at the destination. | Destination-scene preparation parity remains unimplemented/unverified. Do not infer that moving into a scene automatically materializes its scenario premise. |
+| Combat | `CombatPlayerActionService` and `CombatEncounterService` resolve/record their mechanical outcome before their narration helpers request prose or use grounded fallbacks. | These are outcome-resolution/narration paths, not scene-preparation owners. No World Director call was found in the inspected combat service files; combat-context preparation remains a future profile integration. |
+| Opening retry / force regeneration | `generateOpeningScene({ forceRegenerate: true })` bypasses the existing-opening early return, reruns ambient population preparation and readiness assessment, then persists a replacement opening and report. | The current diagnostic is recomputed on regeneration, but it does not prepare missing canon. Repeated generation must not become a route for duplicating or resetting future prepared state. |
+| Resume / reload | StoryRun and `runtimeState` are repository-persisted; the current integration suite exercises repository reconstruction for ambient population, while opening presentation is projected from the persisted `openingScene`. | The newly added World Director missing-anchor reproducer does **not** itself reconstruct/reload the repository. Readiness-report reload persistence and future prepared-scene idempotence still need dedicated assertions. |
+| Provider failure / deterministic fallback | Opening generation falls back to `OpeningSceneService.synthesizeDeterministicOpening()` using the same assembled `rawOpeningFacts`; the readiness assessment is computed before provider generation and retained in generation metadata/runtime context. | Fallback shares the current projection, but missing incident facts remain missing. The fallback must not invent them or silently treat a generic scene as a prepared incident. |
+
+#### Exact-head CI evidence
+
+For feature-branch head `023e2ddf09e53e5e101abb485f70b39545dd2305`, GitHub Actions reports successful completed runs:
+
+- Dreamville Verification run `40469337866`: typecheck, test, and production build all succeeded.
+- Dreamville Release Gate run `40469337889`: release-contract verification, type-check, tests, and production build all succeeded.
+- Additional Dreamville Verification run `40469337714`: lint, test, and build all succeeded.
+- Test logs for the verification and release-gate runs explicitly include the new test `World Director opening integration exposes an investigation premise with no canonical victim or clue as incomplete`; each reports **1,559 passed, 0 failed**.
+
+This is automated CI evidence for the diagnostic slice at that head, not live-provider/UI acceptance and not proof that the scene-preparation feature is complete.
+
+#### Phase 0 exit-gate disposition
+
+- **Focused reproducible test:** PASS in CI (the missing investigation anchors are reported as incomplete, and an ambient NPC is not substituted as victim).
+- **Broad regression/typecheck/build/release contracts:** PASS in the exact-head CI runs listed above.
+- **Canonical persistence-owner review:** PARTIAL. Repository, GeographyGraph scene-object, entity-card, current-event projection, and Chronicle boundaries are source-mapped, but no scenario-specific incident-preparation owner/contract has been selected or implemented.
+- **Entry-path responsibility map:** SOURCE-TRACED for opening, ordinary turn, movement/time advance, combat, force regeneration, reload, and deterministic fallback as tabulated above. Destination preparation parity and World Director-specific reload/idempotence are still unverified.
+- **General-purpose profile contract:** DOCUMENTED; no profile-specific canonical writes have been made.
+- **Phase 0 overall:** STILL OPEN. The remaining work is to settle the universal scene-preparation contract and persistence/lifecycle rules, then add tests for idempotence, reload, hidden/discovered evidence, destination arrival, and fallback parity before any canonical preparation writes.

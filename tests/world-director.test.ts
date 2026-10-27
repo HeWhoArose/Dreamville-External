@@ -1063,3 +1063,110 @@ test('World Director ownership adapters preserve owner metadata and refuse confl
   );
 });
 
+test('World Director owner planning is idempotent for owned records and leaves conflicts unchanged', async () => {
+  const {
+    buildWorldDirectorStableRecordId,
+    planWorldDirectorOwnedRecord,
+    worldDirectorOwnershipAdapters,
+  } = await import('../server/domain/worldDirectorPreparationContract');
+
+  const expected = {
+    recordId: buildWorldDirectorStableRecordId({
+      storyId: 'wd_plan_story',
+      preparationKey: 'incident:shack-murder:cycle-42',
+      recordKind: 'SCENE_OBJECT',
+      role: 'primary-clue',
+      scopeId: 'isolated-shack',
+    }),
+    preparationKey: 'incident:shack-murder:cycle-42',
+    role: 'primary-clue',
+  };
+  const desired = {
+    id: expected.recordId,
+    name: 'Primary clue',
+    kind: 'ITEM' as const,
+    description: 'A clue prepared by World Director.',
+    properties: { worldDirectorGenerated: true },
+  };
+  const mergeOwned = (existing: typeof desired & { properties?: Record<string, unknown> }, next: typeof desired) => ({
+    ...existing,
+    ...next,
+    properties: { ...(existing.properties || {}), ...(next.properties || {}) },
+  });
+
+  const create = planWorldDirectorOwnedRecord(
+    undefined,
+    desired,
+    expected,
+    worldDirectorOwnershipAdapters.sceneObject,
+    mergeOwned,
+  );
+  assert.equal(create.decision.disposition, 'CREATE');
+  assert.equal(create.changed, true);
+  assert.ok(create.record);
+  const createdRecord = create.record! as typeof desired & { properties?: Record<string, unknown> };
+  assert.deepEqual(worldDirectorOwnershipAdapters.sceneObject.read(createdRecord), {
+    contractVersion: 1,
+    preparationKey: expected.preparationKey,
+    role: expected.role,
+  });
+
+  const repeated = planWorldDirectorOwnedRecord(
+    createdRecord,
+    desired,
+    expected,
+    worldDirectorOwnershipAdapters.sceneObject,
+    mergeOwned,
+  );
+  assert.equal(repeated.decision.disposition, 'RECONCILE_OWNED');
+  assert.equal(repeated.changed, false, 'repeating the same preparation should be an idempotent no-op');
+  assert.deepEqual(repeated.record, createdRecord);
+
+  const revisedDesired = { ...desired, description: 'A more precise description of the same clue.' };
+  const reconciled = planWorldDirectorOwnedRecord(
+    createdRecord,
+    revisedDesired,
+    expected,
+    worldDirectorOwnershipAdapters.sceneObject,
+    mergeOwned as any,
+  );
+  assert.equal(reconciled.decision.disposition, 'RECONCILE_OWNED');
+  assert.equal(reconciled.changed, true);
+  assert.equal(reconciled.record?.description, revisedDesired.description);
+  assert.equal(reconciled.record?.properties?.worldDirectorOwnership !== undefined, true);
+  assert.equal(reconciled.record?.properties?.authoredNote, undefined);
+
+  const authoredRecord = {
+    ...desired,
+    properties: { authoredNote: 'must never be adopted', worldDirectorGenerated: false },
+  };
+  const authoredBefore = JSON.parse(JSON.stringify(authoredRecord));
+  const authoredConflict = planWorldDirectorOwnedRecord(
+    authoredRecord,
+    desired,
+    expected,
+    worldDirectorOwnershipAdapters.sceneObject,
+    mergeOwned,
+  );
+  assert.equal(authoredConflict.decision.disposition, 'CONFLICT');
+  assert.equal(authoredConflict.decision.reason, 'EXISTING_RECORD_UNOWNED');
+  assert.equal(authoredConflict.changed, false);
+  assert.deepEqual(authoredConflict.record, authoredBefore, 'conflict must leave the authored record untouched');
+
+  const foreignOwned = worldDirectorOwnershipAdapters.sceneObject.withMarker(desired, {
+    contractVersion: 1,
+    preparationKey: 'authored:foreign-preparation',
+    role: expected.role,
+  });
+  const foreignConflict = planWorldDirectorOwnedRecord(
+    foreignOwned,
+    desired,
+    expected,
+    worldDirectorOwnershipAdapters.sceneObject,
+    mergeOwned,
+  );
+  assert.equal(foreignConflict.decision.disposition, 'CONFLICT');
+  assert.equal(foreignConflict.decision.reason, 'PREPARATION_KEY_MISMATCH');
+  assert.deepEqual(foreignConflict.record, foreignOwned);
+});
+

@@ -486,6 +486,7 @@ Player-owned tasks:
 | Automated regression/CI | PASS — CODE FIX VERIFIED | Root cause: the HTTP action pipeline uses a 30,000 ms provider timeout, while `DeterministicMockAdapter` intentionally sleeps `timeoutMs + 20 ms`; measured response was 30,383 ms, contradicting the old `< 30000 ms` assertion. Updated `tests/chaos-failure-injection.test.ts` to require a real hang near the configured 30s timeout and a finite `< 35000 ms` ceiling for pipeline overhead. Fix commit: `ac678cdbaceb83bb00a2899c672706121ed23968`. Release gate `40467446884` passed 1,558/1,558 tests (0 failures); verification runs `40467447030` and `40467446912` both completed successfully. The subsequent branch-head commit `1e9a13907af5ec5f877365e653f7a1a2bf6027e9` changes only this progress ledger; no application/test code changed after the passing runs. World Director tests passed. No live provider/UI acceptance is claimed. |
 | Latest incremental regression | PASS — EXACT-HEAD CI | `tests/world-director.test.ts`: staged-command owner-planning integration for GeographyGraph, EntityRegistry, KnowledgeFact, and Chronicle passed at `6e2154fee8bcb47d4ea290f06c163a4571e0af72`; all three workflows report 1,578 passed, 0 failed, and successful production builds. The later code head `f2251302d5028507da2444d0bc1b0ecce8128f95` also passes with 1,580 passed, 0 failed. |
 | Phase 1 readiness-state contract | PASS — EXACT-HEAD CI | Commit `f2251302d5028507da2444d0bc1b0ecce8128f95`: unresolved questions are reported without resolving them. They yield `READY_WITH_UNCERTAINTY` only when required visible anchors exist; missing anchors remain `INCOMPLETE`. Both focused regressions pass. The latest verification run reports **1,580 passed, 0 failed**, type-check and production build successful; Release Gate and the second Verification workflow also succeeded. |
+| Phase 1 claim-provenance contract | PASS — EXACT-HEAD CI | Commit `2906fc43ab508766a055bffe9e9b96fad065b174`: five claim states distinguish authored truth, canonical fact, generated proposal, authorized proposal, and unknown conclusion. References are required; only owner-backed canonical facts establish truth, and proposals still require owner commit. All three workflows pass; Verification reports **1,581 passed, 0 failed**, with type-check and production build successful. |
 | Player live test | DEFERRED TO PLAYER | Required after engineering provides the run checklist. |
 
 ## 13. Definition of Done
@@ -790,6 +791,22 @@ Added a staged-command fixture that builds stable record IDs and applies `planWo
 - EntityCard records support owned reconciliation; the append-only KnowledgeFact and Chronicle evidence adapters reject changed desired content and return the existing records unchanged.
 
 This is test-only integration coverage. It does not add a production preparation coordinator or authorize writes from opening/projection code. Exact-head CI at `6e2154fee8bcb47d4ea290f06c163a4571e0af72` passed all three workflows with **1,578 passed, 0 failed**, and successful production builds. Local verification was unavailable because the test dependencies could not be installed.
+
+### 2.24 Phase 1 authored-truth and claim-provenance contract — exact-head CI pass (2026-10-27)
+
+Added the pure `assessWorldDirectorInvestigationClaim()` contract and focused tests. The claim union distinguishes:
+
+- `AUTHORED_TRUTH`: structured, source-referenced scenario truth may support a preparation proposal but does not itself satisfy a current scene requirement.
+- `CANONICAL_FACT`: requires an owner record reference and is the only claim class that establishes fact for readiness.
+- `GENERATED_PROPOSAL`: requires generator and supporting references, but cannot authorize preparation or satisfy readiness.
+- `AUTHORIZED_PROPOSAL`: requires an explicit authorization reference; it may support preparation, but remains non-canonical until an owner commits a record.
+- `UNKNOWN`: requires a question reference and remains unresolved.
+
+The runtime contract rejects empty provenance, record, authorization, and supporting references. This prevents plain narrative text, model hypotheses, historical evidence, or actor knowledge from being silently promoted into present scene truth. This is a pure contract; it is not wired to generation or production mutation paths.
+
+Exact-head CI at `2906fc43ab508766a055bffe9e9b96fad065b174` passed all three workflows: Dreamville Verification runs `40506239684` and `40506239747`, plus Dreamville Release Gate `40506239987`. Verification reports **1,581 passed, 0 failed**; type-check, release contracts, and production builds passed. Local focused execution was unavailable because dependencies are not installed in this checkout.
+
+Phase 1 remains in progress. The next contract slice is to make the isolated-shack readiness requirements structured and reference-based—especially the committed incident, victim/body linkage, and discoverable evidence—instead of treating keyword-matched visible prose as sufficient anchors. Tests must also show that off-location, hidden, or uncommitted proposal records do not satisfy those requirements. Production preparation writes remain disabled.
 
 ### 2.23 Final Phase 0 source, regression, and owner/recovery audit — COMPLETE (2026-10-27)
 

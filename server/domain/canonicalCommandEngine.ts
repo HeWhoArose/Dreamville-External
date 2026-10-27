@@ -818,14 +818,15 @@ export class CanonicalCommandEngine {
 			}
 			if (command.transactionMode === 'STAGED') {
 				// The event is appended to live state inside the persistence batch. If the
-				// durable flush fails before rename, remove that uncommitted event before
-				// restoring the pre-state; snapshot restoration intentionally preserves history.
+				// durable flush fails before rename, remove that uncommitted event in memory
+				// before restoring the pre-state. Do not persist this intermediate staged
+				// state; snapshot restoration preserves the cleaned event history and writes
+				// the pre-state plus that history together.
 				const liveRun = repository.getStoryRun(command.storyId);
 				if (liveRun && Array.isArray(liveRun.canonicalEvents)) {
 					liveRun.canonicalEvents = liveRun.canonicalEvents.filter(
 						(existingEvent: CanonicalCommandEvent) => existingEvent.commandId !== command.commandId,
 					);
-					repository.saveStoryRun(liveRun);
 				}
 			}
 			repository.restoreCanonicalStateSnapshot(before, { preserveCanonicalEvents: true });

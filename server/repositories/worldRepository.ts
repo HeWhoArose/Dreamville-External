@@ -186,7 +186,7 @@ export interface WorldRepository {
   appendCanonicalCommandEvent(storyId: string, event: any): void;
   getCanonicalCommandEvents(storyId: string): any[];
   /** Coalesce all persistLibrary() calls inside the callback into one full-store save. */
-  runWithPersistenceBatching<T>(callback: () => T): T;
+  runWithPersistenceBatching<T>(callback: () => T, options?: { force?: boolean }): T;
   /** O(1) event count; avoids cloning the full event log for sequence numbering. */
   getCanonicalCommandEventCount(storyId: string): number;
   /** Deep-cloned tail of the event log with heavy replay payloads stripped.
@@ -3181,13 +3181,18 @@ export class InMemoryWorldRepository implements WorldRepository {
    * finally block, so a scope that throws still persists whatever state was
    * committed before the failure (crash-recovery contract preserved).
    */
-  runWithPersistenceBatching<T>(callback: () => T): T {
-    if (this.persistenceSuppressed || !this.persistenceBatchingEnabled) {
+  runWithPersistenceBatching<T>(callback: () => T, options: { force?: boolean } = {}): T {
+    if (this.persistenceSuppressed || (!this.persistenceBatchingEnabled && !options.force)) {
       return callback();
     }
     this.persistenceBatchDepth += 1;
+    let finished = false;
     const finish = () => {
-      this.persistenceBatchDepth -= 1;
+      // A flush can throw. The synchronous catch below must not run this
+      // cleanup a second time and drive the nesting depth negative.
+      if (finished) return;
+      finished = true;
+      this.persistenceBatchDepth = Math.max(0, this.persistenceBatchDepth - 1);
       if (this.persistenceBatchDepth === 0 && this.persistenceBatchDirty) {
         this.persistenceBatchDirty = false;
         this.persistentStore.save(this.buildPersistentData());

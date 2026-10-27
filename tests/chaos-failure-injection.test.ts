@@ -374,16 +374,18 @@ describe('Chaos — adapter failure injection through the real action pipeline',
     const deltas = takeCallDeltas();
     await recoverPipeline('timeout');
     assertTurnSucceeded(turn, 'timeout');
-    // Delivery + REAL-HANG assertions: the hung provider sleeps its full
-    // per-attempt budget (timeoutMs + 20ms; ~7s for narrative.generate) before
-    // throwing. A recovery faster than 5s would mean the hang never fired and
-    // the injection was skipped (vacuous test) — that is a rig failure here.
+    // Delivery + REAL-HANG assertions: the HTTP action pipeline uses its
+    // production 30s provider timeout for this route. The mock deliberately
+    // sleeps timeoutMs + 20ms before throwing, so the response may exceed
+    // 30,000ms slightly after HTTP/validation overhead. Keep a finite ceiling
+    // that reflects the actual contract instead of asserting below the timeout
+    // configured by the production path.
     assert.ok(deltas.total >= 1, 'timeout injection must actually reach a provider (delivery assertion).');
     assert.ok(
-      turn.latencyMs >= 5000,
-      `timeout injection must produce a REAL provider hang (>= ~7s per-attempt budget); took only ${turn.latencyMs}ms — injection never fired.`,
+      turn.latencyMs >= 25000,
+      `timeout injection must produce a REAL provider hang near the configured 30s timeout; took only ${turn.latencyMs}ms — injection never fired.`,
     );
-    assert.ok(turn.latencyMs < 30000, `timeout recovery must be bounded, took ${turn.latencyMs}ms.`);
+    assert.ok(turn.latencyMs < 35000, `timeout recovery must be bounded by the 30s provider timeout plus pipeline overhead, took ${turn.latencyMs}ms.`);
     const after = canonicalFingerprint();
     assert.equal(after.locationId, before.locationId, 'timeout recovery must not move the player.');
     logProgress(`timeout ok (primary ${deltas.primary}, fallback ${deltas.fallback}, ${turn.latencyMs}ms — real hang verified)`);

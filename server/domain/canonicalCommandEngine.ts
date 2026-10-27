@@ -759,16 +759,21 @@ export class CanonicalCommandEngine {
 			if (command.transactionMode === 'STAGED') {
 				transactionalRepository.appendCanonicalCommandEvent(command.storyId, event);
 				const committedAfter = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
-				// Keep the live event log: the snapshot intentionally excludes canonical
-				// events and the freshly committed event is appended right after restore.
-				repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true, preserveCanonicalEvents: true });
-				
-				// Propagate all newly created checkpoints, stats, and telemetry to the live orchestrator
-				const stagedOrch = transactionalRepository.getAiOrchestrator();
-				const liveOrch = repository.getAiOrchestrator();
-				liveOrch.commitTransactionState(stagedOrch);
+				// Persist the canonical state and its matching command event as one
+				// repository save. A crash must not leave prepared state durable without
+				// the event that identifies and deduplicates the committed command.
+				repository.runWithPersistenceBatching(() => {
+					// Keep the live event log: the snapshot intentionally excludes canonical
+					// events and the freshly committed event is appended inside this batch.
+					repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true, preserveCanonicalEvents: true });
 
-				repository.appendCanonicalCommandEvent(command.storyId, event);
+					// Propagate all newly created checkpoints, stats, and telemetry to the live orchestrator.
+					const stagedOrch = transactionalRepository.getAiOrchestrator();
+					const liveOrch = repository.getAiOrchestrator();
+					liveOrch.commitTransactionState(stagedOrch);
+
+					repository.appendCanonicalCommandEvent(command.storyId, event);
+				}, { force: true });
 			} else {
 				repository.appendCanonicalCommandEvent(command.storyId, event);
 			}
@@ -810,6 +815,19 @@ export class CanonicalCommandEngine {
 				transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
 			} catch {
 				// Preserve the original resolution error while still attempting to clear transaction state.
+			}
+			if (command.transactionMode === 'STAGED') {
+				// The event is appended to live state inside the persistence batch. If the
+				// durable flush fails before rename, remove that uncommitted event in memory
+				// before restoring the pre-state. Do not persist this intermediate staged
+				// state; snapshot restoration preserves the cleaned event history and writes
+				// the pre-state plus that history together.
+				const liveRun = repository.getStoryRun(command.storyId);
+				if (liveRun && Array.isArray(liveRun.canonicalEvents)) {
+					liveRun.canonicalEvents = liveRun.canonicalEvents.filter(
+						(existingEvent: CanonicalCommandEvent) => existingEvent.commandId !== command.commandId,
+					);
+				}
 			}
 			repository.restoreCanonicalStateSnapshot(before, { preserveCanonicalEvents: true });
 			return {

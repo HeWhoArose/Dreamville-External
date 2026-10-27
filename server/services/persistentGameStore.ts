@@ -89,7 +89,31 @@ export class PersistentGameStore {
     // large campaigns into multi-second synchronous writes per turn.
     writeFileSync(temporaryPath, JSON.stringify(normalized), 'utf8');
     renameSync(temporaryPath, this.filePath);
-    this.pruneSnapshots();
+    // The primary store is already committed after rename. Snapshot pruning is
+    // maintenance only and must not turn a successful durable commit into an
+    // apparent transaction failure that would roll canonical state back.
+    try {
+      this.pruneSnapshots();
+    } catch (error) {
+      console.warn('[PersistentGameStore] Snapshot pruning failed after the primary save committed.', error);
+    }
+  }
+
+  private writeRecoveredPrimary(data: PersistentGameStoreData): void {
+    if (!this.filePath) return;
+    const directory = dirname(this.filePath);
+    mkdirSync(directory, { recursive: true });
+    const temporaryPath = `${this.filePath}.recovery.tmp`;
+    const normalized = normalizeMapsInPlace(clone(data));
+    writeFileSync(temporaryPath, JSON.stringify(normalized), 'utf8');
+    renameSync(temporaryPath, this.filePath);
+    // Recovery has already replaced the corrupt primary. Snapshot pruning is
+    // post-commit maintenance and must not invalidate a successful repair.
+    try {
+      this.pruneSnapshots();
+    } catch (error) {
+      console.warn('[PersistentGameStore] Snapshot pruning failed after primary-file repair.', error);
+    }
   }
 
   private migrateIfNeeded(migrated: PersistentGameStoreData): void {
@@ -150,6 +174,14 @@ export class PersistentGameStore {
           snapshotPath: path,
           error: loadError instanceof Error ? loadError.message : String(loadError),
         });
+        // Repair the primary file from the validated snapshot without first
+        // snapshotting the corrupt primary. If repair itself fails, still return
+        // the recovered data so this process can start in a degraded-but-usable state.
+        try {
+          this.writeRecoveredPrimary(recovered);
+        } catch (repairError) {
+          console.warn('[PersistentGameStore] Snapshot recovery succeeded in memory but primary-file repair failed.', repairError);
+        }
         return clone(recovered);
       } catch {
         // Continue searching older snapshots.

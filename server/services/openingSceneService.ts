@@ -12,6 +12,7 @@ import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
 import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
+import { WorldDirector } from '../domain/worldDirector';
 import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
 import {
 	normalizeLocationSensory,
@@ -148,6 +149,14 @@ export class OpeningSceneService {
 			worldRepo,
 		});
 		const { rawOpeningFacts } = workingContext;
+		// Readiness is diagnostic in this first slice: it exposes missing canonical
+		// investigation anchors without inventing facts or blocking the opening.
+		const sceneReadiness = WorldDirector.assessOpeningSceneReadiness({
+			startingSituation: rawOpeningFacts.character.startingSituation,
+			sceneObjects: rawOpeningFacts.location.sceneObjects,
+			visibleEntities: rawOpeningFacts.location.visibleEntities,
+			visibleEvents: rawOpeningFacts.location.visibleEvents,
+		});
 		const authoredAgenda = worldRepo.getProtagonistAgenda?.(storyId) || null;
 		const authoredAgendaContext = authoredAgenda && typeof authoredAgenda.goal === 'string'
 			&& authoredAgenda.goal.trim()
@@ -174,7 +183,7 @@ export class OpeningSceneService {
 
 		let generatedText = '';
 		let generatedEvents: StructuredNarrativeEvent[] = [];
-		let generationMeta: any = undefined;
+		let generationMeta: any = { sceneReadiness };
 
 		try {
 			const narrator = worldRepo.getAiOrchestrator();
@@ -268,6 +277,7 @@ export class OpeningSceneService {
 				fallbackReason: response.fallbackReason,
 				attemptsTrail: response.attemptsTrail,
 				researchPacket,
+				sceneReadiness,
 			};
 
 			if (response.source === 'DETERMINISTIC_FALLBACK') {
@@ -515,6 +525,7 @@ export class OpeningSceneService {
 			openingNarrativeContext: {
 				research: researchPacket,
 				generation: generationMeta,
+				sceneReadiness,
 				capturedAt: new Date().toISOString(),
 			},
 		};

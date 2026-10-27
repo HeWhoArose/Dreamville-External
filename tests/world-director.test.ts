@@ -1171,3 +1171,73 @@ test('World Director owner planning is idempotent for owned records and leaves c
   assert.deepEqual(foreignConflict.record, foreignOwned);
 });
 
+
+
+test('World Director rejects command-ID reuse with a different payload after repository reload', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+
+  const originalPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-command-conflict-'));
+  const persistencePath = join(tempDirectory, 'dreambook.json');
+  const storyId = 'world_director_command_conflict_after_reload';
+  const commandId = 'wd_conflict_prepare_scene_001';
+  const sceneObjectId = 'wd_conflict_original_clue';
+
+  try {
+    process.env.DREAMBOOK_PERSISTENCE_PATH = persistencePath;
+    const repository = new InMemoryWorldRepository();
+    repository.seedStory(storyId);
+    const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+    assert.ok(location, 'fixture needs a canonical location');
+    const command = {
+      commandId,
+      storyId,
+      actorId: 'wd_conflict_actor',
+      type: 'INTERACT' as const,
+      payload: { action: 'PREPARE_SCENE', sceneKey: 'fixture:original-scene' },
+      source: 'SYSTEM' as const,
+    };
+
+    const firstResult = await canonicalCommandEngine.execute(repository, command, async (_command, context) => {
+      const added = context.repository.getGeographyGraph(storyId).addSceneObject(location.id, {
+        id: sceneObjectId,
+        name: 'Original canonical clue',
+        kind: 'ITEM',
+        visible: true,
+        interactable: true,
+        provenance: 'world_director_command_conflict_test',
+      });
+      assert.equal(added.success, true);
+      return { success: true, data: { sceneObjectId }, summary: 'Committed original scene preparation.' };
+    });
+    assert.equal(firstResult.success, true);
+    repository.saveStoryRun(repository.getStoryRun(storyId));
+
+    const reloaded = new InMemoryWorldRepository();
+    const eventCountBeforeConflict = reloaded.getCanonicalCommandEvents(storyId).length;
+    const changedCommand = {
+      ...command,
+      payload: { action: 'PREPARE_SCENE', sceneKey: 'fixture:DIFFERENT-scene' },
+    };
+    let conflictingHandlerCalls = 0;
+
+    const conflictResult = await canonicalCommandEngine.execute(reloaded, changedCommand, async () => {
+      conflictingHandlerCalls += 1;
+      return { success: true, data: { sceneObjectId: 'wd_conflict_replacement_clue' }, summary: 'Must not execute.' };
+    });
+
+    assert.equal(conflictResult.success, false, 'same command ID with a different fingerprint must fail closed');
+    assert.match(conflictResult.errorReason || '', /different payload/i);
+    assert.equal(conflictingHandlerCalls, 0, 'a conflicting replay must never execute the handler');
+    assert.equal(reloaded.getCanonicalCommandEvents(storyId).length, eventCountBeforeConflict, 'conflict must not append a command event');
+    const sceneObjects = reloaded.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects || [];
+    assert.equal(sceneObjects.filter((object) => object.id === sceneObjectId).length, 1);
+    assert.equal(sceneObjects.some((object) => object.id === 'wd_conflict_replacement_clue'), false);
+    assert.equal(sceneObjects.find((object) => object.id === sceneObjectId)?.name, 'Original canonical clue');
+  } finally {
+    if (originalPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = originalPersistencePath;
+    rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});

@@ -229,3 +229,158 @@ test('World Director canonical-owner contract commits scene-object and Chronicle
   assert.equal(repository.getCanonicalCommandEvents(storyId).length, 1);
 });
 
+test('World Director canonical transaction rolls back actor-scoped Phase 8 knowledge on rejection', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+
+  const storyId = 'world_director_phase8_knowledge_rollback';
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  repository.seedStory(storyId);
+  const actorId = repository.getPlayerLifecycle(storyId)!.actorId;
+  const factId = 'wd_phase8_rollback_fact';
+  const timestamp = repository.getWorldClock(storyId).getTimestamp();
+
+  const result = await canonicalCommandEngine.execute(
+    repository,
+    {
+      commandId: 'world_director_phase8_knowledge_rollback_001',
+      storyId,
+      actorId,
+      type: 'INTERACT',
+      payload: { action: 'PREPARE_SCENE_THEN_REJECT_PHASE8_KNOWLEDGE' },
+      source: 'SYSTEM',
+    },
+    async (_command, context) => {
+      const fact = {
+        id: factId,
+        subjectEntityId: actorId,
+        predicate: 'observed_scene_clue',
+        objectValue: 'The player learned the test clue',
+        sourceType: 'document' as const,
+        acquiredAtTimestamp: timestamp,
+        confidence: 1,
+        secretLevel: 'private' as const,
+        scope: 'exact' as const,
+        provenanceSummary: 'world_director_phase8_transaction_test',
+      };
+      context.repository.addKnowledgeFact(storyId, fact);
+
+      assert.equal(
+        context.repository.getAuthorizedKnowledgeFacts(storyId, actorId).some((entry) => entry.id === factId),
+        false,
+        'storing world truth must not itself grant actor-scoped knowledge',
+      );
+
+      context.repository.getPhase8SimulationEngine(storyId).processCanonicalEvent(context.repository, storyId, {
+        eventId: 'wd_phase8_rollback_acquire_event',
+        type: 'FACT_CHANGED',
+        actorId,
+        timestampSeconds: timestamp.totalElapsedSeconds,
+        payload: {
+          factId,
+          evidenceId: 'wd_phase8_rollback_evidence',
+          knowledgeAcquisitionSuccess: true,
+          subjectEntityId: actorId,
+          predicate: fact.predicate,
+          objectValue: fact.objectValue,
+          confidence: fact.confidence,
+          method: 'SEARCH',
+        },
+      });
+
+      assert.equal(
+        context.repository.getAuthorizedKnowledgeFacts(storyId, actorId).some((entry) => entry.id === factId),
+        true,
+        'successful Phase 8 acquisition should grant knowledge inside the transaction',
+      );
+      return { success: false, errorReason: 'Intentional rollback after Phase 8 acquisition.' };
+    },
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.rolledBack, true);
+  assert.equal(repository.getKnowledgeFacts(storyId).some((fact) => fact.id === factId), false);
+  assert.equal(
+    repository.getAuthorizedKnowledgeFacts(storyId, actorId).some((fact) => fact.id === factId),
+    false,
+    'rejected preparation must not leave actor-scoped knowledge behind',
+  );
+  const phase8State = repository.getStoryRun(storyId)?.runtimeState?.phase8 as any;
+  assert.equal(phase8State?.knowledge?.[actorId]?.facts?.[factId], undefined);
+});
+
+test('World Director canonical transaction commits actor-scoped Phase 8 knowledge on success', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+
+  const storyId = 'world_director_phase8_knowledge_commit';
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  repository.seedStory(storyId);
+  const actorId = repository.getPlayerLifecycle(storyId)!.actorId;
+  const factId = 'wd_phase8_commit_fact';
+  const timestamp = repository.getWorldClock(storyId).getTimestamp();
+
+  const result = await canonicalCommandEngine.execute(
+    repository,
+    {
+      commandId: 'world_director_phase8_knowledge_commit_001',
+      storyId,
+      actorId,
+      type: 'INTERACT',
+      payload: { action: 'PREPARE_SCENE_COMMIT_PHASE8_KNOWLEDGE' },
+      source: 'SYSTEM',
+    },
+    async (_command, context) => {
+      const fact = {
+        id: factId,
+        subjectEntityId: actorId,
+        predicate: 'observed_scene_clue',
+        objectValue: 'The player learned the committed test clue',
+        sourceType: 'document' as const,
+        acquiredAtTimestamp: timestamp,
+        confidence: 1,
+        secretLevel: 'private' as const,
+        scope: 'exact' as const,
+        provenanceSummary: 'world_director_phase8_transaction_test',
+      };
+      context.repository.addKnowledgeFact(storyId, fact);
+
+      assert.equal(
+        context.repository.getAuthorizedKnowledgeFacts(storyId, actorId).some((entry) => entry.id === factId),
+        false,
+        'the canonical fact store alone must not authorize actor knowledge',
+      );
+
+      context.repository.getPhase8SimulationEngine(storyId).processCanonicalEvent(context.repository, storyId, {
+        eventId: 'wd_phase8_commit_acquire_event',
+        type: 'FACT_CHANGED',
+        actorId,
+        timestampSeconds: timestamp.totalElapsedSeconds,
+        payload: {
+          factId,
+          evidenceId: 'wd_phase8_commit_evidence',
+          knowledgeAcquisitionSuccess: true,
+          subjectEntityId: actorId,
+          predicate: fact.predicate,
+          objectValue: fact.objectValue,
+          confidence: fact.confidence,
+          method: 'SEARCH',
+        },
+      });
+
+      return { success: true, data: { factId }, summary: 'Committed actor knowledge test.' };
+    },
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(result.rolledBack, false);
+  assert.equal(repository.getKnowledgeFacts(storyId).some((fact) => fact.id === factId), true);
+  assert.equal(
+    repository.getAuthorizedKnowledgeFacts(storyId, actorId).some((fact) => fact.id === factId),
+    true,
+    'committed Phase 8 acquisition should remain authorized for this actor',
+  );
+  const phase8State = repository.getStoryRun(storyId)?.runtimeState?.phase8 as any;
+  assert.equal(phase8State?.knowledge?.[actorId]?.facts?.[factId]?.status, 'KNOWN');
+});
+

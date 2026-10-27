@@ -170,7 +170,8 @@ export type WorldDirectorOwnerAdapterConflictReason =
   | 'PREPARATION_KEY_MISMATCH'
   | 'ROLE_MISMATCH'
   | 'CONTRACT_VERSION_MISMATCH'
-  | 'DESIRED_RECORD_MARKER_CONFLICT';
+  | 'DESIRED_RECORD_MARKER_CONFLICT'
+  | 'OWNER_APPEND_ONLY';
 
 export interface WorldDirectorOwnerAdapterDecision {
   disposition: WorldDirectorOwnershipDisposition;
@@ -238,6 +239,8 @@ export function evaluateWorldDirectorOwnerRecord(
 }
 
 export interface WorldDirectorOwnershipAdapter<TRecord> {
+  /** Whether this canonical owner supports in-place reconciliation of existing records. */
+  canUpdateExisting: boolean;
   read(record: TRecord): WorldDirectorOwnershipMarker | null;
   /**
    * Returns a new record and preserves unrelated owner metadata.
@@ -288,6 +291,7 @@ function cloneMarker(marker: WorldDirectorOwnershipMarker): WorldDirectorOwnersh
  */
 export const worldDirectorOwnershipAdapters = {
   sceneObject: {
+    canUpdateExisting: true,
     read(record: LocationSceneObject): WorldDirectorOwnershipMarker | null {
       return parseOwnershipMarker(record.properties?.worldDirectorOwnership);
     },
@@ -304,6 +308,7 @@ export const worldDirectorOwnershipAdapters = {
     },
   } satisfies WorldDirectorOwnershipAdapter<LocationSceneObject>,
   entityCard: {
+    canUpdateExisting: true,
     read(record: EntityCard): WorldDirectorOwnershipMarker | null {
       return parseOwnershipMarker(record.metadata?.worldDirectorOwnership);
     },
@@ -320,6 +325,7 @@ export const worldDirectorOwnershipAdapters = {
     },
   } satisfies WorldDirectorOwnershipAdapter<EntityCard>,
   historicalEvidence: {
+    canUpdateExisting: false,
     read(record: HistoricalEvidence): WorldDirectorOwnershipMarker | null {
       return parseOwnershipMarker(record.metadata?.worldDirectorOwnership);
     },
@@ -336,6 +342,7 @@ export const worldDirectorOwnershipAdapters = {
     },
   } satisfies WorldDirectorOwnershipAdapter<HistoricalEvidence>,
   knowledgeFact: {
+    canUpdateExisting: false,
     read(record: KnowledgeFact): WorldDirectorOwnershipMarker | null {
       return parseOwnershipMarker(record.metadata?.worldDirectorOwnership);
     },
@@ -426,10 +433,18 @@ export function planWorldDirectorOwnedRecord<TRecord extends { id: string }>(
       };
     }
     const plannedRecord = adapter.withMarker(merged, marker);
+    const changed = JSON.stringify(plannedRecord) !== JSON.stringify(existing);
+    if (changed && !adapter.canUpdateExisting) {
+      return {
+        decision: ownerConflictDecision(existing.id, 'OWNER_APPEND_ONLY'),
+        record: existing,
+        changed: false,
+      };
+    }
     return {
-      decision,
+      decision: adapter.canUpdateExisting ? decision : { ...decision, mayUpdate: false },
       record: plannedRecord,
-      changed: JSON.stringify(plannedRecord) !== JSON.stringify(existing),
+      changed,
     };
   } catch {
     return {

@@ -387,8 +387,10 @@ test('World Director canonical transaction commits actor-scoped Phase 8 knowledg
   assert.equal(phase8State?.knowledge?.[actorId]?.facts?.[factId]?.status, 'KNOWN');
 });
 
+
 test('World Director canonical scene state and actor knowledge survive a file-backed repository reload', async () => {
   const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
 
   const originalPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
   const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-reload-'));
@@ -411,68 +413,89 @@ test('World Director canonical scene state and actor knowledge survive a file-ba
     assert.ok(location, 'fixture needs a canonical location');
     const timestamp = repository.getWorldClock(storyId).getTimestamp();
 
-    const sceneObjectResult = repository.getGeographyGraph(storyId).addSceneObject(location.id, {
-      id: sceneObjectId,
-      name: 'Reload-persistent clue',
-      kind: 'ITEM',
-      description: 'A clue that must survive a repository reconstruction.',
-      visible: true,
-      interactable: true,
-      tags: ['world-director-reload-test'],
-      provenance: 'world_director_reload_contract_test',
-    });
-    assert.equal(sceneObjectResult.success, true);
-
-    repository.getEntityRegistry(storyId).upsert({
-      id: entityId,
-      name: 'Reload-persistent scene witness',
-      kind: 'NPC',
-      worldState: { locationId: location.id, isAlive: true, presence: 'present' },
-    });
-
-    repository.addKnowledgeFact(storyId, {
-      id: privateFactId,
-      subjectEntityId: actorId,
-      predicate: 'observed_scene_clue',
-      objectValue: 'The actor acquired the private clue before reload.',
-      sourceType: 'document',
-      acquiredAtTimestamp: timestamp,
-      confidence: 1,
-      secretLevel: 'private',
-      scope: 'exact',
-      provenanceSummary: 'world_director_reload_contract_test',
-    });
-
-    repository.getPhase8SimulationEngine(storyId).processCanonicalEvent(repository, storyId, {
-      eventId: 'wd_reload_private_fact_acquired',
-      type: 'FACT_CHANGED',
-      actorId,
-      timestampSeconds: timestamp.totalElapsedSeconds,
-      payload: {
-        factId: privateFactId,
-        evidenceId,
-        knowledgeAcquisitionSuccess: true,
-        subjectEntityId: actorId,
-        predicate: 'observed_scene_clue',
-        objectValue: 'The actor acquired the private clue before reload.',
-        confidence: 1,
-        method: 'SEARCH',
+    const result = await canonicalCommandEngine.execute(
+      repository,
+      {
+        commandId: 'wd_reload_scene_prepare_001',
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { action: 'PREPARE_RELOAD_TEST_SCENE' },
+        source: 'SYSTEM',
       },
-    });
+      async (_command, context) => {
+        const sceneObjectResult = context.repository.getGeographyGraph(storyId).addSceneObject(location.id, {
+          id: sceneObjectId,
+          name: 'Reload-persistent clue',
+          kind: 'ITEM',
+          description: 'A clue that must survive a repository reconstruction.',
+          visible: true,
+          interactable: true,
+          tags: ['world-director-reload-test'],
+          provenance: 'world_director_reload_contract_test',
+        });
+        assert.equal(sceneObjectResult.success, true);
 
-    repository.getHistoricalChronicleEngine(storyId).recordEvidence({
-      id: evidenceId,
-      category: 'WORLD_ANOMALY',
-      timestamp,
-      primarySubjectId: actorId,
-      locationId: location.id,
-      summary: 'Reload persistence test evidence.',
-      details: 'The evidence record should survive repository reconstruction.',
-      sourceEventId: 'wd_reload_private_fact_acquired',
-      provenance: 'world_director_reload_contract_test',
-      visibility: 'PUBLIC',
-    });
+        context.repository.getEntityRegistry(storyId).upsert({
+          id: entityId,
+          name: 'Reload-persistent scene witness',
+          kind: 'NPC',
+          worldState: { locationId: location.id, isAlive: true, presence: 'present' },
+        });
 
+        const fact = {
+          id: privateFactId,
+          subjectEntityId: actorId,
+          predicate: 'observed_scene_clue',
+          objectValue: 'The actor acquired the private clue before reload.',
+          sourceType: 'document' as const,
+          acquiredAtTimestamp: timestamp,
+          confidence: 1,
+          secretLevel: 'private' as const,
+          scope: 'exact' as const,
+          provenanceSummary: 'world_director_reload_contract_test',
+        };
+        context.repository.addKnowledgeFact(storyId, fact);
+
+        context.repository.getPhase8SimulationEngine(storyId).processCanonicalEvent(context.repository, storyId, {
+          eventId: 'wd_reload_private_fact_acquired',
+          type: 'FACT_CHANGED',
+          actorId,
+          timestampSeconds: timestamp.totalElapsedSeconds,
+          payload: {
+            factId: privateFactId,
+            evidenceId,
+            knowledgeAcquisitionSuccess: true,
+            subjectEntityId: actorId,
+            predicate: fact.predicate,
+            objectValue: fact.objectValue,
+            confidence: fact.confidence,
+            method: 'SEARCH',
+          },
+        });
+
+        context.repository.getHistoricalChronicleEngine(storyId).recordEvidence({
+          id: evidenceId,
+          category: 'WORLD_ANOMALY',
+          timestamp,
+          primarySubjectId: actorId,
+          locationId: location.id,
+          summary: 'Reload persistence test evidence.',
+          details: 'The evidence record should survive repository reconstruction.',
+          sourceEventId: 'wd_reload_private_fact_acquired',
+          provenance: 'world_director_reload_contract_test',
+          visibility: 'PUBLIC',
+        });
+
+        return {
+          success: true,
+          data: { sceneObjectId, entityId, privateFactId, evidenceId },
+          summary: 'Committed the canonical reload test scene.',
+        };
+      },
+    );
+
+    assert.equal(result.success, true);
     repository.saveStoryRun(repository.getStoryRun(storyId));
 
     const reloadedRepository = new InMemoryWorldRepository();
@@ -514,4 +537,3 @@ test('World Director canonical scene state and actor knowledge survive a file-ba
     rmSync(tempDirectory, { recursive: true, force: true });
   }
 });
-

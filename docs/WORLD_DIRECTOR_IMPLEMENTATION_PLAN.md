@@ -534,3 +534,32 @@ Two focused tests were added to `tests/world-director.test.ts` and committed as 
 The canonical command boundary is now verified by CI for the scene-object + Chronicle contract: corrected-head verification and release-gate workflows passed with 1,561 tests, 0 failures, and successful type-check, production build, lint, and release-contract checks. A follow-on test extension adds EntityRegistry upserts and shared WorldRepository knowledge-fact writes to both the rejected and successful command cases, asserting rollback/commit alongside GeographyGraph and Chronicle. That extension was committed as `f341b70d81cc2023d48b5f82eeb184a6449b5b23`; its exact-head CI is in progress and is not yet a pass claim. The knowledge assertion covers the repository's canonical KnowledgeFact store, **not** actor-scoped Phase 8 acquired knowledge. Durable recovery after process interruption and reload/idempotence of a prepared scene also remain unproven. The production World Director remains read-only and no production canonical scene-preparation writes have been introduced.
 
 Phase 0 remains open. Next gate: finish exact-head CI for the EntityRegistry + KnowledgeFact extension; then test actor-scoped Phase 8 knowledge rollback/commit and persistence/reload/idempotence. Establish stable incident identity and lifecycle reconciliation before any production preparation writes.
+
+### 2.11 Actor knowledge, persistence/reload, and replay/idempotence gates (2026-10-27)
+
+The follow-on reliability gates are now covered by exact-head GitHub Actions at commit `19b421f2d0da8edb20ac6f2e67e469d20dfa8173`:
+
+- **Actor-scoped Phase 8 knowledge rollback/commit:** tests verify that acquired actor knowledge is restored on rejected canonical commands and retained on committed commands. The shared WorldRepository KnowledgeFact store does not implicitly grant another actor private Phase 8 knowledge.
+- **File-backed persistence/reload:** a test uses a temporary persistence file, commits scene state through one canonical command, reconstructs a fresh repository, and verifies the scene object, EntityRegistry entity, shared world fact, actor-authorized acquired knowledge, absence of authorization for a different actor, and Chronicle evidence survive reload.
+- **Command replay after reload:** the same committed command ID is replayed after constructing a fresh repository from the persistence file. The handler must not run again, canonical command-event count must not increase, and the stable scene-object and Chronicle evidence IDs must each occur once.
+- **Stable scene-object duplicate rejection:** GeographyGraph must reject a conflicting duplicate stable scene-object ID without replacing or appending to the existing object.
+
+Exact-head CI for commit `19b421f2d0da8edb20ac6f2e67e469d20dfa8173` completed successfully:
+- Dreamville Verification run `40485948707`: **1,565 passed, 0 failed**, production build succeeded.
+- Dreamville Release Gate run `40485948698`: **1,565 passed, 0 failed**, production build succeeded.
+- Additional Dreamville Verification run `40485948699`: **1,565 passed, 0 failed**, production build succeeded.
+
+These tests establish the tested canonical command transaction/replay behavior and repository persistence/reload behavior. They do **not** establish durable crash recovery at arbitrary interruption points, cross-process concurrency safety, production World Director preparation idempotence, incident identity/lifecycle reconciliation, or opening/movement/combat preparation parity.
+
+#### Updated Phase 0 disposition
+
+- Focused missing-investigation-anchor diagnostic regression: PASS in prior exact-head CI.
+- Canonical transaction rollback/commit across GeographyGraph, EntityRegistry, shared KnowledgeFact, Chronicle, and actor-scoped Phase 8 knowledge: PASS in the current test suite.
+- Actor-scoped knowledge isolation and file-backed persistence/reload: PASS in the current test suite.
+- Same-command replay after reload and duplicate stable scene-object rejection: PASS in the current test suite.
+- Typecheck, release contracts, lint where configured, and production build: PASS in the associated exact-head workflows.
+- Durable crash recovery / interrupted-write behavior: OPEN.
+- Stable incident identity and lifecycle reconciliation (create/update/remove/reconcile without overwriting unrelated canon): OPEN.
+- Universal preparation contract, composable profile policies, and all-entry-path integration: OPEN.
+- Phase 0 overall: **STILL OPEN**. Production World Director remains diagnostic-only/read-only; do not enable canonical scene-preparation writes until the remaining lifecycle and recovery gates are designed and tested.
+

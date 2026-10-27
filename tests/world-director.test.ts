@@ -644,3 +644,77 @@ test('World Director canonical command replay after repository reload does not r
     rmSync(tempDirectory, { recursive: true, force: true });
   }
 });
+
+test('World Director stable preparation identities are deterministic and explicitly scoped', async () => {
+  const { buildWorldDirectorStableRecordId } = await import('../server/domain/worldDirectorPreparationContract');
+  const input = {
+    storyId: 'wd_identity_story',
+    preparationKey: 'incident:shack-murder:cycle-42',
+    recordKind: 'SCENE_OBJECT' as const,
+    role: 'victim-body',
+    scopeId: 'isolated-shack',
+  };
+
+  const first = buildWorldDirectorStableRecordId(input);
+  assert.equal(buildWorldDirectorStableRecordId({ ...input }), first, 'same canonical identity inputs must produce the same record ID');
+  assert.notEqual(
+    buildWorldDirectorStableRecordId({ ...input, preparationKey: 'incident:shack-murder:cycle-43' }),
+    first,
+    'a distinct preparation key must not alias the original incident record',
+  );
+  assert.notEqual(
+    buildWorldDirectorStableRecordId({ ...input, scopeId: 'solar-citadel-outskirts' }),
+    first,
+    'location-scoped records must differ across owning locations',
+  );
+  assert.notEqual(
+    buildWorldDirectorStableRecordId({ ...input, role: 'primary-clue' }),
+    first,
+    'distinct record roles must receive distinct stable identities',
+  );
+  assert.throws(
+    () => buildWorldDirectorStableRecordId({ ...input, preparationKey: '   ' }),
+    /preparationKey/,
+    'the preparation key must be explicit and non-empty rather than inferred from narration',
+  );
+  assert.throws(
+    () => buildWorldDirectorStableRecordId({ ...input, storyId: 's'.repeat(241) }),
+    /exceeds 240 characters/,
+    'identity inputs must be bounded to prevent unbounded canonical IDs',
+  );
+});
+
+test('World Director ownership reconciliation never claims unmarked or foreign canonical records', async () => {
+  const { classifyWorldDirectorOwnership, WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION } = await import('../server/domain/worldDirectorPreparationContract');
+  const expected = { preparationKey: 'incident:shack-murder:cycle-42', role: 'primary-clue' };
+
+  assert.equal(classifyWorldDirectorOwnership(undefined, expected), 'CREATE', 'missing record may be created');
+  assert.equal(
+    classifyWorldDirectorOwnership({
+      contractVersion: WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION,
+      preparationKey: expected.preparationKey,
+      role: expected.role,
+    }, expected),
+    'RECONCILE_OWNED',
+    'only a record explicitly owned by this preparation and role may be reconciled',
+  );
+  assert.equal(
+    classifyWorldDirectorOwnership({
+      contractVersion: WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION,
+      preparationKey: 'authored:unrelated-clue',
+      role: expected.role,
+    }, expected),
+    'CONFLICT',
+    'an unrelated or authored record must never be overwritten',
+  );
+  assert.equal(
+    classifyWorldDirectorOwnership({
+      contractVersion: WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION - 1,
+      preparationKey: expected.preparationKey,
+      role: expected.role,
+    }, expected),
+    'CONFLICT',
+    'older ownership contracts require explicit migration rather than implicit mutation',
+  );
+});
+

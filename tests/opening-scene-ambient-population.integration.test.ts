@@ -184,7 +184,9 @@ test('World Director opening integration exposes an investigation premise with n
   );
   assert.deepEqual(
     rig.repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
-      card.worldState?.locationId === rig.locationId && card.worldState?.isAlive !== false
+      card.kind !== 'PLAYER' &&
+      card.worldState?.locationId === rig.locationId &&
+      card.worldState?.isAlive !== false
     ),
     [],
     'abandoned-location setup must not fabricate an ambient NPC as a substitute for a victim',

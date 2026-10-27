@@ -1315,9 +1315,11 @@ test('World Director staged commit save failure rolls back and leaves batching u
 
     // Corrupt the primary file to verify snapshot recovery cannot resurrect the
     // failed staged scene or its command event.
-    const { writeFileSync } = await import('node:fs');
+    const { readFileSync, writeFileSync } = await import('node:fs');
     writeFileSync(persistencePath, '{ invalid json', 'utf8');
     const recoveredFromSnapshot = new InMemoryWorldRepository();
+    const repairedPrimary = JSON.parse(readFileSync(persistencePath, 'utf8'));
+    assert.ok(repairedPrimary, 'snapshot recovery must atomically repair the primary file');
     assert.equal(
       recoveredFromSnapshot.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_atomic_commit_failure_clue'),
       false,

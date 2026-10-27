@@ -117,7 +117,7 @@ test('World Director canonical-owner contract rolls back scene-object and Chroni
     false,
   );
   assert.equal(
-    repository.getHistoricalChronicleEngine(storyId).exportState().evidence?.some((item: any) => item.id === 'wd_rollback_test_evidence'),
+    repository.getHistoricalChronicleEngine(storyId).exportState().evidenceStore?.some((item: any) => item.id === 'wd_rollback_test_evidence'),
     false,
   );
 });
@@ -180,7 +180,7 @@ test('World Director canonical-owner contract commits scene-object and Chronicle
   assert.equal(result.rolledBack, false);
   assert.equal(repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_commit_test_clue'), true);
   assert.equal(
-    repository.getHistoricalChronicleEngine(storyId).exportState().evidence?.some((item: any) => item.id === 'wd_commit_test_evidence'),
+    repository.getHistoricalChronicleEngine(storyId).exportState().evidenceStore?.some((item: any) => item.id === 'wd_commit_test_evidence'),
     true,
   );
   assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repository)).identical, false);

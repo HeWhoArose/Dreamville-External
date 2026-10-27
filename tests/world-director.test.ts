@@ -855,10 +855,37 @@ test('World Director staged scene preparation persists canonical state and its c
         name: 'Atomic commit clue fixture',
         kind: 'ITEM',
         visible: true,
-        properties: { worldDirectorFixture: true },
+        properties: {
+          worldDirectorFixture: true,
+          worldDirectorOwnership: {
+            contractVersion: 1,
+            preparationKey: 'fixture:atomic-scene-commit',
+            role: 'primary-clue',
+          },
+        },
         provenance: 'world_director_atomic_commit_test',
       });
       assert.equal(added.success, true);
+      context.repository.addKnowledgeFact(storyId, {
+        id: 'wd_atomic_scene_commit_fact',
+        subjectEntityId: actorId,
+        predicate: 'scene_has_primary_clue',
+        objectValue: 'wd_atomic_scene_commit_clue',
+        sourceType: 'system_grant',
+        acquiredAtTimestamp: context.repository.getWorldClock(storyId).getTimestamp(),
+        confidence: 1,
+        secretLevel: 'public',
+        scope: 'exact',
+        provenanceSummary: 'World Director atomic commit fixture fact.',
+        metadata: {
+          authoredNote: 'preserve fact metadata',
+          worldDirectorOwnership: {
+            contractVersion: 1,
+            preparationKey: 'fixture:atomic-scene-commit',
+            role: 'scene-fact',
+          },
+        },
+      });
       return { success: true, data: { sceneObjectId: 'wd_atomic_scene_commit_clue' }, summary: 'Prepared atomic commit fixture.' };
     });
 
@@ -876,6 +903,13 @@ test('World Director staged scene preparation persists canonical state and its c
       reloaded.getCanonicalCommandEvents(storyId).some((event: any) => event.commandId === command.commandId),
       'the matching canonical command event must survive in the same durable commit',
     );
+    const persistedFact = reloaded.getKnowledgeFacts(storyId).find((fact) => fact.id === 'wd_atomic_scene_commit_fact');
+    assert.deepEqual(persistedFact?.metadata?.worldDirectorOwnership, {
+      contractVersion: 1,
+      preparationKey: 'fixture:atomic-scene-commit',
+      role: 'scene-fact',
+    }, 'structured ownership metadata on shared knowledge facts must survive the same atomic commit');
+    assert.equal(persistedFact?.metadata?.authoredNote, 'preserve fact metadata');
   } finally {
     PersistentGameStore.prototype.save = originalSave;
     if (previousPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;

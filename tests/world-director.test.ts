@@ -1351,3 +1351,82 @@ test('World Director staged commit save failure rolls back and leaves batching u
   }
 });
 
+test('World Director staged commit remains committed when post-rename snapshot pruning fails', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const { PersistentGameStore } = await import('../server/services/persistentGameStore');
+
+  const previousPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-prune-failure-'));
+  const persistencePath = join(tempDirectory, 'dreambook.json');
+  const originalSave = PersistentGameStore.prototype.save;
+  const originalPrune = (PersistentGameStore.prototype as any).pruneSnapshots;
+  let saveCount = 0;
+  let failPruneOnce = false;
+
+  try {
+    process.env.DREAMBOOK_PERSISTENCE_PATH = persistencePath;
+    PersistentGameStore.prototype.save = function (data) {
+      if (this.getPath() === persistencePath) saveCount += 1;
+      return originalSave.call(this, data);
+    };
+    (PersistentGameStore.prototype as any).pruneSnapshots = function () {
+      if (this.getPath() === persistencePath && failPruneOnce) {
+        failPruneOnce = false;
+        throw new Error('injected post-rename snapshot pruning failure');
+      }
+      return originalPrune.call(this);
+    };
+
+    const repository = new InMemoryWorldRepository();
+    const storyId = 'wd_post_rename_prune_failure';
+    const actorId = 'wd_post_rename_prune_actor';
+    repository.seedStory(storyId);
+    const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+    assert.ok(location, 'fixture needs a canonical location');
+    saveCount = 0;
+    failPruneOnce = true;
+
+    const command = {
+      commandId: 'wd_post_rename_prune_failure_001',
+      storyId,
+      actorId,
+      type: 'INTERACT' as const,
+      payload: { action: 'PREPARE_POST_RENAME_SCENE', preparationKey: 'fixture:post-rename-prune' },
+      source: 'SYSTEM' as const,
+      transactionMode: 'STAGED' as const,
+    };
+    const result = await canonicalCommandEngine.execute(repository, command, async (_command, context) => {
+      const added = context.repository.getGeographyGraph(storyId).addSceneObject(location.id, {
+        id: 'wd_post_rename_prune_clue',
+        name: 'Committed despite snapshot maintenance failure',
+        kind: 'ITEM',
+        visible: true,
+        provenance: 'world_director_post_rename_prune_test',
+      });
+      assert.equal(added.success, true);
+      return { success: true, data: { sceneObjectId: 'wd_post_rename_prune_clue' }, summary: 'Committed a scene before snapshot pruning failed.' };
+    });
+
+    assert.equal(failPruneOnce, false, 'the injected maintenance failure must have occurred after rename');
+    assert.equal(result.success, true, 'post-rename snapshot maintenance failure must not roll back an already committed store');
+    assert.equal(saveCount, 1, 'the canonical commit must still use one store save');
+    const reloaded = new InMemoryWorldRepository();
+    assert.equal(
+      reloaded.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_post_rename_prune_clue'),
+      true,
+      'the renamed primary store must contain the committed scene object',
+    );
+    assert.ok(
+      reloaded.getCanonicalCommandEvents(storyId).some((event: any) => event.commandId === command.commandId),
+      'the renamed primary store must contain the matching command event',
+    );
+  } finally {
+    PersistentGameStore.prototype.save = originalSave;
+    (PersistentGameStore.prototype as any).pruneSnapshots = originalPrune;
+    if (previousPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPersistencePath;
+    rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});
+

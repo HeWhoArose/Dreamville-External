@@ -487,7 +487,7 @@ Player-owned tasks:
 | Latest incremental regression | PASS — EXACT-HEAD CI | `tests/world-director.test.ts`: staged-command owner-planning integration for GeographyGraph, EntityRegistry, KnowledgeFact, and Chronicle passed at `6e2154fee8bcb47d4ea290f06c163a4571e0af72`; all three workflows report 1,578 passed, 0 failed, and successful production builds. The later code head `f2251302d5028507da2444d0bc1b0ecce8128f95` also passes with 1,580 passed, 0 failed. |
 | Phase 1 readiness-state contract | PASS — EXACT-HEAD CI | Commit `f2251302d5028507da2444d0bc1b0ecce8128f95`: unresolved questions are reported without resolving them. They yield `READY_WITH_UNCERTAINTY` only when required visible anchors exist; missing anchors remain `INCOMPLETE`. Both focused regressions pass. The latest verification run reports **1,580 passed, 0 failed**, type-check and production build successful; Release Gate and the second Verification workflow also succeeded. |
 | Phase 1 claim-provenance contract | PASS — EXACT-HEAD CI | Commit `2906fc43ab508766a055bffe9e9b96fad065b174`: five claim states distinguish authored truth, canonical fact, generated proposal, authorized proposal, and unknown conclusion. References are required; only owner-backed canonical facts establish truth, and proposals still require owner commit. All three workflows pass; Verification reports **1,581 passed, 0 failed**, with type-check and production build successful. |
-| Phase 1 structured investigation anchors | ADDED — CI PENDING | `assessWorldDirectorInvestigationSceneContract()` now requires a committed active incident at the current location, a committed victim identity, a present body linked to that victim, and present local evidence that is visible or discoverable. Tests cover a complete scene with hidden-but-searchable evidence and reject a proposed incident, unlinked/off-location body, and hidden undiscoverable clue. |
+| Phase 1 structured investigation anchors | PASS — EXACT-HEAD CI | `assessWorldDirectorInvestigationSceneContract()` requires a committed active incident at the current location, a committed victim identity, a present body linked to that victim, and present local evidence that is visible or discoverable. Tests cover a complete scene with hidden-but-searchable evidence and reject a proposed incident, unlinked/off-location body, and hidden undiscoverable clue. Commit `d998270ac7733294ab368e170b1971785e030239` passed all three workflows: **1,582 passed, 0 failed**, type-check, release checks, and production builds successful. |
 | Player live test | DEFERRED TO PLAYER | Required after engineering provides the run checklist. |
 
 ## 13. Definition of Done
@@ -807,7 +807,23 @@ The runtime contract rejects empty provenance, record, authorization, and suppor
 
 Exact-head CI at `2906fc43ab508766a055bffe9e9b96fad065b174` passed all three workflows: Dreamville Verification runs `40506239684` and `40506239747`, plus Dreamville Release Gate `40506239987`. Verification reports **1,581 passed, 0 failed**; type-check, release contracts, and production builds passed. Local focused execution was unavailable because dependencies are not installed in this checkout.
 
-Phase 1 remains in progress. The new structured fixture contract must pass exact-head CI before the next slice. Production preparation writes remain disabled.
+Phase 1 remains in progress. The next slice should connect the structured contract to the readiness report using actual canonical owner projections, with explicit error/recovery behavior for malformed or conflicting references. Production preparation writes remain disabled.
+
+### 2.25 Structured investigation references and local evidence requirements — exact-head CI pass (2026-10-27)
+
+Added pure `assessWorldDirectorInvestigationSceneContract()` with typed references to the owning authorities:
+
+- A committed, active canonical event at the current location.
+- A committed victim identity in EntityRegistry.
+- A physically present body scene object at the current location, explicitly linked to that victim record, and visible or discoverable.
+- At least one physically present evidence scene object at the current location that is visible or discoverable. Hidden but searchable evidence satisfies physical readiness without being player-visible.
+- Canonical open questions remain listed as unresolved; they do not block readiness once mandatory anchors are satisfied.
+
+The contract rejects proposed or historical incidents, uncommitted victim identities, absent/off-location/unlinked body records, and hidden undiscoverable or off-location evidence. Tests verify both a ready-with-uncertainty fixture and those negative cases. This remains a pure assessment; it does not query repositories, mutate owner records, or wire into opening generation.
+
+Exact-head CI at `d998270ac7733294ab368e170b1971785e030239` passed Dreamville Verification runs `40508378775` and `40508378699`, plus Dreamville Release Gate run `40508378892`. The latest verification log reports **1,582 passed, 0 failed**; type-check, release contracts, and production builds succeeded.
+
+Phase 1 remains open until the readiness contract consumes actual authorized canonical projections and defines conflict/error/recovery results for owner references. Production preparation writes remain disabled.
 
 ### 2.23 Final Phase 0 source, regression, and owner/recovery audit — COMPLETE (2026-10-27)
 

@@ -122,6 +122,25 @@ These are illustrative, extensible policies, not a mandate to require every list
 
 **Current implementation limitation:** `server/domain/worldDirector.ts` currently has a conservative `GENERAL` / `INVESTIGATION` diagnostic with murder/investigation vocabulary and two investigation anchors. That is acceptable as the first regression probe only. Before canonical preparation is implemented, refactor the interface around a universal scene contract plus composable profile requirements; keep text classification as a fallback selector, never the source of truth for incident existence.
 
+### 2.7 Required cross-profile regression matrix before any preparation writes canonical state
+
+The first test is deliberately a **negative/control test**: an investigation hook with no victim/clue must remain INCOMPLETE and must not cause the narrator to invent one. It is not sufficient evidence that a reusable World Director works. Before Phase 0 closes, record the following tests and their existing canonical owner for each row; use fixtures and services already in the repository where possible.
+
+| Scenario | Expected World Director behavior | Must not do |
+|---|---|---|
+| Ordinary arrival / quiet room | Validate grounded place/activity/affordances; no investigation requirements | Add a victim, threat, clue, or random event just to enrich prose |
+| Social visit / negotiation | Validate that the target interlocutor and interaction opportunity are present/authorized | Invent dialogue, relationship history, or NPC consent |
+| Travel / arrival | Validate canonical route, journey progress, destination/access and time/arrival state | Teleport the player or claim arrival before movement commits |
+| Exploration / hidden discovery | Validate discoverable features and perception/knowledge boundaries | Count hidden/off-location facts as visible or reveal a secret early |
+| Combat / immediate danger | Consume canonical participants, positions, threat and committed combat state | Create a duplicate combat state or resolve actions in narration |
+| Investigation / crime or non-criminal mystery | Validate a supported target/incident and discoverable physical evidence; distinguish body/object/event/history | Hard-code only murder terminology or force a corpse into unrelated mysteries |
+| Work / rest / routine | Validate suitable canonical affordances/resources and relevant schedule/time | Create jobs/resources or alter schedules without their owning system |
+| Sparse or intentionally empty scene | Return READY_WITH_UNCERTAINTY or an explicit incomplete report appropriate to policy | Treat absence of data as proof of abandonment, danger, or a hidden event |
+| Retry / force regeneration / reload | Reuse the same committed preparation and preserve IDs, provenance, visibility and outcomes | Duplicate scene objects/entities/events or reroll an already committed incident |
+| Provider failure / fallback | Give deterministic fallback the same grounded prepared facts and visibility limits | Use fallback as a back door for unsupported invention |
+
+**Phase 0 exit rule:** no scene-preparation implementation that mutates canonical state begins until (a) this cross-profile contract is reviewed, (b) the isolated-shack integration test is executable and its result recorded, (c) owner/persistence contracts for scene objects, entities, events, Chronicle and knowledge have been checked, and (d) entry-path review states which callers prepare, which merely project, and which resolve actions. Live provider/UI acceptance remains a later player-run gate.
+
 ## 3. Scope and Non-Goals
 
 ### In scope
@@ -411,7 +430,7 @@ Player-owned tasks:
 
 | Slice | Status | Evidence / next action |
 |---|---|---|
-| Main-source audit | SOURCE TRACE UPDATED; INTEGRATION REPRODUCER ADDED; PHASE 0 OPEN | Refreshed the feature-branch source map and traced the gap: CharacterGenesis/StoryRun preserves the hook, generic Chronicle bootstrap records it as history, world events remain PLANNED, and the opening projection only consumes canonical objects/entities/current-location events. Added `tests/opening-scene-ambient-population.integration.test.ts` integration coverage for an isolated-shack murder premise with no registered victim/clue; it asserts readiness remains INCOMPLETE and no ambient NPC is fabricated as a substitute. The test content was re-fetched after commit, but this GitHub integration returned no workflow runs/status checks for the latest test commit, so execution is **NOT VERIFIED**. Next: run the focused test and relevant suite through CI or local execution; inspect canonical Chronicle/entity/scene-object persistence and remaining movement/combat/retry/reload callers before Phase 0 exit. |
+| Main-source audit | GENERAL CONTRACT DOCUMENTED; REPRODUCER AWAITING EXECUTION; PHASE 0 OPEN | Source trace documents the premise-to-canonical-state gap and a general-purpose, composable scene contract (arrival, social, travel, exploration, combat, investigation, work/rest, empty scenes, retries/reload and fallback). Added a deterministic opening integration reproducer for a missing investigation target/clue; file was re-fetched and verified, but no CI workflow/status is exposed for its latest test commit, so test execution is NOT VERIFIED. Remaining Phase 0 gates: run the focused test + regressions; verify entity/scene-object/event/Chronicle/knowledge persistence owners; audit every relevant entry caller and record prepare-vs-project-vs-resolve responsibility. No canonical scene-preparation writes yet. |
 | Plan and docs index | COMMITTED | `docs/WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md` and `docs/README.md` index update committed on this feature branch; final content re-fetch verified. |
 | Investigation scene contract | PARTIAL | `tests/world-director.test.ts` covers the diagnostic contract for missing victim/evidence anchors, visible versus hidden/absent anchors, and non-investigation openings. A canonical incident-preparation contract is still needed. |
 | First implementation | IMPLEMENTED — DIAGNOSTIC SLICE | `server/domain/worldDirector.ts` assesses investigation-opening readiness; `OpeningSceneService` records the report in `runtimeState.openingNarrativeContext`. This does not yet create canonical victim/incident/evidence records or change player-facing narration. |

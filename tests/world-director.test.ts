@@ -52,3 +52,138 @@ test('World Director does not count hidden or absent entities as a victim anchor
   assert.equal(report.status, 'INCOMPLETE');
   assert.ok(report.issues.some((issue) => issue.code === 'INVESTIGATION_VICTIM_NOT_ESTABLISHED'));
 });
+
+test('World Director canonical-owner contract rolls back scene-object and Chronicle writes together', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const { captureCanonicalStateSnapshot, compareCanonicalSnapshots } = await import('../server/domain/canonicalSnapshot');
+
+  const storyId = 'world_director_cross_owner_rollback';
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  repository.seedStory(storyId);
+  const before = captureCanonicalStateSnapshot(storyId, repository);
+  const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+  assert.ok(location, 'fixture needs a canonical location');
+  const actorId = repository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+
+  const result = await canonicalCommandEngine.execute(
+    repository,
+    {
+      commandId: 'world_director_cross_owner_rollback_001',
+      storyId,
+      actorId,
+      type: 'INTERACT',
+      payload: { action: 'PREPARE_SCENE_THEN_REJECT' },
+      source: 'SYSTEM',
+    },
+    async (_command, context) => {
+      const graph = context.repository.getGeographyGraph(storyId);
+      const objectResult = graph.addSceneObject(location.id, {
+        id: 'wd_rollback_test_body',
+        name: 'Test body representation',
+        kind: 'ENVIRONMENTAL_FEATURE',
+        visible: true,
+        interactable: false,
+        provenance: 'world_director_contract_test',
+      });
+      assert.equal(objectResult.success, true);
+
+      context.repository.getHistoricalChronicleEngine(storyId).recordEvidence({
+        id: 'wd_rollback_test_evidence',
+        category: 'WORLD_ANOMALY',
+        timestamp: context.repository.getWorldClock(storyId).getTimestamp(),
+        primarySubjectId: actorId,
+        locationId: location.id,
+        summary: 'Temporary evidence for a rejected scene preparation.',
+        details: 'This evidence must be rolled back with the scene object.',
+        sourceEventId: 'wd_rollback_test_event',
+        provenance: 'world_director_contract_test',
+        visibility: 'PUBLIC',
+      });
+
+      return { success: false, errorReason: 'Intentional rejection after two canonical-owner writes.' };
+    },
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.rolledBack, true);
+  assert.equal(
+    compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repository)).identical,
+    true,
+    'rejected preparation must restore both GeographyGraph and Chronicle to their pre-transaction state',
+  );
+  assert.equal(
+    repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_rollback_test_body'),
+    false,
+  );
+  assert.equal(
+    repository.getHistoricalChronicleEngine(storyId).exportState().evidence?.some((item: any) => item.id === 'wd_rollback_test_evidence'),
+    false,
+  );
+});
+
+test('World Director canonical-owner contract commits scene-object and Chronicle writes in one command', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const { captureCanonicalStateSnapshot, compareCanonicalSnapshots } = await import('../server/domain/canonicalSnapshot');
+
+  const storyId = 'world_director_cross_owner_commit';
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  repository.seedStory(storyId);
+  const before = captureCanonicalStateSnapshot(storyId, repository);
+  const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+  assert.ok(location, 'fixture needs a canonical location');
+  const actorId = repository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+
+  const result = await canonicalCommandEngine.execute(
+    repository,
+    {
+      commandId: 'world_director_cross_owner_commit_001',
+      storyId,
+      actorId,
+      type: 'INTERACT',
+      payload: { action: 'PREPARE_SCENE_COMMIT' },
+      source: 'SYSTEM',
+    },
+    async (_command, context) => {
+      const graph = context.repository.getGeographyGraph(storyId);
+      const objectResult = graph.addSceneObject(location.id, {
+        id: 'wd_commit_test_clue',
+        name: 'Test scene clue',
+        kind: 'ITEM',
+        description: 'A fixture clue committed by the scene-preparation contract test.',
+        visible: true,
+        interactable: true,
+        tags: ['world-director-contract-test'],
+        provenance: 'world_director_contract_test',
+      });
+      assert.equal(objectResult.success, true);
+
+      context.repository.getHistoricalChronicleEngine(storyId).recordEvidence({
+        id: 'wd_commit_test_evidence',
+        category: 'WORLD_ANOMALY',
+        timestamp: context.repository.getWorldClock(storyId).getTimestamp(),
+        primarySubjectId: actorId,
+        locationId: location.id,
+        summary: 'Scene preparation committed a test clue.',
+        details: 'The clue and evidence record are part of the same canonical command.',
+        sourceEventId: 'wd_commit_test_event',
+        provenance: 'world_director_contract_test',
+        visibility: 'PUBLIC',
+      });
+
+      return { success: true, data: { sceneObjectId: 'wd_commit_test_clue', evidenceId: 'wd_commit_test_evidence' }, summary: 'Scene preparation test committed.' };
+    },
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(result.rolledBack, false);
+  assert.equal(repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_commit_test_clue'), true);
+  assert.equal(
+    repository.getHistoricalChronicleEngine(storyId).exportState().evidence?.some((item: any) => item.id === 'wd_commit_test_evidence'),
+    true,
+  );
+  assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repository)).identical, false);
+  assert.equal(repository.getCanonicalCommandEvents(storyId).length, 1);
+});
+

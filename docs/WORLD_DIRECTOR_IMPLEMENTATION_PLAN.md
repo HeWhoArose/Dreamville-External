@@ -680,3 +680,18 @@ These are **marker storage adapters**, not complete owner mutation adapters. The
 
 Next gate: test a pure owner-record planning/reconciliation operation that returns a proposed canonical record without writing it, proves repeated preparation is idempotent, and leaves conflicting existing records unchanged. Then add owner-specific persistence/restart and interruption tests. Phase 0 remains open; production scene-preparation writes stay disabled.
 
+
+
+### 2.17 Conflicting command replay after repository reload (2026-10-27)
+
+Added a focused regression at commit `95e4d2f0e56d0ad63afad12a617b6bbd43cfca9b`:
+
+- Commit a canonical preparation command and persist/reload the repository.
+- Reuse the same `commandId` with a different payload/fingerprint.
+- Require a failure result, zero calls to the conflicting handler, no extra canonical command event, and preservation of the original scene object without a replacement object.
+
+This complements the same-payload replay test: idempotent retries should return the existing committed result, while a reused identity with different intent must be rejected without mutation.
+
+**Verification status at documentation update:** the three exact-head workflows for `95e4d2f0e56d0ad63afad12a617b6bbd43cfca9b` were still running when checked (two Dreamville Verification workflows and one Dreamville Release Gate). Do not mark this regression green until those exact-head runs complete successfully.
+
+**Next reliability gate:** explicit interruption/restart recovery. The existing staged commit test proves one file-store save contains the canonical state and matching command event; it does not prove process-crash recovery, filesystem durability under power loss, or concurrent/cross-process safety. Inspect the repository persistence and canonical command recovery boundaries before designing a fault-injection test. Keep production preparation writes disabled.

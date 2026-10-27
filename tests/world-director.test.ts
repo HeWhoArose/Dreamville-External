@@ -884,3 +884,70 @@ test('World Director staged scene preparation persists canonical state and its c
   }
 });
 
+test('World Director owner adapter decisions distinguish absent, owned, and conflicting records without deletion', async () => {
+  const {
+    evaluateWorldDirectorOwnerRecord,
+    WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION,
+  } = await import('../server/domain/worldDirectorPreparationContract');
+
+  const expected = {
+    recordId: 'wdp:v1:story|incident%3Ashack-murder%3Acycle-42|SCENE_OBJECT|primary-clue|isolated-shack',
+    preparationKey: 'incident:shack-murder:cycle-42',
+    role: 'primary-clue',
+  };
+  const marker = {
+    contractVersion: WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION,
+    preparationKey: expected.preparationKey,
+    role: expected.role,
+  };
+
+  const absent = evaluateWorldDirectorOwnerRecord(undefined, expected);
+  assert.equal(absent.disposition, 'CREATE');
+  assert.equal(absent.reason, 'RECORD_ABSENT');
+  assert.equal(absent.mayCreate, true);
+  assert.equal(absent.mayUpdate, false);
+  assert.equal(absent.mayDelete, false);
+
+  const authored = evaluateWorldDirectorOwnerRecord({ id: expected.recordId }, expected);
+  assert.equal(authored.disposition, 'CONFLICT');
+  assert.equal(authored.reason, 'EXISTING_RECORD_UNOWNED');
+  assert.equal(authored.mayCreate, false);
+  assert.equal(authored.mayUpdate, false);
+  assert.equal(authored.mayDelete, false);
+
+  const owned = evaluateWorldDirectorOwnerRecord({ id: expected.recordId, ownershipMarker: marker }, expected);
+  assert.equal(owned.disposition, 'RECONCILE_OWNED');
+  assert.equal(owned.reason, 'OWNED_RECORD_MATCH');
+  assert.equal(owned.mayCreate, false);
+  assert.equal(owned.mayUpdate, true);
+  assert.equal(owned.mayDelete, false);
+
+  const foreignPreparation = evaluateWorldDirectorOwnerRecord({
+    id: expected.recordId,
+    ownershipMarker: { ...marker, preparationKey: 'authored:unrelated-record' },
+  }, expected);
+  assert.equal(foreignPreparation.disposition, 'CONFLICT');
+  assert.equal(foreignPreparation.reason, 'PREPARATION_KEY_MISMATCH');
+
+  const foreignRole = evaluateWorldDirectorOwnerRecord({
+    id: expected.recordId,
+    ownershipMarker: { ...marker, role: 'victim-body' },
+  }, expected);
+  assert.equal(foreignRole.disposition, 'CONFLICT');
+  assert.equal(foreignRole.reason, 'ROLE_MISMATCH');
+
+  const oldContract = evaluateWorldDirectorOwnerRecord({
+    id: expected.recordId,
+    ownershipMarker: { ...marker, contractVersion: WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION - 1 },
+  }, expected);
+  assert.equal(oldContract.disposition, 'CONFLICT');
+  assert.equal(oldContract.reason, 'CONTRACT_VERSION_MISMATCH');
+
+  const differentId = evaluateWorldDirectorOwnerRecord({
+    id: 'authored:some-other-object',
+    ownershipMarker: marker,
+  }, expected);
+  assert.equal(differentId.disposition, 'CONFLICT');
+  assert.equal(differentId.reason, 'RECORD_ID_MISMATCH');
+});
+

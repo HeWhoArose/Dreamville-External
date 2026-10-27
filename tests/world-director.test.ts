@@ -88,6 +88,25 @@ test('World Director canonical-owner contract rolls back scene-object and Chroni
       });
       assert.equal(objectResult.success, true);
 
+      context.repository.getEntityRegistry(storyId).upsert({
+        id: 'wd_rollback_test_entity',
+        name: 'Temporary scene witness',
+        kind: 'NPC',
+        worldState: { locationId: location.id, isAlive: true, presence: 'present' },
+      });
+      context.repository.addKnowledgeFact(storyId, {
+        id: 'wd_rollback_test_knowledge',
+        subjectEntityId: actorId,
+        predicate: 'observed_scene_clue',
+        objectValue: 'Temporary clue that must be rolled back',
+        sourceType: 'document',
+        acquiredAtTimestamp: context.repository.getWorldClock(storyId).getTimestamp(),
+        confidence: 1,
+        secretLevel: 'public',
+        scope: 'exact',
+        provenanceSummary: 'world_director_contract_test',
+      });
+
       context.repository.getHistoricalChronicleEngine(storyId).recordEvidence({
         id: 'wd_rollback_test_evidence',
         category: 'WORLD_ANOMALY',
@@ -120,6 +139,8 @@ test('World Director canonical-owner contract rolls back scene-object and Chroni
     repository.getHistoricalChronicleEngine(storyId).exportState().evidenceStore?.some((item: any) => item.id === 'wd_rollback_test_evidence'),
     false,
   );
+  assert.equal(repository.getEntityRegistry(storyId).get('wd_rollback_test_entity'), undefined);
+  assert.equal(repository.getKnowledgeFacts(storyId).some((fact) => fact.id === 'wd_rollback_test_knowledge'), false);
 });
 
 test('World Director canonical-owner contract commits scene-object and Chronicle writes in one command', async () => {
@@ -159,6 +180,25 @@ test('World Director canonical-owner contract commits scene-object and Chronicle
       });
       assert.equal(objectResult.success, true);
 
+      context.repository.getEntityRegistry(storyId).upsert({
+        id: 'wd_commit_test_entity',
+        name: 'Committed scene witness',
+        kind: 'NPC',
+        worldState: { locationId: location.id, isAlive: true, presence: 'present' },
+      });
+      context.repository.addKnowledgeFact(storyId, {
+        id: 'wd_commit_test_knowledge',
+        subjectEntityId: actorId,
+        predicate: 'observed_scene_clue',
+        objectValue: 'Committed test clue',
+        sourceType: 'document',
+        acquiredAtTimestamp: context.repository.getWorldClock(storyId).getTimestamp(),
+        confidence: 1,
+        secretLevel: 'public',
+        scope: 'exact',
+        provenanceSummary: 'world_director_contract_test',
+      });
+
       context.repository.getHistoricalChronicleEngine(storyId).recordEvidence({
         id: 'wd_commit_test_evidence',
         category: 'WORLD_ANOMALY',
@@ -183,6 +223,8 @@ test('World Director canonical-owner contract commits scene-object and Chronicle
     repository.getHistoricalChronicleEngine(storyId).exportState().evidenceStore?.some((item: any) => item.id === 'wd_commit_test_evidence'),
     true,
   );
+  assert.equal(repository.getEntityRegistry(storyId).get('wd_commit_test_entity')?.name, 'Committed scene witness');
+  assert.equal(repository.getKnowledgeFacts(storyId).some((fact) => fact.id === 'wd_commit_test_knowledge'), true);
   assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repository)).identical, false);
   assert.equal(repository.getCanonicalCommandEvents(storyId).length, 1);
 });

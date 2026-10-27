@@ -49,10 +49,15 @@ export interface OpeningSceneReadinessInput {
   sceneObjects?: WorldDirectorSceneObjectEvidence[];
   visibleEntities?: WorldDirectorEntityEvidence[];
   visibleEvents?: WorldDirectorEventEvidence[];
+  /** Canonically recorded open questions; these are uncertainty, not missing facts to invent. */
+  unresolvedQuestions?: string[];
 }
 
 export interface WorldDirectorReadinessIssue {
-  code: 'INVESTIGATION_VICTIM_NOT_ESTABLISHED' | 'INVESTIGATION_EVIDENCE_NOT_ESTABLISHED';
+  code:
+    | 'INVESTIGATION_VICTIM_NOT_ESTABLISHED'
+    | 'INVESTIGATION_EVIDENCE_NOT_ESTABLISHED'
+    | 'INVESTIGATION_UNRESOLVED_QUESTION';
   requirement: string;
   message: string;
 }
@@ -158,9 +163,27 @@ export class WorldDirector {
       });
     }
 
+    const unresolvedQuestions = (input.unresolvedQuestions || [])
+      .map((question) => String(question || '').trim())
+      .filter(Boolean);
+    for (const question of unresolvedQuestions) {
+      issues.push({
+        code: 'INVESTIGATION_UNRESOLVED_QUESTION',
+        requirement: 'Preserve the question as unresolved; do not infer its answer',
+        message: `The investigation remains unresolved: ${question}`,
+      });
+    }
+
+    const hasMissingRequirements = issues.some((issue) =>
+      issue.code !== 'INVESTIGATION_UNRESOLVED_QUESTION',
+    );
     return {
       profile: 'INVESTIGATION',
-      status: issues.length ? 'INCOMPLETE' : 'READY',
+      status: hasMissingRequirements
+        ? 'INCOMPLETE'
+        : unresolvedQuestions.length
+          ? 'READY_WITH_UNCERTAINTY'
+          : 'READY',
       issues,
       evidenceCounts,
     };

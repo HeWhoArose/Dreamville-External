@@ -57,6 +57,38 @@ test('World Director does not count hidden or absent entities as a victim anchor
   assert.ok(report.issues.some((issue) => issue.code === 'INVESTIGATION_VICTIM_NOT_ESTABLISHED'));
 });
 
+test('World Director preserves explicit investigation questions as uncertainty without making the scene incomplete', () => {
+  const report = WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Investigating a fresh murder scene.',
+    sceneObjects: [
+      { id: 'body', name: 'Victim body', visible: true },
+      { id: 'clue', name: 'Bloodstain', visible: true },
+    ],
+    unresolvedQuestions: ['Who entered the shack?', 'What was the motive?'],
+  });
+
+  assert.equal(report.status, 'READY_WITH_UNCERTAINTY');
+  assert.deepEqual(
+    report.issues.map((issue) => issue.message),
+    [
+      'The investigation remains unresolved: Who entered the shack?',
+      'The investigation remains unresolved: What was the motive?',
+    ],
+  );
+});
+
+test('World Director keeps missing required anchors incomplete even when open questions are explicit', () => {
+  const report = WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Investigating a fresh murder scene.',
+    unresolvedQuestions: ['Who entered the shack?'],
+  });
+
+  assert.equal(report.status, 'INCOMPLETE');
+  assert.ok(report.issues.some((issue) => issue.code === 'INVESTIGATION_VICTIM_NOT_ESTABLISHED'));
+  assert.ok(report.issues.some((issue) => issue.code === 'INVESTIGATION_EVIDENCE_NOT_ESTABLISHED'));
+  assert.ok(report.issues.some((issue) => issue.code === 'INVESTIGATION_UNRESOLVED_QUESTION'));
+});
+
 test('World Director canonical-owner contract rolls back scene-object and Chronicle writes together', async () => {
   const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
   const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');

@@ -1363,6 +1363,201 @@ test('World Director ownership plan reconciles through GeographyGraph inside a s
 });
 
 
+test('World Director owner planning persists EntityRegistry, KnowledgeFact, and Chronicle records', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { EntityRegistry } = await import('../server/domain/entityCard');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const {
+    buildWorldDirectorStableRecordId,
+    planWorldDirectorOwnedRecord,
+    worldDirectorOwnershipAdapters,
+  } = await import('../server/domain/worldDirectorPreparationContract');
+
+  const previousPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-owner-records-'));
+  process.env.DREAMBOOK_PERSISTENCE_PATH = join(tempDirectory, 'dreambook.json');
+  try {
+    const repository = new InMemoryWorldRepository();
+    const storyId = 'wd_owner_records_reload';
+    const actorId = 'wd_owner_records_actor';
+    const preparationKey = 'fixture:owner-records-reload';
+    repository.seedStory(storyId);
+    const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+    assert.ok(location, 'fixture needs a canonical location');
+    const timestamp = repository.getWorldClock(storyId).getTimestamp();
+
+    const makeId = (recordKind: 'ENTITY' | 'WORLD_FACT' | 'CHRONICLE_EVIDENCE', role: string) =>
+      buildWorldDirectorStableRecordId({ storyId, preparationKey, recordKind, role, scopeId: location.id });
+    const entityId = makeId('ENTITY', 'witness');
+    const factId = makeId('WORLD_FACT', 'private-observation');
+    const evidenceId = makeId('CHRONICLE_EVIDENCE', 'witness-evidence');
+    const entityExpected = { recordId: entityId, preparationKey, role: 'witness' };
+    const factExpected = { recordId: factId, preparationKey, role: 'private-observation' };
+    const evidenceExpected = { recordId: evidenceId, preparationKey, role: 'witness-evidence' };
+
+    const entityDesired = new EntityRegistry(storyId).upsert({
+      id: entityId,
+      storyId,
+      name: 'Prepared witness',
+      kind: 'NPC',
+      worldState: { locationId: location.id, isAlive: true, presence: 'present' },
+      metadata: { authoredNote: 'retain entity note' },
+    });
+    const factDesired = {
+      id: factId,
+      subjectEntityId: actorId,
+      predicate: 'witness_present',
+      objectValue: 'The witness is present in the scene.',
+      sourceType: 'system_grant' as const,
+      acquiredAtTimestamp: timestamp,
+      confidence: 1,
+      secretLevel: 'private' as const,
+      scope: 'exact' as const,
+      provenanceSummary: 'World Director owner adapter fixture.',
+      metadata: { authoredNote: 'retain fact note' },
+    };
+    const evidenceDesired = {
+      id: evidenceId,
+      category: 'WORLD_ANOMALY' as const,
+      timestamp,
+      primarySubjectId: actorId,
+      locationId: location.id,
+      summary: 'Prepared witness evidence.',
+      details: 'Append-only Chronicle evidence for owner adapter coverage.',
+      sourceEventId: 'wd_owner_records_command_001',
+      provenance: 'world_director_owner_record_integration_test',
+      visibility: 'PUBLIC' as const,
+      metadata: { authoredNote: 'retain evidence note' },
+    };
+
+    const commandResult = await canonicalCommandEngine.execute(repository, {
+      commandId: 'wd_owner_records_command_001',
+      storyId,
+      actorId,
+      type: 'INTERACT',
+      payload: { action: 'PREPARE_OWNED_CANONICAL_RECORDS', preparationKey },
+      source: 'SYSTEM',
+      transactionMode: 'STAGED',
+    }, async (_command, context) => {
+      const entityPlan = planWorldDirectorOwnedRecord(
+        undefined,
+        entityDesired,
+        entityExpected,
+        worldDirectorOwnershipAdapters.entityCard,
+        (existing, desired) => ({
+          ...existing,
+          ...desired,
+          metadata: { ...existing.metadata, ...desired.metadata },
+          createdAt: existing.createdAt,
+          updatedAt: existing.updatedAt,
+        }),
+      );
+      const factPlan = planWorldDirectorOwnedRecord(
+        undefined,
+        factDesired,
+        factExpected,
+        worldDirectorOwnershipAdapters.knowledgeFact,
+        (existing, desired) => ({ ...existing, ...desired, metadata: { ...existing.metadata, ...desired.metadata } }),
+      );
+      const evidencePlan = planWorldDirectorOwnedRecord(
+        undefined,
+        evidenceDesired,
+        evidenceExpected,
+        worldDirectorOwnershipAdapters.historicalEvidence,
+        (existing, desired) => ({ ...existing, ...desired, metadata: { ...existing.metadata, ...desired.metadata } }),
+      );
+      assert.equal(entityPlan.decision.disposition, 'CREATE');
+      assert.equal(factPlan.decision.disposition, 'CREATE');
+      assert.equal(evidencePlan.decision.disposition, 'CREATE');
+      context.repository.saveEntityCard(storyId, entityPlan.record!);
+      context.repository.addKnowledgeFact(storyId, factPlan.record!);
+      context.repository.getHistoricalChronicleEngine(storyId).recordEvidence(evidencePlan.record!);
+      return { success: true, data: { entityId, factId, evidenceId }, summary: 'Committed owned-record integration fixture.' };
+    });
+    assert.equal(commandResult.success, true);
+
+    const reloaded = new InMemoryWorldRepository();
+    const entity = reloaded.getEntityCard(storyId, entityId);
+    const fact = reloaded.getKnowledgeFacts(storyId).find((record) => record.id === factId);
+    const evidence = reloaded.getHistoricalChronicleEngine(storyId).exportState().evidenceStore?.find((record: any) => record.id === evidenceId);
+    assert.deepEqual(worldDirectorOwnershipAdapters.entityCard.read(entity!), { contractVersion: 1, preparationKey, role: 'witness' });
+    assert.deepEqual(worldDirectorOwnershipAdapters.knowledgeFact.read(fact!), { contractVersion: 1, preparationKey, role: 'private-observation' });
+    assert.deepEqual(worldDirectorOwnershipAdapters.historicalEvidence.read(evidence!), { contractVersion: 1, preparationKey, role: 'witness-evidence' });
+    assert.equal(entity?.metadata.authoredNote, 'retain entity note');
+    assert.equal(fact?.metadata?.authoredNote, 'retain fact note');
+    assert.equal(evidence?.metadata?.authoredNote, 'retain evidence note');
+    assert.equal(reloaded.getAuthorizedKnowledgeFacts(storyId, actorId).some((record) => record.id === factId), false,
+      'ownership metadata must not grant actor-scoped knowledge');
+
+    const repeatedEntity = planWorldDirectorOwnedRecord(
+      entity,
+      entityDesired,
+      entityExpected,
+      worldDirectorOwnershipAdapters.entityCard,
+      (existing, desired) => ({
+        ...existing,
+        ...desired,
+        metadata: { ...existing.metadata, ...desired.metadata },
+        createdAt: existing.createdAt,
+        updatedAt: existing.updatedAt,
+      }),
+    );
+    const repeatedFact = planWorldDirectorOwnedRecord(
+      fact,
+      factDesired,
+      factExpected,
+      worldDirectorOwnershipAdapters.knowledgeFact,
+      (existing, desired) => ({ ...existing, ...desired, metadata: { ...existing.metadata, ...desired.metadata } }),
+    );
+    const repeatedEvidence = planWorldDirectorOwnedRecord(
+      evidence,
+      evidenceDesired,
+      evidenceExpected,
+      worldDirectorOwnershipAdapters.historicalEvidence,
+      (existing, desired) => ({ ...existing, ...desired, metadata: { ...existing.metadata, ...desired.metadata } }),
+    );
+    assert.equal(repeatedEntity.decision.disposition, 'RECONCILE_OWNED');
+    assert.equal(repeatedEntity.changed, false);
+    assert.equal(repeatedFact.decision.disposition, 'RECONCILE_OWNED');
+    assert.equal(repeatedFact.changed, false);
+    assert.equal(repeatedEvidence.decision.disposition, 'RECONCILE_OWNED');
+    assert.equal(repeatedEvidence.changed, false);
+
+    const changedEntity = planWorldDirectorOwnedRecord(
+      entity,
+      { ...entityDesired, name: 'Reconciled witness' },
+      entityExpected,
+      worldDirectorOwnershipAdapters.entityCard,
+      (existing, desired) => ({ ...existing, ...desired, metadata: { ...existing.metadata, ...desired.metadata }, updatedAt: existing.updatedAt }),
+    );
+    assert.equal(changedEntity.decision.disposition, 'RECONCILE_OWNED');
+    assert.equal(changedEntity.changed, true);
+    const changedFact = planWorldDirectorOwnedRecord(
+      fact,
+      { ...factDesired, objectValue: 'A revised shared fact.' },
+      factExpected,
+      worldDirectorOwnershipAdapters.knowledgeFact,
+      (existing, desired) => ({ ...existing, ...desired, metadata: { ...existing.metadata, ...desired.metadata } }),
+    );
+    const changedEvidence = planWorldDirectorOwnedRecord(
+      evidence,
+      { ...evidenceDesired, summary: 'Revised historical evidence.' },
+      evidenceExpected,
+      worldDirectorOwnershipAdapters.historicalEvidence,
+      (existing, desired) => ({ ...existing, ...desired, metadata: { ...existing.metadata, ...desired.metadata } }),
+    );
+    assert.equal(changedFact.decision.reason, 'OWNER_APPEND_ONLY');
+    assert.deepEqual(changedFact.record, fact);
+    assert.equal(changedEvidence.decision.reason, 'OWNER_APPEND_ONLY');
+    assert.deepEqual(changedEvidence.record, evidence);
+  } finally {
+    if (previousPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPersistencePath;
+    rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+
 test('World Director rejects command-ID reuse with a different payload after repository reload', async () => {
   const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
   const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');

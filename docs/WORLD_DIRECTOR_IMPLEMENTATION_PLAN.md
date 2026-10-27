@@ -695,3 +695,20 @@ This complements the same-payload replay test: idempotent retries should return 
 **Verification status at documentation update:** the three exact-head workflows for `95e4d2f0e56d0ad63afad12a617b6bbd43cfca9b` were still running when checked (two Dreamville Verification workflows and one Dreamville Release Gate). Do not mark this regression green until those exact-head runs complete successfully.
 
 **Next reliability gate:** explicit interruption/restart recovery. The existing staged commit test proves one file-store save contains the canonical state and matching command event; it does not prove process-crash recovery, filesystem durability under power loss, or concurrent/cross-process safety. Inspect the repository persistence and canonical command recovery boundaries before designing a fault-injection test. Keep production preparation writes disabled.
+
+
+### 2.18 Staged persistence fault injection and commit-point correction (2026-10-27)
+
+A new fault-injection regression exposed a real staged-transaction failure path. When the staged flush threw before the primary-file rename, the command result correctly failed and the scene state was restored, but the live canonical event list still retained the uncommitted command event. The earlier test initially failed on this exact assertion; this was not dismissed as a flaky test.
+
+Corrections committed on the feature branch:
+- The staged-command exception path now removes the failed command's uncommitted event before restoring the pre-state snapshot. Existing canonical history is preserved; the failed command event is not.
+- The persistent store now treats snapshot pruning as post-commit maintenance. Once the temporary file has been renamed over the primary store, pruning failure is logged but does not cause the command engine to report a failed transaction and roll back memory while durable storage already contains the committed state.
+
+Fault-injection coverage now targets both sides of the persistence commit point:
+- A save failure before the primary rename must leave no scene object or committed command event after reload, and a subsequent staged command must still commit.
+- A snapshot-pruning failure after rename must leave the command successful, with the scene object and matching command event present after reload.
+
+**Verification:** the first CI run for the pre-fix test commit failed at the retained-command-event assertion (1,574 passed, 1 failed). The correction is now committed; exact-head CI must pass before this gate is marked complete. This test models injected save/maintenance failures, not actual OS process termination, power loss, fsync guarantees, or cross-process concurrent writers.
+
+Next: verify exact-head CI, then test primary-file corruption recovery against snapshots and review whether the repository's persistence format gives the required guarantees for World Director preparation. Production preparation writes remain disabled.

@@ -73,6 +73,23 @@ Fallback must remain factually grounded but should receive the same prepared sce
 - Existing tests cover many world-build, scene-projection, ambient-population, and opening behaviours, but a dedicated end-to-end murder-scene contract must be established.
 - A structured ActionResolution is supplied to narration, but source inspection did not establish a universal guarantee that every resolved player-visible effect is represented. This is a related, separately owned narrative-fidelity slice, not a reason to move combat mechanics into World Director.
 
+### 2.5 Current source map and authority boundaries
+
+| Boundary | Current source evidence | Audit conclusion |
+|---|---|---|
+| Character setup | `server/services/characterGenesisService.ts` builds the starting-situation summary/activity/hook; `server/repositories/worldRepository.ts:createStoryRunFromConfirmedCharacter()` copies it to the StoryRun. | No scenario-specific incident materialization is present in this setup code. |
+| Genesis Chronicle | `WorldRepository.createStoryRunFromConfirmedCharacter()` calls `HistoricalChronicleEngine.recordBootstrapEvidence()` for a generic genesis entry with the hook in `details`. | Historical bootstrap text is not a current-scene event or a structured clue. |
+| Authored world events | The same method copies `world.events` into `run.plannedEvents` with status `PLANNED`. | Existing authored events must be reconciled by ID/location/status; a character hook is not proof that an event was created or executed. |
+| Opening entry | `server/services/openingSceneService.ts` → `WorldActivityDirector.ensureAmbientPopulation()` → `WorkingContextEngine.assembleOpeningContext()` → `CurrentSituationBuilder.build()` → opening prompt and opening-candidate review. | Ambient population is prepared, but no investigation-specific producer is called on this path. |
+| Normal freeform entry | `server/mockEngine/serverMockAuthority.ts` resolves the action and uses `WorldActivityDirector.ensureAmbientPopulation()`; `server/domain/aiOrchestrator.ts` assembles `CurrentSituation`, research, narrative planning, and provider candidates. | Reuse this path's authorities; do not make the projection layer create incident state. |
+| Canonical scene objects | `WorldRepository.createStoryRunFromConfirmedCharacter()` copies authored location `sceneObjects`; `GeographyGraph.addSceneObject/patchSceneObject/removeSceneObject` own location-object mutations; `CurrentSituationBuilder` projects visible objects and ground inventory items. | Existing object projection is connected on this branch. The remaining gap is incident-specific object creation/linkage, not a reason to weaken semantic review. |
+| Canonical entities | `WorldRepository.saveEntityCard()` delegates to `EntityRegistry.upsert()`; `saveStoryRun()` persists registry export under `runtimeState.entities`; `getEntityRegistry()` restores that snapshot. | Entity cards are an existing persistent authority for witnesses/NPCs/victims, but visibility/lifecycle semantics must be handled deliberately. |
+| Victim/body visibility | `CurrentSituationBuilder` projects only alive/present entity cards into `nearbyEntities`; dead NPC lifecycles project absent. | A deceased person must not be treated as a living visible NPC. A physical body needs a distinct visible scene representation linked to the canonical victim where appropriate. |
+| Current scene events | `CurrentSituationBuilder` projects active dialogue, generated ambient activity events, and recent canonical command events scoped to the current location. | Chronicle bootstrap evidence and `plannedEvents` are not automatically projected as current visible scene events. |
+| Opening regeneration/reload | `OpeningSceneService` returns the saved opening unless forced; canonical entity registry is reloaded from StoryRun runtime state. | A future preparation call must be idempotent and must not regenerate/overwrite the incident on force-regeneration or reload. This behaviour still needs a dedicated investigation fixture. |
+
+This map refreshes the critical opening/setup boundaries against the feature-branch source on 2026-10-27. It does **not** claim that every combat, movement/time-advance, or regeneration caller has been re-audited line-by-line in this slice. The older narrative-grounding trace and V2 execution plan remain supporting references for those shared paths; Phase 0 remains open until their relevant handoffs and a focused canonical investigation fixture are checked against this branch.
+
 ## 3. Scope and Non-Goals
 
 ### In scope

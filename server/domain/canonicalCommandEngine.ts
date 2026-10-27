@@ -759,16 +759,21 @@ export class CanonicalCommandEngine {
 			if (command.transactionMode === 'STAGED') {
 				transactionalRepository.appendCanonicalCommandEvent(command.storyId, event);
 				const committedAfter = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
-				// Keep the live event log: the snapshot intentionally excludes canonical
-				// events and the freshly committed event is appended right after restore.
-				repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true, preserveCanonicalEvents: true });
-				
-				// Propagate all newly created checkpoints, stats, and telemetry to the live orchestrator
-				const stagedOrch = transactionalRepository.getAiOrchestrator();
-				const liveOrch = repository.getAiOrchestrator();
-				liveOrch.commitTransactionState(stagedOrch);
+				// Persist the canonical state and its matching command event as one
+				// repository save. A crash must not leave prepared state durable without
+				// the event that identifies and deduplicates the committed command.
+				repository.runWithPersistenceBatching(() => {
+					// Keep the live event log: the snapshot intentionally excludes canonical
+					// events and the freshly committed event is appended inside this batch.
+					repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true, preserveCanonicalEvents: true });
 
-				repository.appendCanonicalCommandEvent(command.storyId, event);
+					// Propagate all newly created checkpoints, stats, and telemetry to the live orchestrator.
+					const stagedOrch = transactionalRepository.getAiOrchestrator();
+					const liveOrch = repository.getAiOrchestrator();
+					liveOrch.commitTransactionState(stagedOrch);
+
+					repository.appendCanonicalCommandEvent(command.storyId, event);
+				}, { force: true });
 			} else {
 				repository.appendCanonicalCommandEvent(command.storyId, event);
 			}

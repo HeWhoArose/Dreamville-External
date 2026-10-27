@@ -436,8 +436,8 @@ export function planWorldDirectorOwnedRecord<TRecord extends { id: string }>(
     const changed = JSON.stringify(plannedRecord) !== JSON.stringify(existing);
     if (changed && !adapter.canUpdateExisting) {
       return {
-        decision: ownerConflictDecision(existing.id, 'OWNER_APPEND_ONLY'),
-        record: existing,
+        decision: ownerConflictDecision(existing?.id || desired.id, 'OWNER_APPEND_ONLY'),
+        record: existing ?? undefined,
         changed: false,
       };
     }

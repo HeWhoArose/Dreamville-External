@@ -867,6 +867,19 @@ test('World Director staged scene preparation persists canonical state and its c
         provenance: 'world_director_atomic_commit_test',
       });
       assert.equal(added.success, true);
+      context.repository.saveEntityCard(storyId, {
+        id: 'wd_atomic_scene_commit_witness',
+        name: 'Atomic commit witness fixture',
+        kind: 'NPC',
+        metadata: {
+          authoredNote: 'preserve entity metadata',
+          worldDirectorOwnership: {
+            contractVersion: 1,
+            preparationKey: 'fixture:atomic-scene-commit',
+            role: 'witness',
+          },
+        },
+      });
       context.repository.addKnowledgeFact(storyId, {
         id: 'wd_atomic_scene_commit_fact',
         subjectEntityId: actorId,
@@ -911,6 +924,13 @@ test('World Director staged scene preparation persists canonical state and its c
       role: 'scene-fact',
     }, 'structured ownership metadata on shared knowledge facts must survive the same atomic commit');
     assert.equal(persistedFact?.metadata?.authoredNote, 'preserve fact metadata');
+    const persistedEntity = reloaded.getEntityCard(storyId, 'wd_atomic_scene_commit_witness');
+    assert.deepEqual(persistedEntity?.metadata.worldDirectorOwnership, {
+      contractVersion: 1,
+      preparationKey: 'fixture:atomic-scene-commit',
+      role: 'witness',
+    }, 'entity ownership metadata must survive the same staged commit and reload');
+    assert.equal(persistedEntity?.metadata.authoredNote, 'preserve entity metadata');
   } finally {
     PersistentGameStore.prototype.save = originalSave;
     if (previousPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
@@ -1171,6 +1191,176 @@ test('World Director owner planning is idempotent for owned records and leaves c
   assert.deepEqual(foreignConflict.record, foreignOwned);
 });
 
+
+
+test('World Director ownership plan reconciles through GeographyGraph inside a staged command', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const {
+    buildWorldDirectorStableRecordId,
+    planWorldDirectorOwnedRecord,
+    worldDirectorOwnershipAdapters,
+  } = await import('../server/domain/worldDirectorPreparationContract');
+
+  const previousPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-owner-graph-'));
+  process.env.DREAMBOOK_PERSISTENCE_PATH = join(tempDirectory, 'dreambook.json');
+  try {
+    const repository = new InMemoryWorldRepository();
+    const storyId = 'wd_owner_graph_integration';
+    const actorId = 'wd_owner_graph_integration_actor';
+    const preparationKey = 'fixture:geography-owner-integration';
+    repository.seedStory(storyId);
+    const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+    assert.ok(location, 'fixture needs a canonical location');
+
+    const recordId = buildWorldDirectorStableRecordId({
+      storyId,
+      preparationKey,
+      recordKind: 'SCENE_OBJECT',
+      role: 'primary-clue',
+      scopeId: location.id,
+    });
+    const expected = { recordId, preparationKey, role: 'primary-clue' };
+    const desired: LocationSceneObject = {
+      id: recordId,
+      name: 'Preparation fixture clue',
+      kind: 'ITEM',
+      visible: true,
+      interactable: true,
+      description: 'Initial fixture description.',
+      properties: { worldDirectorGenerated: true },
+    };
+
+    const executePreparation = (commandId: string, nextDesired: LocationSceneObject) =>
+      canonicalCommandEngine.execute<Record<string, unknown>, { recordId: string; disposition: string; changed: boolean }>(repository, {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { action: 'PREPARE_SCENE_OBJECT', preparationKey, recordId },
+        source: 'SYSTEM',
+        transactionMode: 'STAGED',
+      }, async (_command, context) => {
+        const graph = context.repository.getGeographyGraph(storyId);
+        const existing = graph.getNode(location.id)?.sceneObjects?.find((object) => object.id === recordId);
+        const plan = planWorldDirectorOwnedRecord(
+          existing,
+          nextDesired,
+          expected,
+          worldDirectorOwnershipAdapters.sceneObject,
+          (owned, next) => ({
+            ...owned,
+            ...next,
+            properties: { ...(owned.properties || {}), ...(next.properties || {}) },
+          }),
+        );
+        if (plan.decision.disposition === 'CONFLICT' || !plan.record) {
+          return { success: false, errorReason: `Scene-object preparation conflict: ${plan.decision.reason}.` };
+        }
+        if (plan.changed) {
+          const mutation = existing
+            ? graph.patchSceneObject(location.id, recordId, {
+                name: plan.record.name,
+                description: plan.record.description,
+                visible: plan.record.visible,
+                interactable: plan.record.interactable,
+                properties: plan.record.properties,
+                tags: plan.record.tags,
+              })
+            : graph.addSceneObject(location.id, plan.record);
+          if (!mutation.success) return { success: false, errorReason: mutation.errorReason };
+        }
+        return {
+          success: true,
+          data: { recordId, disposition: plan.decision.disposition, changed: plan.changed },
+          summary: `Scene-object preparation ${plan.decision.disposition.toLowerCase()}.`,
+        };
+      });
+
+    const first = await executePreparation('wd_owner_graph_integration_001', desired);
+    assert.equal(first.success, true);
+    assert.equal(first.data?.changed, true);
+    assert.equal(
+      repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.filter((object) => object.id === recordId).length,
+      1,
+      'first preparation creates one canonical scene object',
+    );
+
+    const repeated = await executePreparation('wd_owner_graph_integration_002', desired);
+    assert.equal(repeated.success, true);
+    assert.equal(repeated.data?.disposition, 'RECONCILE_OWNED');
+    assert.equal(repeated.data?.changed, false);
+    assert.equal(
+      repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.filter((object) => object.id === recordId).length,
+      1,
+      'repeat preparation must not duplicate the object',
+    );
+
+    const revised = { ...desired, description: 'Reconciled description from the same preparation.' };
+    const reconciled = await executePreparation('wd_owner_graph_integration_003', revised);
+    assert.equal(reconciled.success, true);
+    assert.equal(reconciled.data?.changed, true);
+    const reconciledRecord = repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.find((object) => object.id === recordId);
+    assert.equal(reconciledRecord?.description, revised.description);
+    assert.deepEqual(worldDirectorOwnershipAdapters.sceneObject.read(reconciledRecord!), {
+      contractVersion: 1,
+      preparationKey,
+      role: 'primary-clue',
+    });
+
+    const authoredRole = 'authored-conflict';
+    const authoredId = buildWorldDirectorStableRecordId({
+      storyId,
+      preparationKey,
+      recordKind: 'SCENE_OBJECT',
+      role: authoredRole,
+      scopeId: location.id,
+    });
+    const authored = {
+      ...desired,
+      id: authoredId,
+      name: 'Pre-existing authored object',
+      description: 'Must remain untouched by preparation.',
+      properties: { authoredMarker: 'preserve-me' },
+    };
+    assert.equal(repository.getGeographyGraph(storyId).addSceneObject(location.id, authored).success, true);
+    repository.saveStoryRun(repository.getStoryRun(storyId));
+    const authoredBefore = repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.find((object) => object.id === authoredId);
+    const eventCountBeforeConflict = repository.getCanonicalCommandEvents(storyId).length;
+
+    const conflict = await canonicalCommandEngine.execute(repository, {
+      commandId: 'wd_owner_graph_integration_004',
+      storyId,
+      actorId,
+      type: 'INTERACT',
+      payload: { action: 'PREPARE_SCENE_OBJECT', preparationKey, recordId: authoredId },
+      source: 'SYSTEM',
+      transactionMode: 'STAGED',
+    }, async (_command, context) => {
+      const graph = context.repository.getGeographyGraph(storyId);
+      const existing = graph.getNode(location.id)?.sceneObjects?.find((object) => object.id === authoredId);
+      const conflictPlan = planWorldDirectorOwnedRecord(
+        existing,
+        { ...authored, description: 'Attempted overwrite.' },
+        { recordId: authoredId, preparationKey, role: authoredRole },
+        worldDirectorOwnershipAdapters.sceneObject,
+        (owned, next) => ({ ...owned, ...next, properties: { ...(owned.properties || {}), ...(next.properties || {}) } }),
+      );
+      return conflictPlan.decision.disposition === 'CONFLICT'
+        ? { success: false, errorReason: `Scene-object preparation conflict: ${conflictPlan.decision.reason}.` }
+        : { success: false, errorReason: 'Fixture expected an unowned authored record conflict.' };
+    });
+    assert.equal(conflict.success, false, 'an existing unowned record must fail closed');
+    assert.equal(repository.getCanonicalCommandEvents(storyId).length, eventCountBeforeConflict);
+    const authoredAfter = repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.find((object) => object.id === authoredId);
+    assert.deepEqual(authoredAfter, authoredBefore, 'conflicts leave authored canonical state unchanged');
+  } finally {
+    if (previousPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPersistencePath;
+    rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});
 
 
 test('World Director rejects command-ID reuse with a different payload after repository reload', async () => {

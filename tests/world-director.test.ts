@@ -155,6 +155,91 @@ test('World Director distinguishes authored truth, canonical facts, generated pr
   );
 });
 
+test('World Director investigation contract requires owner-backed incident, linked body, and discoverable local evidence', async () => {
+  const { assessWorldDirectorInvestigationSceneContract } = await import('../server/domain/worldDirectorPreparationContract');
+
+  const complete = assessWorldDirectorInvestigationSceneContract({
+    currentLocationId: 'loc_isolated_shack',
+    incident: {
+      owner: 'CANONICAL_EVENT',
+      recordRef: 'event:shack-murder-01',
+      locationId: 'loc_isolated_shack',
+      state: 'COMMITTED_ACTIVE',
+    },
+    victim: {
+      owner: 'ENTITY_REGISTRY',
+      recordRef: 'entity:victim-01',
+      state: 'COMMITTED',
+    },
+    body: {
+      owner: 'GEOGRAPHY_GRAPH',
+      recordRef: 'scene-object:body-01',
+      locationId: 'loc_isolated_shack',
+      presence: 'PRESENT',
+      visibleToPlayer: true,
+      discoverable: true,
+      representsVictimRef: 'entity:victim-01',
+    },
+    evidence: [{
+      owner: 'GEOGRAPHY_GRAPH',
+      recordRef: 'scene-object:hidden-latch-clue',
+      locationId: 'loc_isolated_shack',
+      presence: 'PRESENT',
+      visibleToPlayer: false,
+      discoverable: true,
+    }],
+    unresolvedQuestions: ['Who entered the shack?'],
+  });
+
+  assert.equal(complete.status, 'READY_WITH_UNCERTAINTY');
+  assert.ok(complete.requirements.every((requirement) => requirement.status === 'SATISFIED'));
+  assert.deepEqual(complete.unresolvedQuestions, ['Who entered the shack?']);
+  assert.deepEqual(
+    complete.requirements.find((requirement) => requirement.id === 'DISCOVERABLE_EVIDENCE')?.recordRefs,
+    ['scene-object:hidden-latch-clue'],
+    'hidden but discoverable evidence may satisfy physical readiness without being player-visible',
+  );
+
+  const unsupported = assessWorldDirectorInvestigationSceneContract({
+    currentLocationId: 'loc_isolated_shack',
+    incident: {
+      owner: 'CANONICAL_EVENT',
+      recordRef: 'event:proposed-murder',
+      locationId: 'loc_isolated_shack',
+      state: 'PROPOSED',
+    },
+    victim: {
+      owner: 'ENTITY_REGISTRY',
+      recordRef: 'entity:victim-01',
+      state: 'COMMITTED',
+    },
+    body: {
+      owner: 'GEOGRAPHY_GRAPH',
+      recordRef: 'scene-object:unlinked-body',
+      locationId: 'loc_elsewhere',
+      presence: 'PRESENT',
+      visibleToPlayer: true,
+      discoverable: true,
+      representsVictimRef: 'entity:other-victim',
+    },
+    evidence: [{
+      owner: 'GEOGRAPHY_GRAPH',
+      recordRef: 'scene-object:concealed-unsearchable-clue',
+      locationId: 'loc_elsewhere',
+      presence: 'PRESENT',
+      visibleToPlayer: false,
+      discoverable: false,
+    }],
+  });
+
+  assert.equal(unsupported.status, 'INCOMPLETE');
+  assert.deepEqual(
+    unsupported.requirements.filter((requirement) => requirement.status === 'MISSING').map((requirement) => requirement.id),
+    ['CURRENT_INCIDENT', 'VICTIM_BODY', 'DISCOVERABLE_EVIDENCE'],
+    'an uncommitted incident, mismatched/off-location body, or hidden undiscoverable evidence cannot satisfy readiness',
+  );
+});
+
 test('World Director canonical-owner contract rolls back scene-object and Chronicle writes together', async () => {
   const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
   const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');

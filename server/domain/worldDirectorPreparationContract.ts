@@ -145,6 +145,142 @@ export function assessWorldDirectorInvestigationClaim(
   }
 }
 
+export interface WorldDirectorInvestigationIncidentRef {
+  owner: 'CANONICAL_EVENT';
+  recordRef: string;
+  locationId: string;
+  state: 'COMMITTED_ACTIVE' | 'PROPOSED' | 'HISTORICAL';
+}
+
+export interface WorldDirectorInvestigationVictimRef {
+  owner: 'ENTITY_REGISTRY';
+  recordRef: string;
+  state: 'COMMITTED' | 'PROPOSED';
+}
+
+export interface WorldDirectorInvestigationPhysicalAnchorRef {
+  owner: 'GEOGRAPHY_GRAPH';
+  recordRef: string;
+  locationId: string;
+  presence: 'PRESENT' | 'ABSENT';
+  visibleToPlayer: boolean;
+  discoverable: boolean;
+}
+
+export interface WorldDirectorInvestigationBodyRef extends WorldDirectorInvestigationPhysicalAnchorRef {
+  representsVictimRef: string;
+}
+
+export interface WorldDirectorInvestigationSceneContractInput {
+  currentLocationId: string;
+  incident?: WorldDirectorInvestigationIncidentRef;
+  victim?: WorldDirectorInvestigationVictimRef;
+  body?: WorldDirectorInvestigationBodyRef;
+  evidence?: WorldDirectorInvestigationPhysicalAnchorRef[];
+  unresolvedQuestions?: string[];
+}
+
+export type WorldDirectorInvestigationRequirementId =
+  | 'CURRENT_INCIDENT'
+  | 'VICTIM_IDENTITY'
+  | 'VICTIM_BODY'
+  | 'DISCOVERABLE_EVIDENCE';
+
+export interface WorldDirectorInvestigationRequirementResult {
+  id: WorldDirectorInvestigationRequirementId;
+  status: 'SATISFIED' | 'MISSING';
+  recordRefs: string[];
+  reason?: string;
+}
+
+export interface WorldDirectorInvestigationSceneContractReport {
+  status: 'READY' | 'READY_WITH_UNCERTAINTY' | 'INCOMPLETE';
+  requirements: WorldDirectorInvestigationRequirementResult[];
+  unresolvedQuestions: string[];
+}
+
+function nonEmptyRecordRef(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Checks the minimum structured contract for the first isolated-shack murder
+ * fixture. Proposals, historical records, off-location objects, and hidden
+ * undiscoverable objects cannot satisfy present-scene requirements.
+ */
+export function assessWorldDirectorInvestigationSceneContract(
+  input: WorldDirectorInvestigationSceneContractInput,
+): WorldDirectorInvestigationSceneContractReport {
+  const locationId = String(input.currentLocationId || '').trim();
+  const incident = input.incident;
+  const victim = input.victim;
+  const body = input.body;
+  const incidentValid = Boolean(
+    locationId && incident?.owner === 'CANONICAL_EVENT' &&
+    incident.state === 'COMMITTED_ACTIVE' &&
+    nonEmptyRecordRef(incident.recordRef) && incident.locationId === locationId,
+  );
+  const victimValid = Boolean(
+    victim?.owner === 'ENTITY_REGISTRY' && victim.state === 'COMMITTED' &&
+    nonEmptyRecordRef(victim.recordRef),
+  );
+  const bodyValid = Boolean(
+    body?.owner === 'GEOGRAPHY_GRAPH' && nonEmptyRecordRef(body.recordRef) &&
+    body.locationId === locationId && body.presence === 'PRESENT' &&
+    (body.visibleToPlayer || body.discoverable) && victimValid &&
+    body.representsVictimRef === victim?.recordRef,
+  );
+  const validEvidence = (input.evidence || []).filter((evidence) =>
+    evidence?.owner === 'GEOGRAPHY_GRAPH' &&
+    nonEmptyRecordRef(evidence.recordRef) &&
+    evidence.locationId === locationId &&
+    evidence.presence === 'PRESENT' &&
+    (evidence.visibleToPlayer || evidence.discoverable),
+  );
+
+  const requirements: WorldDirectorInvestigationRequirementResult[] = [
+    {
+      id: 'CURRENT_INCIDENT',
+      status: incidentValid ? 'SATISFIED' : 'MISSING',
+      recordRefs: incidentValid ? [incident!.recordRef] : [],
+      reason: incidentValid ? undefined : 'A committed active incident at the current location is required; a proposal or historical record is insufficient.',
+    },
+    {
+      id: 'VICTIM_IDENTITY',
+      status: victimValid ? 'SATISFIED' : 'MISSING',
+      recordRefs: victimValid ? [victim!.recordRef] : [],
+      reason: victimValid ? undefined : 'A committed victim identity record is required.',
+    },
+    {
+      id: 'VICTIM_BODY',
+      status: bodyValid ? 'SATISFIED' : 'MISSING',
+      recordRefs: bodyValid ? [body!.recordRef, victim!.recordRef] : [],
+      reason: bodyValid ? undefined : 'A present, visible or discoverable body record at this location must reference the committed victim identity.',
+    },
+    {
+      id: 'DISCOVERABLE_EVIDENCE',
+      status: validEvidence.length > 0 ? 'SATISFIED' : 'MISSING',
+      recordRefs: validEvidence.map((evidence) => evidence.recordRef),
+      reason: validEvidence.length > 0 ? undefined : 'At least one present, visible or discoverable evidence record at this location is required.',
+    },
+  ];
+
+  const unresolvedQuestions = (input.unresolvedQuestions || [])
+    .map((question) => String(question || '').trim())
+    .filter(Boolean);
+  const hasMissingRequirements = requirements.some((requirement) => requirement.status === 'MISSING');
+
+  return {
+    status: hasMissingRequirements
+      ? 'INCOMPLETE'
+      : unresolvedQuestions.length
+        ? 'READY_WITH_UNCERTAINTY'
+        : 'READY',
+    requirements,
+    unresolvedQuestions,
+  };
+}
+
 export type WorldDirectorPreparedRecordKind =
   | 'SCENE_OBJECT'
   | 'ENTITY'

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import type { LocationSceneObject } from '../server/domain/types';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1081,14 +1082,14 @@ test('World Director owner planning is idempotent for owned records and leaves c
     preparationKey: 'incident:shack-murder:cycle-42',
     role: 'primary-clue',
   };
-  const desired = {
+  const desired: LocationSceneObject = {
     id: expected.recordId,
     name: 'Primary clue',
     kind: 'ITEM' as const,
     description: 'A clue prepared by World Director.',
     properties: { worldDirectorGenerated: true },
   };
-  const mergeOwned = (existing: typeof desired & { properties?: Record<string, unknown> }, next: typeof desired) => ({
+  const mergeOwned = (existing: LocationSceneObject, next: LocationSceneObject): LocationSceneObject => ({
     ...existing,
     ...next,
     properties: { ...(existing.properties || {}), ...(next.properties || {}) },
@@ -1104,7 +1105,7 @@ test('World Director owner planning is idempotent for owned records and leaves c
   assert.equal(create.decision.disposition, 'CREATE');
   assert.equal(create.changed, true);
   assert.ok(create.record);
-  const createdRecord = create.record! as typeof desired & { properties?: Record<string, unknown> };
+  const createdRecord = create.record!;
   assert.deepEqual(worldDirectorOwnershipAdapters.sceneObject.read(createdRecord), {
     contractVersion: 1,
     preparationKey: expected.preparationKey,
@@ -1128,7 +1129,7 @@ test('World Director owner planning is idempotent for owned records and leaves c
     revisedDesired,
     expected,
     worldDirectorOwnershipAdapters.sceneObject,
-    mergeOwned as any,
+    mergeOwned,
   );
   assert.equal(reconciled.decision.disposition, 'RECONCILE_OWNED');
   assert.equal(reconciled.changed, true);

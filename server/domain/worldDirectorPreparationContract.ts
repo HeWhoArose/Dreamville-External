@@ -86,3 +86,66 @@ export function classifyWorldDirectorOwnership(
   }
   return 'CONFLICT';
 }
+
+/**
+ * Proposed incident-preparation lifecycle. This is a pure policy contract only:
+ * it does not mutate canonical records or define cleanup/retention semantics.
+ * Production adoption remains blocked on durable recovery and owner adapters.
+ */
+export type WorldDirectorPreparationLifecycleState =
+  | 'PLANNED'
+  | 'ACTIVE'
+  | 'RESOLVED'
+  | 'CANCELLED'
+  | 'SUPERSEDED';
+
+export interface WorldDirectorLifecycleTransition {
+  allowed: boolean;
+  from: WorldDirectorPreparationLifecycleState;
+  to: WorldDirectorPreparationLifecycleState;
+  idempotent: boolean;
+  reason: string;
+}
+
+const WORLD_DIRECTOR_LIFECYCLE_TRANSITIONS: Record<
+  WorldDirectorPreparationLifecycleState,
+  readonly WorldDirectorPreparationLifecycleState[]
+> = {
+  PLANNED: ['ACTIVE', 'CANCELLED', 'SUPERSEDED'],
+  ACTIVE: ['RESOLVED', 'CANCELLED', 'SUPERSEDED'],
+  RESOLVED: [],
+  CANCELLED: [],
+  SUPERSEDED: [],
+};
+
+/**
+ * Evaluates lifecycle transitions without performing writes.
+ * Repeating the current state is an idempotent no-op; terminal states cannot
+ * be reopened under the same preparation identity.
+ */
+export function evaluateWorldDirectorLifecycleTransition(
+  from: WorldDirectorPreparationLifecycleState,
+  to: WorldDirectorPreparationLifecycleState,
+): WorldDirectorLifecycleTransition {
+  if (from === to) {
+    return {
+      allowed: true,
+      from,
+      to,
+      idempotent: true,
+      reason: 'Preparation already has the requested lifecycle state.',
+    };
+  }
+
+  const allowed = WORLD_DIRECTOR_LIFECYCLE_TRANSITIONS[from].includes(to);
+  return {
+    allowed,
+    from,
+    to,
+    idempotent: false,
+    reason: allowed
+      ? 'Lifecycle transition is permitted by the preparation contract.'
+      : 'Lifecycle transition is not permitted; use an explicit new preparation identity for a new lifecycle.',
+  };
+}
+

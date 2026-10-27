@@ -148,6 +148,49 @@ function buildOpeningRig(storyId: string, locationName: string, population: any,
   return { repository, locationId, worldId, orchestrator, prompts };
 }
 
+test('World Director opening integration exposes an investigation premise with no canonical victim or clue as incomplete', async () => {
+  const storyId = 'opening_investigation_missing_anchors_' + Date.now();
+  const rig = buildOpeningRig(
+    storyId,
+    'Isolated Shack',
+    { status: 'ABANDONED', expectedPopulation: 'NONE', explanation: 'An isolated shack with no established occupants.', provenance: 'AUTHORED' },
+  );
+
+  // The hook is narrative setup only. This fixture deliberately registers no
+  // victim entity/body object, clue object, or current-location incident event.
+  const run = rig.repository.getStoryRun(storyId);
+  run.startingSituation = {
+    summary: 'Kaelen Voss is investigating a fresh murder scene inside the isolated shack.',
+    hook: 'A fresh murder has been reported at the shack.',
+    activity: 'examining the scene',
+    situationType: 'pressure_event',
+  };
+  rig.repository.saveStoryRun(run);
+
+  await OpeningSceneService.generateOpeningScene({
+    storyId,
+    worldRepo: rig.repository,
+    allowDeterministicFallback: true,
+  });
+
+  const persisted = rig.repository.getStoryRun(storyId);
+  const readiness = persisted.runtimeState?.openingNarrativeContext?.sceneReadiness;
+  assert.equal(readiness?.profile, 'INVESTIGATION');
+  assert.equal(readiness?.status, 'INCOMPLETE');
+  assert.deepEqual(
+    readiness?.issues?.map((issue: any) => issue.code),
+    ['INVESTIGATION_VICTIM_NOT_ESTABLISHED', 'INVESTIGATION_EVIDENCE_NOT_ESTABLISHED'],
+    'opening integration must surface that the premise did not materialize canonical victim/clue anchors',
+  );
+  assert.deepEqual(
+    rig.repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
+      card.worldState?.locationId === rig.locationId && card.worldState?.isAlive !== false
+    ),
+    [],
+    'abandoned-location setup must not fabricate an ambient NPC as a substitute for a victim',
+  );
+});
+
 test('opening scene seeds and projects canonical ambient people before generating a public citadel opening', async () => {
   const storyId = 'opening_population_public_' + Date.now();
   const rig = buildOpeningRig(

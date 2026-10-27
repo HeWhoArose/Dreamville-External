@@ -149,3 +149,86 @@ export function evaluateWorldDirectorLifecycleTransition(
   };
 }
 
+export interface WorldDirectorOwnerRecordRef {
+  id: string;
+  ownershipMarker?: WorldDirectorOwnershipMarker | null;
+}
+
+export interface WorldDirectorOwnerAdapterExpectation {
+  recordId: string;
+  preparationKey: string;
+  role: string;
+}
+
+export type WorldDirectorOwnerAdapterConflictReason =
+  | 'RECORD_ID_MISMATCH'
+  | 'EXISTING_RECORD_UNOWNED'
+  | 'PREPARATION_KEY_MISMATCH'
+  | 'ROLE_MISMATCH'
+  | 'CONTRACT_VERSION_MISMATCH';
+
+export interface WorldDirectorOwnerAdapterDecision {
+  disposition: WorldDirectorOwnershipDisposition;
+  recordId: string;
+  reason:
+    | 'RECORD_ABSENT'
+    | 'OWNED_RECORD_MATCH'
+    | WorldDirectorOwnerAdapterConflictReason;
+  mayCreate: boolean;
+  mayUpdate: boolean;
+  /** Deletion is intentionally forbidden until per-owner lifecycle retention is approved. */
+  mayDelete: false;
+}
+
+/**
+ * Adapter-safe decision that distinguishes a truly absent record from an
+ * existing authored/unmarked record. Never treat a missing marker on an
+ * existing record as permission to create/adopt/overwrite it.
+ *
+ * This function only decides; it does not mutate any canonical owner.
+ */
+export function evaluateWorldDirectorOwnerRecord(
+  existing: WorldDirectorOwnerRecordRef | null | undefined,
+  expected: WorldDirectorOwnerAdapterExpectation,
+): WorldDirectorOwnerAdapterDecision {
+  if (!existing) {
+    return {
+      disposition: 'CREATE',
+      recordId: expected.recordId,
+      reason: 'RECORD_ABSENT',
+      mayCreate: true,
+      mayUpdate: false,
+      mayDelete: false,
+    };
+  }
+
+  const conflict = (reason: WorldDirectorOwnerAdapterConflictReason): WorldDirectorOwnerAdapterDecision => ({
+    disposition: 'CONFLICT',
+    recordId: existing.id,
+    reason,
+    mayCreate: false,
+    mayUpdate: false,
+    mayDelete: false,
+  });
+
+  if (existing.id !== expected.recordId) return conflict('RECORD_ID_MISMATCH');
+  const marker = existing.ownershipMarker;
+  if (!marker) return conflict('EXISTING_RECORD_UNOWNED');
+  if (marker.contractVersion !== WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION) {
+    return conflict('CONTRACT_VERSION_MISMATCH');
+  }
+  if (marker.preparationKey !== expected.preparationKey) {
+    return conflict('PREPARATION_KEY_MISMATCH');
+  }
+  if (marker.role !== expected.role) return conflict('ROLE_MISMATCH');
+
+  return {
+    disposition: 'RECONCILE_OWNED',
+    recordId: existing.id,
+    reason: 'OWNED_RECORD_MATCH',
+    mayCreate: false,
+    mayUpdate: true,
+    mayDelete: false,
+  };
+}
+

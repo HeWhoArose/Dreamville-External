@@ -985,3 +985,81 @@ test('World Director owner adapter decisions distinguish absent, owned, and conf
   assert.equal(differentId.reason, 'RECORD_ID_MISMATCH');
 });
 
+test('World Director ownership adapters preserve owner metadata and refuse conflicting marker replacement', async () => {
+  const { worldDirectorOwnershipAdapters } = await import('../server/domain/worldDirectorPreparationContract');
+  const { EntityRegistry } = await import('../server/domain/entityCard');
+
+  const marker = {
+    contractVersion: 1,
+    preparationKey: 'incident:shack-murder:cycle-42',
+    role: 'primary-clue',
+  };
+  const foreignMarker = { ...marker, preparationKey: 'authored:foreign-preparation' };
+
+  const sceneObject = {
+    id: 'wd_adapter_scene_object',
+    name: 'Adapter fixture clue',
+    kind: 'ITEM' as const,
+    properties: { authoredNote: 'preserve scene note' },
+  };
+  const markedSceneObject = worldDirectorOwnershipAdapters.sceneObject.withMarker(sceneObject, marker);
+  assert.deepEqual(worldDirectorOwnershipAdapters.sceneObject.read(markedSceneObject), marker);
+  assert.equal(markedSceneObject.properties?.authoredNote, 'preserve scene note');
+  assert.equal(sceneObject.properties.worldDirectorOwnership, undefined, 'adapter must not mutate the input record');
+  assert.throws(
+    () => worldDirectorOwnershipAdapters.sceneObject.withMarker(markedSceneObject, foreignMarker),
+    /refuses to replace a conflicting ownership marker/,
+  );
+
+  const registry = new EntityRegistry('wd_adapter_story');
+  const entity = registry.upsert({
+    id: 'wd_adapter_entity',
+    storyId: 'wd_adapter_story',
+    name: 'Adapter fixture entity',
+    kind: 'NPC',
+    metadata: { authoredNote: 'preserve entity note' },
+  });
+  const markedEntity = worldDirectorOwnershipAdapters.entityCard.withMarker(entity, marker);
+  assert.deepEqual(worldDirectorOwnershipAdapters.entityCard.read(markedEntity), marker);
+  assert.equal(markedEntity.metadata.authoredNote, 'preserve entity note');
+
+  const timestamp = { year: 42, month: 10, day: 14, hour: 17, minute: 42, second: 0, totalElapsedSeconds: 0 };
+  const evidence = {
+    id: 'wd_adapter_evidence',
+    category: 'WORLD_ANOMALY' as const,
+    timestamp,
+    primarySubjectId: 'wd_adapter_actor',
+    locationId: 'isolated-shack',
+    summary: 'Adapter fixture evidence.',
+    details: 'Test-only.',
+    sourceEventId: 'wd_adapter_event',
+    provenance: 'world_director_owner_adapter_test',
+    visibility: 'PUBLIC' as const,
+    metadata: { authoredNote: 'preserve evidence note' },
+  };
+  const markedEvidence = worldDirectorOwnershipAdapters.historicalEvidence.withMarker(evidence, marker);
+  assert.deepEqual(worldDirectorOwnershipAdapters.historicalEvidence.read(markedEvidence), marker);
+  assert.equal(markedEvidence.metadata?.authoredNote, 'preserve evidence note');
+
+  const fact = {
+    id: 'wd_adapter_fact',
+    subjectEntityId: 'wd_adapter_actor',
+    predicate: 'observed_clue',
+    objectValue: 'wd_adapter_scene_object',
+    sourceType: 'system_grant' as const,
+    acquiredAtTimestamp: timestamp,
+    confidence: 1,
+    secretLevel: 'public' as const,
+    scope: 'exact' as const,
+    provenanceSummary: 'Adapter fixture fact.',
+    metadata: { authoredNote: 'preserve fact note' },
+  };
+  const markedFact = worldDirectorOwnershipAdapters.knowledgeFact.withMarker(fact, marker);
+  assert.deepEqual(worldDirectorOwnershipAdapters.knowledgeFact.read(markedFact), marker);
+  assert.equal(markedFact.metadata?.authoredNote, 'preserve fact note');
+  assert.throws(
+    () => worldDirectorOwnershipAdapters.knowledgeFact.withMarker(markedFact, foreignMarker),
+    /refuses to replace a conflicting ownership marker/,
+  );
+});
+

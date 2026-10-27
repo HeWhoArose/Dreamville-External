@@ -89,6 +89,72 @@ test('World Director keeps missing required anchors incomplete even when open qu
   assert.ok(report.issues.some((issue) => issue.code === 'INVESTIGATION_UNRESOLVED_QUESTION'));
 });
 
+test('World Director distinguishes authored truth, canonical facts, generated proposals, and unknown conclusions', async () => {
+  const { assessWorldDirectorInvestigationClaim } = await import('../server/domain/worldDirectorPreparationContract');
+
+  const authored = assessWorldDirectorInvestigationClaim({
+    kind: 'AUTHORED_TRUTH',
+    claimId: 'incident-shack-victim',
+    statement: 'A victim was killed in the shack.',
+    sourceRef: 'scenario:isolated-shack:victim',
+  });
+  assert.equal(authored.establishesCanonicalFact, false);
+  assert.equal(authored.maySupportPreparation, true);
+  assert.equal(authored.requiresCanonicalOwnerCommit, true);
+
+  const canonical = assessWorldDirectorInvestigationClaim({
+    kind: 'CANONICAL_FACT',
+    claimId: 'incident-shack-body',
+    statement: 'The victim body is present in the shack.',
+    recordRef: 'scene-object:body-shack-01',
+  });
+  assert.equal(canonical.establishesCanonicalFact, true);
+  assert.equal(canonical.requiresCanonicalOwnerCommit, false);
+
+  const proposal = assessWorldDirectorInvestigationClaim({
+    kind: 'GENERATED_PROPOSAL',
+    proposalId: 'proposal-suspect-01',
+    statement: 'A patrol member may have entered the shack.',
+    generator: 'narrative-model',
+    basedOnRefs: ['scene-object:broken-latch'],
+  });
+  assert.equal(proposal.establishesCanonicalFact, false);
+  assert.equal(proposal.maySupportPreparation, false);
+  assert.equal(proposal.requiresCanonicalOwnerCommit, true);
+
+  const authorizedProposal = assessWorldDirectorInvestigationClaim({
+    kind: 'AUTHORIZED_PROPOSAL',
+    proposalId: 'approved-proposal-suspect-01',
+    statement: 'A patrol member may have entered the shack.',
+    generator: 'narrative-model',
+    basedOnRefs: ['scene-object:broken-latch'],
+    authorizationRef: 'scenario-author-review:approval-12',
+  });
+  assert.equal(authorizedProposal.establishesCanonicalFact, false);
+  assert.equal(authorizedProposal.maySupportPreparation, true);
+  assert.equal(authorizedProposal.requiresCanonicalOwnerCommit, true);
+
+  const unknown = assessWorldDirectorInvestigationClaim({
+    kind: 'UNKNOWN',
+    questionId: 'who-entered',
+    question: 'Who entered the shack?',
+  });
+  assert.equal(unknown.establishesCanonicalFact, false);
+  assert.equal(unknown.maySupportPreparation, false);
+  assert.equal(unknown.requiresCanonicalOwnerCommit, false);
+
+  assert.throws(
+    () => assessWorldDirectorInvestigationClaim({
+      kind: 'CANONICAL_FACT',
+      claimId: 'missing-record-reference',
+      statement: 'A clue is present.',
+      recordRef: '  ',
+    }),
+    /non-empty recordRef/,
+    'a claim without an owner record reference must not establish canonical truth',
+  );
+});
+
 test('World Director canonical-owner contract rolls back scene-object and Chronicle writes together', async () => {
   const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
   const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');

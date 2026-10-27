@@ -12,6 +12,139 @@ import type { KnowledgeFact, LocationSceneObject } from './types';
 
 export const WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION = 1 as const;
 
+/**
+ * Investigation claims keep authored scenario truth, committed canonical
+ * records, generated suggestions, and unanswered questions distinct. Narrative
+ * prose by itself is not a claim source; callers must supply an explicit ref.
+ */
+export type WorldDirectorInvestigationClaim =
+  | {
+      kind: 'AUTHORED_TRUTH';
+      claimId: string;
+      statement: string;
+      sourceRef: string;
+    }
+  | {
+      kind: 'CANONICAL_FACT';
+      claimId: string;
+      statement: string;
+      recordRef: string;
+    }
+  | {
+      kind: 'GENERATED_PROPOSAL';
+      proposalId: string;
+      statement: string;
+      generator: string;
+      basedOnRefs: string[];
+    }
+  | {
+      kind: 'AUTHORIZED_PROPOSAL';
+      proposalId: string;
+      statement: string;
+      generator: string;
+      basedOnRefs: string[];
+      authorizationRef: string;
+    }
+  | {
+      kind: 'UNKNOWN';
+      questionId: string;
+      question: string;
+    };
+
+export interface WorldDirectorInvestigationClaimAssessment {
+  classification: WorldDirectorInvestigationClaim['kind'];
+  establishesCanonicalFact: boolean;
+  maySupportPreparation: boolean;
+  requiresCanonicalOwnerCommit: boolean;
+  reason: string;
+}
+
+function requireClaimReference(name: string, value: string): void {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`World Director investigation claim requires a non-empty ${name}.`);
+  }
+}
+
+/**
+ * Only an owner-backed canonical record satisfies a prepared-scene fact
+ * requirement. Structured authored truth may justify proposing a record;
+ * generated content cannot do that on its own, and unknowns stay unanswered.
+ */
+export function assessWorldDirectorInvestigationClaim(
+  claim: WorldDirectorInvestigationClaim,
+): WorldDirectorInvestigationClaimAssessment {
+  switch (claim.kind) {
+    case 'AUTHORED_TRUTH': {
+      requireClaimReference('claimId', claim.claimId);
+      requireClaimReference('statement', claim.statement);
+      requireClaimReference('sourceRef', claim.sourceRef);
+      return {
+        classification: claim.kind,
+        establishesCanonicalFact: false,
+        maySupportPreparation: true,
+        requiresCanonicalOwnerCommit: true,
+        reason: 'Structured authored truth can support preparation, but it is not a committed scene record.',
+      };
+    }
+    case 'CANONICAL_FACT': {
+      requireClaimReference('claimId', claim.claimId);
+      requireClaimReference('statement', claim.statement);
+      requireClaimReference('recordRef', claim.recordRef);
+      return {
+        classification: claim.kind,
+        establishesCanonicalFact: true,
+        maySupportPreparation: true,
+        requiresCanonicalOwnerCommit: false,
+        reason: 'The canonical owner record establishes this fact for readiness evaluation.',
+      };
+    }
+    case 'GENERATED_PROPOSAL': {
+      requireClaimReference('proposalId', claim.proposalId);
+      requireClaimReference('statement', claim.statement);
+      requireClaimReference('generator', claim.generator);
+      if (!Array.isArray(claim.basedOnRefs) || claim.basedOnRefs.length === 0) {
+        throw new Error('World Director generated proposal requires at least one supporting reference.');
+      }
+      claim.basedOnRefs.forEach((ref, index) => requireClaimReference(`basedOnRefs[${index}]`, ref));
+      return {
+        classification: claim.kind,
+        establishesCanonicalFact: false,
+        maySupportPreparation: false,
+        requiresCanonicalOwnerCommit: true,
+        reason: 'Generated proposals remain hypotheses until independently authorized and committed through a canonical owner.',
+      };
+    }
+    case 'AUTHORIZED_PROPOSAL': {
+      requireClaimReference('proposalId', claim.proposalId);
+      requireClaimReference('statement', claim.statement);
+      requireClaimReference('generator', claim.generator);
+      requireClaimReference('authorizationRef', claim.authorizationRef);
+      if (!Array.isArray(claim.basedOnRefs) || claim.basedOnRefs.length === 0) {
+        throw new Error('World Director authorized proposal requires at least one supporting reference.');
+      }
+      claim.basedOnRefs.forEach((ref, index) => requireClaimReference(`basedOnRefs[${index}]`, ref));
+      return {
+        classification: claim.kind,
+        establishesCanonicalFact: false,
+        maySupportPreparation: true,
+        requiresCanonicalOwnerCommit: true,
+        reason: 'Explicitly authorized proposals may support a preparation request but remain non-canonical until an owner commits a record.',
+      };
+    }
+    case 'UNKNOWN': {
+      requireClaimReference('questionId', claim.questionId);
+      requireClaimReference('question', claim.question);
+      return {
+        classification: claim.kind,
+        establishesCanonicalFact: false,
+        maySupportPreparation: false,
+        requiresCanonicalOwnerCommit: false,
+        reason: 'The conclusion is unknown and must remain unresolved until new authoritative evidence exists.',
+      };
+    }
+  }
+}
+
 export type WorldDirectorPreparedRecordKind =
   | 'SCENE_OBJECT'
   | 'ENTITY'

@@ -169,7 +169,8 @@ export type WorldDirectorOwnerAdapterConflictReason =
   | 'EXISTING_RECORD_UNOWNED'
   | 'PREPARATION_KEY_MISMATCH'
   | 'ROLE_MISMATCH'
-  | 'CONTRACT_VERSION_MISMATCH';
+  | 'CONTRACT_VERSION_MISMATCH'
+  | 'DESIRED_RECORD_MARKER_CONFLICT';
 
 export interface WorldDirectorOwnerAdapterDecision {
   disposition: WorldDirectorOwnershipDisposition;
@@ -351,4 +352,91 @@ export const worldDirectorOwnershipAdapters = {
     },
   } satisfies WorldDirectorOwnershipAdapter<KnowledgeFact>,
 };
+
+export interface WorldDirectorOwnerRecordPlan<TRecord> {
+  decision: WorldDirectorOwnerAdapterDecision;
+  /** Proposed record only; callers must still commit through the canonical transaction owner. */
+  record?: TRecord;
+  changed: boolean;
+}
+
+function ownerConflictDecision(
+  recordId: string,
+  reason: WorldDirectorOwnerAdapterConflictReason,
+): WorldDirectorOwnerAdapterDecision {
+  return {
+    disposition: 'CONFLICT',
+    recordId,
+    reason,
+    mayCreate: false,
+    mayUpdate: false,
+    mayDelete: false,
+  };
+}
+
+/**
+ * Plans create/reconcile without mutating the existing record or any canonical
+ * owner. Owner-specific merge functions must preserve unrelated fields. Conflicts
+ * return the existing record unchanged; deletion is never proposed here.
+ */
+export function planWorldDirectorOwnedRecord<TRecord extends { id: string }>(
+  existing: TRecord | null | undefined,
+  desired: TRecord,
+  expected: WorldDirectorOwnerAdapterExpectation,
+  adapter: WorldDirectorOwnershipAdapter<TRecord>,
+  mergeOwned: (existing: TRecord, desired: TRecord) => TRecord,
+): WorldDirectorOwnerRecordPlan<TRecord> {
+  if (desired.id !== expected.recordId) {
+    return {
+      decision: ownerConflictDecision(desired.id, 'RECORD_ID_MISMATCH'),
+      record: existing || undefined,
+      changed: false,
+    };
+  }
+
+  const existingRef = existing
+    ? { id: existing.id, ownershipMarker: adapter.read(existing) }
+    : undefined;
+  const decision = evaluateWorldDirectorOwnerRecord(existingRef, expected);
+  if (decision.disposition === 'CONFLICT') {
+    return { decision, record: existing || undefined, changed: false };
+  }
+
+  const marker: WorldDirectorOwnershipMarker = {
+    contractVersion: WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION,
+    preparationKey: expected.preparationKey,
+    role: expected.role,
+  };
+
+  try {
+    if (decision.disposition === 'CREATE') {
+      return {
+        decision,
+        record: adapter.withMarker(desired, marker),
+        changed: true,
+      };
+    }
+
+    const merged = mergeOwned(existing as TRecord, desired);
+    if (merged.id !== expected.recordId) {
+      return {
+        decision: ownerConflictDecision(merged.id, 'RECORD_ID_MISMATCH'),
+        record: existing || undefined,
+        changed: false,
+      };
+    }
+    const plannedRecord = adapter.withMarker(merged, marker);
+    return {
+      decision,
+      record: plannedRecord,
+      changed: JSON.stringify(plannedRecord) !== JSON.stringify(existing),
+    };
+  } catch {
+    return {
+      decision: ownerConflictDecision(existing?.id || desired.id, 'DESIRED_RECORD_MARKER_CONFLICT'),
+      record: existing || undefined,
+      changed: false,
+    };
+  }
+}
 

@@ -89,7 +89,14 @@ export class PersistentGameStore {
     // large campaigns into multi-second synchronous writes per turn.
     writeFileSync(temporaryPath, JSON.stringify(normalized), 'utf8');
     renameSync(temporaryPath, this.filePath);
-    this.pruneSnapshots();
+    // The primary store is already committed after rename. Snapshot pruning is
+    // maintenance only and must not turn a successful durable commit into an
+    // apparent transaction failure that would roll canonical state back.
+    try {
+      this.pruneSnapshots();
+    } catch (error) {
+      console.warn('[PersistentGameStore] Snapshot pruning failed after the primary save committed.', error);
+    }
   }
 
   private migrateIfNeeded(migrated: PersistentGameStoreData): void {

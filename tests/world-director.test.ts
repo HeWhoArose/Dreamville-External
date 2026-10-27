@@ -113,7 +113,7 @@ test('World Director canonical-owner contract rolls back scene-object and Chroni
     'rejected preparation must restore both GeographyGraph and Chronicle to their pre-transaction state',
   );
   assert.equal(
-    repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_rollback_test_body'),
+    Boolean(repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_rollback_test_body')),
     false,
   );
   assert.equal(
@@ -178,7 +178,7 @@ test('World Director canonical-owner contract commits scene-object and Chronicle
 
   assert.equal(result.success, true);
   assert.equal(result.rolledBack, false);
-  assert.equal(repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_commit_test_clue'), true);
+  assert.equal(Boolean(repository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_commit_test_clue')), true);
   assert.equal(
     repository.getHistoricalChronicleEngine(storyId).exportState().evidenceStore?.some((item: any) => item.id === 'wd_commit_test_evidence'),
     true,

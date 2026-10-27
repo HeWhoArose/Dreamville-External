@@ -1313,6 +1313,22 @@ test('World Director staged commit save failure rolls back and leaves batching u
       'a failed staged commit must not leave a committed command event',
     );
 
+    // Corrupt the primary file to verify snapshot recovery cannot resurrect the
+    // failed staged scene or its command event.
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(persistencePath, '{ invalid json', 'utf8');
+    const recoveredFromSnapshot = new InMemoryWorldRepository();
+    assert.equal(
+      recoveredFromSnapshot.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_atomic_commit_failure_clue'),
+      false,
+      'snapshot recovery after a failed commit must not resurrect its scene object',
+    );
+    assert.equal(
+      recoveredFromSnapshot.getCanonicalCommandEvents(storyId).some((event: any) => event.commandId === failedCommand.commandId),
+      false,
+      'snapshot recovery after a failed commit must not resurrect its command event',
+    );
+
     saveCount = 0;
     const recoveryCommand = {
       commandId: 'wd_atomic_commit_failure_002',

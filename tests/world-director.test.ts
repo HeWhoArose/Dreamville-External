@@ -783,3 +783,33 @@ test('World Director ownership markers survive canonical owner export/import wit
   assert.equal(evidence?.metadata?.authoredNote, 'preserve evidence metadata', 'evidence ownership metadata must not erase unrelated metadata');
 });
 
+test('World Director preparation lifecycle allows only explicit forward transitions and idempotent repeats', async () => {
+  const { evaluateWorldDirectorLifecycleTransition } = await import('../server/domain/worldDirectorPreparationContract');
+
+  const transitions: Array<[string, string, boolean]> = [
+    ['PLANNED', 'ACTIVE', true],
+    ['PLANNED', 'CANCELLED', true],
+    ['PLANNED', 'SUPERSEDED', true],
+    ['ACTIVE', 'RESOLVED', true],
+    ['ACTIVE', 'CANCELLED', true],
+    ['ACTIVE', 'SUPERSEDED', true],
+    ['PLANNED', 'RESOLVED', false],
+    ['ACTIVE', 'PLANNED', false],
+    ['RESOLVED', 'ACTIVE', false],
+    ['CANCELLED', 'ACTIVE', false],
+    ['SUPERSEDED', 'ACTIVE', false],
+  ];
+
+  for (const [from, to, expectedAllowed] of transitions) {
+    const result = evaluateWorldDirectorLifecycleTransition(from as any, to as any);
+    assert.equal(result.allowed, expectedAllowed, `transition ${from} -> ${to}`);
+    assert.equal(result.idempotent, false, `different states are not idempotent: ${from} -> ${to}`);
+  }
+
+  for (const state of ['PLANNED', 'ACTIVE', 'RESOLVED', 'CANCELLED', 'SUPERSEDED']) {
+    const result = evaluateWorldDirectorLifecycleTransition(state as any, state as any);
+    assert.equal(result.allowed, true, `same-state repeat should be accepted for ${state}`);
+    assert.equal(result.idempotent, true, `same-state repeat should be a no-op for ${state}`);
+  }
+});
+

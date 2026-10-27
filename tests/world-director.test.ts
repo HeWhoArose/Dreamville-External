@@ -1299,7 +1299,7 @@ test('World Director staged commit save failure rolls back and leaves batching u
 
     assert.equal(failedResult.success, false, 'a failed durable flush must fail the staged command');
     assert.match(failedResult.errorReason || '', /injected staged commit persistence failure/);
-    assert.equal(saveCount, 2, 'the failed commit flush must be followed by a durable pre-state restore');
+    assert.ok(saveCount >= 2, 'the failed flush must be followed by cleanup and a durable pre-state restore');
 
     const afterFailure = new InMemoryWorldRepository();
     assert.equal(

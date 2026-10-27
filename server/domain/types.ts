@@ -197,6 +197,8 @@ export interface KnowledgeFact {
   secretLevel: 'public' | 'faction' | 'private' | 'cosmic_secret';
   scope: 'exact' | 'general' | 'uncertain';
   provenanceSummary: string;
+  /** Structured provenance/ownership extensions; does not grant actor knowledge by itself. */
+  metadata?: Record<string, unknown>;
 }
 
 export interface ObservationRecord {

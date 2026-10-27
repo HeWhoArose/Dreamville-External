@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { WorldDirector } from '../server/domain/worldDirector';
 
 test('World Director does not apply investigation requirements to an ordinary opening', () => {
@@ -382,5 +385,133 @@ test('World Director canonical transaction commits actor-scoped Phase 8 knowledg
   );
   const phase8State = repository.getStoryRun(storyId)?.runtimeState?.phase8 as any;
   assert.equal(phase8State?.knowledge?.[actorId]?.facts?.[factId]?.status, 'KNOWN');
+});
+
+test('World Director canonical scene state and actor knowledge survive a file-backed repository reload', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+
+  const originalPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-reload-'));
+  const persistencePath = join(tempDirectory, 'dreambook.json');
+  const storyId = 'world_director_file_reload_contract';
+  const privateFactId = 'wd_reload_private_fact';
+  const sceneObjectId = 'wd_reload_scene_clue';
+  const entityId = 'wd_reload_scene_entity';
+  const evidenceId = 'wd_reload_chronicle_evidence';
+
+  try {
+    process.env.DREAMBOOK_PERSISTENCE_PATH = persistencePath;
+    const repository = new InMemoryWorldRepository();
+    repository.seedStory(storyId);
+    const run = repository.getStoryRun(storyId);
+    assert.ok(run, 'fixture must create a persisted story run');
+    const actorId = repository.getPlayerLifecycle(storyId)!.actorId;
+    const otherActorId = 'wd_reload_other_actor';
+    const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+    assert.ok(location, 'fixture needs a canonical location');
+    const timestamp = repository.getWorldClock(storyId).getTimestamp();
+
+    const sceneObjectResult = repository.getGeographyGraph(storyId).addSceneObject(location.id, {
+      id: sceneObjectId,
+      name: 'Reload-persistent clue',
+      kind: 'ITEM',
+      description: 'A clue that must survive a repository reconstruction.',
+      visible: true,
+      interactable: true,
+      tags: ['world-director-reload-test'],
+      provenance: 'world_director_reload_contract_test',
+    });
+    assert.equal(sceneObjectResult.success, true);
+
+    repository.getEntityRegistry(storyId).upsert({
+      id: entityId,
+      name: 'Reload-persistent scene witness',
+      kind: 'NPC',
+      worldState: { locationId: location.id, isAlive: true, presence: 'present' },
+    });
+
+    repository.addKnowledgeFact(storyId, {
+      id: privateFactId,
+      subjectEntityId: actorId,
+      predicate: 'observed_scene_clue',
+      objectValue: 'The actor acquired the private clue before reload.',
+      sourceType: 'document',
+      acquiredAtTimestamp: timestamp,
+      confidence: 1,
+      secretLevel: 'private',
+      scope: 'exact',
+      provenanceSummary: 'world_director_reload_contract_test',
+    });
+
+    repository.getPhase8SimulationEngine(storyId).processCanonicalEvent(repository, storyId, {
+      eventId: 'wd_reload_private_fact_acquired',
+      type: 'FACT_CHANGED',
+      actorId,
+      timestampSeconds: timestamp.totalElapsedSeconds,
+      payload: {
+        factId: privateFactId,
+        evidenceId,
+        knowledgeAcquisitionSuccess: true,
+        subjectEntityId: actorId,
+        predicate: 'observed_scene_clue',
+        objectValue: 'The actor acquired the private clue before reload.',
+        confidence: 1,
+        method: 'SEARCH',
+      },
+    });
+
+    repository.getHistoricalChronicleEngine(storyId).recordEvidence({
+      id: evidenceId,
+      category: 'WORLD_ANOMALY',
+      timestamp,
+      primarySubjectId: actorId,
+      locationId: location.id,
+      summary: 'Reload persistence test evidence.',
+      details: 'The evidence record should survive repository reconstruction.',
+      sourceEventId: 'wd_reload_private_fact_acquired',
+      provenance: 'world_director_reload_contract_test',
+      visibility: 'PUBLIC',
+    });
+
+    repository.saveStoryRun(repository.getStoryRun(storyId));
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedRun = reloadedRepository.getStoryRun(storyId);
+    assert.ok(reloadedRun, 'story run should load from the file-backed store');
+    assert.equal(
+      reloadedRepository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === sceneObjectId),
+      true,
+      'canonical scene object must survive reload',
+    );
+    assert.equal(
+      reloadedRepository.getEntityRegistry(storyId).get(entityId)?.name,
+      'Reload-persistent scene witness',
+      'entity registry state must survive reload',
+    );
+    assert.equal(
+      reloadedRepository.getKnowledgeFacts(storyId).some((fact) => fact.id === privateFactId),
+      true,
+      'canonical world fact must survive reload',
+    );
+    assert.equal(
+      reloadedRepository.getAuthorizedKnowledgeFacts(storyId, actorId).some((fact) => fact.id === privateFactId),
+      true,
+      'actor-acquired knowledge must remain authorized after reload',
+    );
+    assert.equal(
+      reloadedRepository.getAuthorizedKnowledgeFacts(storyId, otherActorId).some((fact) => fact.id === privateFactId),
+      false,
+      'reloading one actor knowledge state must not authorize another actor',
+    );
+    assert.equal(
+      reloadedRepository.getHistoricalChronicleEngine(storyId).exportState().evidenceStore?.some((item: any) => item.id === evidenceId),
+      true,
+      'Chronicle evidence must survive reload',
+    );
+  } finally {
+    if (originalPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = originalPersistencePath;
+    rmSync(tempDirectory, { recursive: true, force: true });
+  }
 });
 

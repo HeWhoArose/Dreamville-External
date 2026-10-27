@@ -90,6 +90,38 @@ Fallback must remain factually grounded but should receive the same prepared sce
 
 This map refreshes the critical opening/setup boundaries against the feature-branch source on 2026-10-27. It does **not** claim that every combat, movement/time-advance, or regeneration caller has been re-audited line-by-line in this slice. The older narrative-grounding trace and V2 execution plan remain supporting references for those shared paths; Phase 0 remains open until their relevant handoffs and a focused canonical investigation fixture are checked against this branch.
 
+### 2.6 General-purpose design constraint — not a murder-scene patch
+
+The isolated-shack murder is the **first regression fixture**, not the product scope. World Director must work for arbitrary scene purposes and genres by coordinating composable scene requirements over existing canonical authorities. Do not add a pile of premise-word regexes or a parallel scene database as the final architecture.
+
+**Universal preparation contract (every scene):**
+
+- **Purpose and player intent:** why this scene exists now, the protagonist's current goal/starting activity, and any authored inciting pressure. A hook is an intent signal, not proof that an event occurred.
+- **Place and physical affordances:** canonical location identity, layout/connected areas where available, visible objects, usable affordances, environmental conditions, time/lighting/weather where supported, and travel/access constraints.
+- **Actors and activity:** canonical present entities, their player-visible identities/roles, activities, relevant relationships, and permitted interaction opportunities. Do not seed occupants into restricted, abandoned, or explicitly empty locations.
+- **Events and causal state:** distinguish authored/planned events from active/committed events, historical Chronicle entries from current visible events, and proposals from persisted outcomes.
+- **Knowledge and visibility:** separate world truth from what the protagonist can perceive, what the protagonist knows, and what NPCs know. Hidden facts must not satisfy visible-scene requirements.
+- **Playability and continuity:** ensure the scene has grounded details the player can observe or interact with, preserve unresolved questions and player agency, and keep preparation idempotent across opening regeneration, reload, and later turns.
+- **Uncertainty and omissions:** report what is unknown or absent instead of silently inventing a fact. A repair must use the owning canonical authority and preserve provenance, time, location, visibility, and lifecycle rules.
+
+**Composable scene profiles are policy, not separate world systems.** The universal contract is always checked; additional requirements are selected by structured starting-situation metadata, a committed event/action, or a conservative classifier when metadata is absent. Initial profiles should include:
+
+| Profile | Example requirements (only when supported by the scene's purpose) |
+|---|---|
+| GENERAL / ARRIVAL | grounded place identity, immediate activity, useful observable affordances, clear player next-step opportunities |
+| INVESTIGATION | relevant incident/target, physically present discoverable evidence, observation/knowledge boundaries, unresolved causal questions |
+| SOCIAL / NEGOTIATION | present interlocutors, their public roles/stance/activity, interaction affordances, known relationship/context boundaries |
+| TRAVEL / TRANSITION | origin/destination, route/access state, travel mode/progress, arrival conditions and relevant environmental change |
+| EXPLORATION / DISCOVERY | accessible space, discoverable features, visibility/obstruction constraints, risk or uncertainty only where canon supports it |
+| COMBAT / IMMEDIATE DANGER | canonical participants, positions/range/line of sight, active threat and authoritative combat state; never duplicate combat resolution |
+| REST / WORK / ROUTINE | appropriate location affordances, available resources/tasks, time/activity context and existing schedule constraints |
+
+These are illustrative, extensible policies, not a mandate to require every listed item in every scene. A profile must never manufacture a required fact just to turn readiness green. If its requirement cannot be grounded, report an explicit gap or uncertainty and let the owning system or player action resolve it.
+
+**Architecture boundary:** World Director orchestrates preparation and validates readiness. WorldRepository/GeographyGraph own persistence and location objects; EntityRegistry owns entity cards; the event/action engines own committed events and outcomes; Chronicle owns history; CurrentSituationBuilder owns epistemically filtered projection; WorldActivityDirector owns eligible ambient population/activity; existing narrative planning/review owns narration quality and safety. World Director must call or coordinate these owners rather than replace them.
+
+**Current implementation limitation:** `server/domain/worldDirector.ts` currently has a conservative `GENERAL` / `INVESTIGATION` diagnostic with murder/investigation vocabulary and two investigation anchors. That is acceptable as the first regression probe only. Before canonical preparation is implemented, refactor the interface around a universal scene contract plus composable profile requirements; keep text classification as a fallback selector, never the source of truth for incident existence.
+
 ## 3. Scope and Non-Goals
 
 ### In scope

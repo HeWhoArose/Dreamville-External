@@ -537,3 +537,110 @@ test('World Director canonical scene state and actor knowledge survive a file-ba
     rmSync(tempDirectory, { recursive: true, force: true });
   }
 });
+
+
+test('World Director canonical command replay after repository reload does not rerun preparation or duplicate scene records', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+
+  const originalPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-replay-'));
+  const persistencePath = join(tempDirectory, 'dreambook.json');
+  const storyId = 'world_director_replay_after_reload';
+  const actorId = 'wd_replay_actor';
+  const commandId = 'wd_replay_prepare_scene_001';
+  const sceneObjectId = 'wd_replay_stable_clue';
+  const evidenceId = 'wd_replay_stable_evidence';
+
+  try {
+    process.env.DREAMBOOK_PERSISTENCE_PATH = persistencePath;
+    const repository = new InMemoryWorldRepository();
+    repository.seedStory(storyId);
+    const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+    assert.ok(location, 'fixture needs a canonical location');
+    const timestamp = repository.getWorldClock(storyId).getTimestamp();
+
+    const command = {
+      commandId,
+      storyId,
+      actorId,
+      type: 'INTERACT' as const,
+      payload: { action: 'PREPARE_IDEMPOTENT_SCENE', sceneKey: 'fixture:replay-after-reload' },
+      source: 'SYSTEM' as const,
+    };
+
+    let firstHandlerCalls = 0;
+    const firstResult = await canonicalCommandEngine.execute(repository, command, async (_command, context) => {
+      firstHandlerCalls += 1;
+      const added = context.repository.getGeographyGraph(storyId).addSceneObject(location.id, {
+        id: sceneObjectId,
+        name: 'Stable replay fixture clue',
+        kind: 'ITEM',
+        visible: true,
+        interactable: true,
+        tags: ['world-director-replay-test'],
+        provenance: 'world_director_replay_contract_test',
+      });
+      assert.equal(added.success, true);
+      context.repository.getHistoricalChronicleEngine(storyId).recordEvidence({
+        id: evidenceId,
+        category: 'WORLD_ANOMALY',
+        timestamp,
+        primarySubjectId: actorId,
+        locationId: location.id,
+        summary: 'Stable replay fixture evidence.',
+        details: 'This must be created once only.',
+        sourceEventId: 'wd_replay_source_event',
+        provenance: 'world_director_replay_contract_test',
+        visibility: 'PUBLIC',
+      });
+      return { success: true, data: { sceneObjectId, evidenceId }, summary: 'Prepared replay fixture scene.' };
+    });
+
+    assert.equal(firstResult.success, true);
+    assert.equal(firstHandlerCalls, 1);
+    repository.saveStoryRun(repository.getStoryRun(storyId));
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    assert.ok(reloadedRepository.getStoryRun(storyId), 'story must be reconstructed from file-backed persistence');
+    const eventCountBeforeReplay = reloadedRepository.getCanonicalCommandEvents(storyId).length;
+    let replayHandlerCalls = 0;
+
+    const replayResult = await canonicalCommandEngine.execute(reloadedRepository, command, async () => {
+      replayHandlerCalls += 1;
+      return { success: true, data: { sceneObjectId, evidenceId }, summary: 'This handler must not run on replay.' };
+    });
+
+    assert.equal(replayResult.success, true, 'replaying a committed command after reload should return success');
+    assert.equal(replayHandlerCalls, 0, 'the committed command handler must not execute again after reload');
+    assert.equal(reloadedRepository.getCanonicalCommandEvents(storyId).length, eventCountBeforeReplay, 'replay must not append another canonical command event');
+    assert.equal(
+      reloadedRepository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.filter((object) => object.id === sceneObjectId).length,
+      1,
+      'the stable scene-object ID must occur exactly once',
+    );
+    assert.equal(
+      reloadedRepository.getHistoricalChronicleEngine(storyId).exportState().evidenceStore?.filter((item: any) => item.id === evidenceId).length,
+      1,
+      'the stable Chronicle evidence ID must occur exactly once',
+    );
+
+    const duplicateObjectResult = reloadedRepository.getGeographyGraph(storyId).addSceneObject(location.id, {
+      id: sceneObjectId,
+      name: 'Conflicting duplicate clue',
+      kind: 'ITEM',
+      visible: true,
+      provenance: 'world_director_replay_contract_test',
+    });
+    assert.equal(duplicateObjectResult.success, false, 'GeographyGraph must reject a duplicate stable scene-object ID');
+    assert.equal(
+      reloadedRepository.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.filter((object) => object.id === sceneObjectId).length,
+      1,
+      'a rejected duplicate must not replace or append to the existing canonical scene object',
+    );
+  } finally {
+    if (originalPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = originalPersistencePath;
+    rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});

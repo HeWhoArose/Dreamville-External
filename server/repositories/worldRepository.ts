@@ -3186,8 +3186,13 @@ export class InMemoryWorldRepository implements WorldRepository {
       return callback();
     }
     this.persistenceBatchDepth += 1;
+    let finished = false;
     const finish = () => {
-      this.persistenceBatchDepth -= 1;
+      // A flush can throw. The synchronous catch below must not run this
+      // cleanup a second time and drive the nesting depth negative.
+      if (finished) return;
+      finished = true;
+      this.persistenceBatchDepth = Math.max(0, this.persistenceBatchDepth - 1);
       if (this.persistenceBatchDepth === 0 && this.persistenceBatchDirty) {
         this.persistenceBatchDirty = false;
         this.persistentStore.save(this.buildPersistentData());

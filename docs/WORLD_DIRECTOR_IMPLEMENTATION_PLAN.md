@@ -598,3 +598,22 @@ Commit `99a631d656ca2c646007d4b7fba4045a3b083f95` adds the pure contract module.
 
 Next gate: verify CI, then add owner-adapter contract tests proving that existing authored objects are never adopted or overwritten, records owned by the same preparation reconcile deterministically, and identity conflicts yield an incomplete/conflict result. Do not enable production writes or claim crash recovery until durable transaction recovery is designed and demonstrated.
 
+### 2.14 Proposed preparation lifecycle policy prototype (2026-10-27)
+
+Added `evaluateWorldDirectorLifecycleTransition()` to the pure `worldDirectorPreparationContract.ts` module and a focused transition-matrix test.
+
+Proposed states:
+- `PLANNED`: identity exists but canonical preparation is not active.
+- `ACTIVE`: preparation is active for the scene/incident.
+- `RESOLVED`: preparation has reached its resolved terminal state.
+- `CANCELLED`: preparation was intentionally cancelled.
+- `SUPERSEDED`: preparation was replaced by a distinct preparation identity.
+
+The pure transition matrix currently permits `PLANNED -> ACTIVE/CANCELLED/SUPERSEDED` and `ACTIVE -> RESOLVED/CANCELLED/SUPERSEDED`. Repeating the same state is an idempotent no-op. Terminal states cannot be reopened under the same preparation identity; a new lifecycle must use an explicit new identity.
+
+**This is a proposed policy contract, not an accepted product-level lifecycle or production coordinator.** It deliberately does not mutate canonical owners, remove/hide scene objects, revise entity state, revoke knowledge, or erase Chronicle history. Those per-owner retention and compensation semantics remain unresolved and must be agreed before implementation.
+
+Commit `f61bcecf6d774886fefd1aa0ff4da6e722bc1581` adds the pure lifecycle policy; commit `c714f9d168b08784e52f1e914185d58ba77d8b4f` adds transition tests. Exact-head CI for the test commit is pending verification.
+
+Next: verify CI, then design a typed owner-adapter result that distinguishes created, already-owned/reconcilable, and conflicting records without mutating unrelated canon. Keep production writes disabled until adapter reconciliation and durable interruption/recovery tests pass.
+

@@ -813,3 +813,74 @@ test('World Director preparation lifecycle allows only explicit forward transiti
   }
 });
 
+test('World Director staged scene preparation persists canonical state and its command event in one save', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const { PersistentGameStore } = await import('../server/services/persistentGameStore');
+
+  const previousPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-atomic-'));
+  const persistencePath = join(tempDirectory, 'dreambook.json');
+  const originalSave = PersistentGameStore.prototype.save;
+  let saveCount = 0;
+
+  try {
+    process.env.DREAMBOOK_PERSISTENCE_PATH = persistencePath;
+    PersistentGameStore.prototype.save = function (data) {
+      if (this.getPath() === persistencePath) saveCount += 1;
+      return originalSave.call(this, data);
+    };
+
+    const repository = new InMemoryWorldRepository();
+    const storyId = 'wd_atomic_scene_commit';
+    const actorId = 'wd_atomic_scene_actor';
+    repository.seedStory(storyId);
+    const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+    assert.ok(location, 'fixture needs a canonical location');
+    saveCount = 0;
+
+    const command = {
+      commandId: 'wd_atomic_scene_commit_001',
+      storyId,
+      actorId,
+      type: 'INTERACT' as const,
+      payload: { action: 'PREPARE_ATOMIC_SCENE_COMMIT', preparationKey: 'fixture:atomic-scene-commit' },
+      source: 'SYSTEM' as const,
+      transactionMode: 'STAGED' as const,
+    };
+
+    const result = await canonicalCommandEngine.execute(repository, command, async (_command, context) => {
+      const added = context.repository.getGeographyGraph(storyId).addSceneObject(location.id, {
+        id: 'wd_atomic_scene_commit_clue',
+        name: 'Atomic commit clue fixture',
+        kind: 'ITEM',
+        visible: true,
+        properties: { worldDirectorFixture: true },
+        provenance: 'world_director_atomic_commit_test',
+      });
+      assert.equal(added.success, true);
+      return { success: true, data: { sceneObjectId: 'wd_atomic_scene_commit_clue' }, summary: 'Prepared atomic commit fixture.' };
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(saveCount, 1, 'the staged canonical state and its matching command event must flush in one persistence save');
+
+    const reloaded = new InMemoryWorldRepository();
+    const reloadedLocation = reloaded.getGeographyGraph(storyId).getNode(location.id);
+    assert.equal(
+      reloadedLocation?.sceneObjects?.filter((object) => object.id === 'wd_atomic_scene_commit_clue').length,
+      1,
+      'the committed scene object must survive reload',
+    );
+    assert.ok(
+      reloaded.getCanonicalCommandEvents(storyId).some((event: any) => event.commandId === command.commandId),
+      'the matching canonical command event must survive in the same durable commit',
+    );
+  } finally {
+    PersistentGameStore.prototype.save = originalSave;
+    if (previousPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPersistencePath;
+    rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});
+

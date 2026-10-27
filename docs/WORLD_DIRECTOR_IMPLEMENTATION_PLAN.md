@@ -709,6 +709,27 @@ Fault-injection coverage now targets both sides of the persistence commit point:
 - A save failure before the primary rename must leave no scene object or committed command event after reload, and a subsequent staged command must still commit.
 - A snapshot-pruning failure after rename must leave the command successful, with the scene object and matching command event present after reload.
 
-**Verification:** the first CI run for the pre-fix test commit failed at the retained-command-event assertion (1,574 passed, 1 failed). The correction is now committed; exact-head CI must pass before this gate is marked complete. This test models injected save/maintenance failures, not actual OS process termination, power loss, fsync guarantees, or cross-process concurrent writers.
+**Verification:** the first CI run for the pre-fix test commit failed at the retained-command-event assertion (1,574 passed, 1 failed). The correction is now verified at exact head `87a0ee91382e0eea2041d8cad8b9d18bbd8b6071`:
+- Dreamville Verification `40492986617`: **1,576 passed, 0 failed**, production build succeeded.
+- Dreamville Release Gate `40492986632`: **1,576 passed, 0 failed**, release checks and production build succeeded.
+- Additional Dreamville Verification `40492986669`: **1,576 passed, 0 failed**, production build succeeded.
 
-Next: verify exact-head CI, then test primary-file corruption recovery against snapshots and review whether the repository's persistence format gives the required guarantees for World Director preparation. Production preparation writes remain disabled.
+The final rollback path removes the uncommitted event in memory and immediately restores/persists the pre-state with the cleaned history; it does not persist the intermediate staged scene without its event. The test models injected save/maintenance failures, not actual OS process termination, power loss, fsync guarantees, or cross-process concurrent writers.
+
+Next: test primary-file corruption recovery against snapshots and review whether the repository's persistence format gives the required guarantees for World Director preparation. Production preparation writes remain disabled.
+
+### 2.19 Pure owner-record planning and idempotence (2026-10-27)
+
+Added `planWorldDirectorOwnedRecord()` as a pure planning operation layered on the existence-aware decision and per-owner marker adapters. It returns a proposed record and decision; it does not write to a canonical owner.
+
+The focused regression verifies:
+- An absent stable ID produces a `CREATE` candidate with the expected ownership marker.
+- Repeating the same desired record yields `RECONCILE_OWNED` with `changed: false`.
+- A changed desired description yields a proposed reconciliation while preserving the existing ownership marker.
+- An existing same-ID authored/unmarked record returns `CONFLICT`, `changed: false`, and the original record unchanged.
+- A record owned by a different preparation key returns `CONFLICT` and is unchanged.
+
+Exact-head CI at `87a0ee91382e0eea2041d8cad8b9d18bbd8b6071` passed all three workflows with **1,576 tests passed and 0 failures** in each, with production builds successful.
+
+This is still a pure planner over the scene-object adapter, not a production reconciliation coordinator. The per-owner merge callback must preserve unrelated fields; no canonical mutation, lifecycle deletion, knowledge revocation, or Chronicle erasure is performed. Next gate: corruption/restart recovery and then a transactional adapter integration test proving create → repeat → reconcile → conflict against real canonical owners. Phase 0 remains open.
+

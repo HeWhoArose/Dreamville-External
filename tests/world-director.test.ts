@@ -1005,7 +1005,7 @@ test('World Director ownership adapters preserve owner metadata and refuse confl
   const markedSceneObject = worldDirectorOwnershipAdapters.sceneObject.withMarker(sceneObject, marker);
   assert.deepEqual(worldDirectorOwnershipAdapters.sceneObject.read(markedSceneObject), marker);
   assert.equal(markedSceneObject.properties?.authoredNote, 'preserve scene note');
-  assert.equal(sceneObject.properties.worldDirectorOwnership, undefined, 'adapter must not mutate the input record');
+  assert.equal((sceneObject.properties as Record<string, unknown>).worldDirectorOwnership, undefined, 'adapter must not mutate the input record');
   assert.throws(
     () => worldDirectorOwnershipAdapters.sceneObject.withMarker(markedSceneObject, foreignMarker),
     /refuses to replace a conflicting ownership marker/,

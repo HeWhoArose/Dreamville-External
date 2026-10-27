@@ -718,3 +718,68 @@ test('World Director ownership reconciliation never claims unmarked or foreign c
   );
 });
 
+test('World Director ownership markers survive canonical owner export/import without replacing authored metadata', async () => {
+  const { GeographyGraph } = await import('../server/domain/geographyGraph');
+  const { EntityRegistry } = await import('../server/domain/entityCard');
+  const { HistoricalChronicleEngine } = await import('../server/domain/historicalChronicleEngine');
+  const { WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION } = await import('../server/domain/worldDirectorPreparationContract');
+
+  const marker = {
+    contractVersion: WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION,
+    preparationKey: 'incident:shack-murder:cycle-42',
+    role: 'primary-clue',
+  };
+
+  const graph = new GeographyGraph();
+  const location = graph.getAllNodes()[0];
+  assert.ok(location, 'fixture needs a canonical location');
+  const authoredProperties = { authoredNote: 'keep this author-supplied detail' };
+  const addResult = graph.addSceneObject(location.id, {
+    id: 'wd_owner_marker_scene_object',
+    name: 'Owner marker round-trip fixture',
+    kind: 'ITEM',
+    properties: { ...authoredProperties, worldDirectorOwnership: marker },
+    provenance: 'authored',
+  });
+  assert.equal(addResult.success, true);
+  const restoredGraph = new GeographyGraph(false);
+  restoredGraph.importState(graph.exportState());
+  const restoredObject = restoredGraph.getNode(location.id)?.sceneObjects?.find((object) => object.id === 'wd_owner_marker_scene_object');
+  assert.deepEqual(restoredObject?.properties?.worldDirectorOwnership, marker);
+  assert.equal(restoredObject?.properties?.authoredNote, authoredProperties.authoredNote, 'scene-object marker must coexist with authored properties');
+
+  const entities = new EntityRegistry('wd_owner_marker_story');
+  entities.upsert({
+    id: 'wd_owner_marker_entity',
+    storyId: 'wd_owner_marker_story',
+    name: 'Owner marker entity fixture',
+    kind: 'NPC',
+    metadata: { authoredNote: 'preserve entity metadata', worldDirectorOwnership: marker },
+  });
+  const restoredEntities = new EntityRegistry('wd_owner_marker_story');
+  restoredEntities.importState(entities.exportState());
+  const restoredEntity = restoredEntities.get('wd_owner_marker_entity');
+  assert.deepEqual(restoredEntity?.metadata.worldDirectorOwnership, marker);
+  assert.equal(restoredEntity?.metadata.authoredNote, 'preserve entity metadata', 'entity ownership metadata must not erase unrelated metadata');
+
+  const chronicle = new HistoricalChronicleEngine();
+  chronicle.recordEvidence({
+    id: 'wd_owner_marker_evidence',
+    category: 'WORLD_ANOMALY',
+    timestamp: { year: 42, month: 10, day: 14, hour: 17, minute: 42, second: 0, totalElapsedSeconds: 0 },
+    primarySubjectId: 'wd_owner_marker_actor',
+    locationId: location.id,
+    summary: 'Owner marker round-trip evidence fixture.',
+    details: 'Test-only evidence used to verify structured ownership metadata persistence.',
+    sourceEventId: 'wd_owner_marker_source_event',
+    provenance: 'world_director_owner_adapter_test',
+    visibility: 'PUBLIC',
+    metadata: { authoredNote: 'preserve evidence metadata', worldDirectorOwnership: marker },
+  });
+  const restoredChronicle = new HistoricalChronicleEngine();
+  restoredChronicle.importState(chronicle.exportState());
+  const evidence = restoredChronicle.exportState().evidenceStore?.find((item: any) => item.id === 'wd_owner_marker_evidence');
+  assert.deepEqual(evidence?.metadata?.worldDirectorOwnership, marker);
+  assert.equal(evidence?.metadata?.authoredNote, 'preserve evidence metadata', 'evidence ownership metadata must not erase unrelated metadata');
+});
+

@@ -1,3 +1,7 @@
+import type { EntityCard } from './entityCard';
+import type { HistoricalEvidence } from './historicalEvidence';
+import type { KnowledgeFact, LocationSceneObject } from './types';
+
 /**
  * World Director preparation identity contract.
  *
@@ -231,4 +235,120 @@ export function evaluateWorldDirectorOwnerRecord(
     mayDelete: false,
   };
 }
+
+export interface WorldDirectorOwnershipAdapter<TRecord> {
+  read(record: TRecord): WorldDirectorOwnershipMarker | null;
+  /**
+   * Returns a new record and preserves unrelated owner metadata.
+   * Call only after evaluateWorldDirectorOwnerRecord permits CREATE or RECONCILE_OWNED.
+   */
+  withMarker(record: TRecord, marker: WorldDirectorOwnershipMarker): TRecord;
+}
+
+function parseOwnershipMarker(value: unknown): WorldDirectorOwnershipMarker | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const marker = value as Partial<WorldDirectorOwnershipMarker>;
+  if (
+    typeof marker.contractVersion !== 'number' ||
+    typeof marker.preparationKey !== 'string' ||
+    typeof marker.role !== 'string'
+  ) return null;
+  return {
+    contractVersion: marker.contractVersion,
+    preparationKey: marker.preparationKey,
+    role: marker.role,
+  };
+}
+
+function assertMarkerMayBeWritten(existingValue: unknown, marker: WorldDirectorOwnershipMarker): void {
+  if (existingValue === undefined || existingValue === null) return;
+  const existing = parseOwnershipMarker(existingValue);
+  if (
+    !existing ||
+    existing.contractVersion !== marker.contractVersion ||
+    existing.preparationKey !== marker.preparationKey ||
+    existing.role !== marker.role
+  ) {
+    throw new Error('World Director ownership adapter refuses to replace a conflicting ownership marker.');
+  }
+}
+
+function cloneMarker(marker: WorldDirectorOwnershipMarker): WorldDirectorOwnershipMarker {
+  return {
+    contractVersion: marker.contractVersion,
+    preparationKey: marker.preparationKey,
+    role: marker.role,
+  };
+}
+
+/**
+ * Explicit marker serialization adapters for canonical owners. These functions
+ * are pure record transformations; they do not persist or mutate owner state.
+ */
+export const worldDirectorOwnershipAdapters = {
+  sceneObject: {
+    read(record: LocationSceneObject): WorldDirectorOwnershipMarker | null {
+      return parseOwnershipMarker(record.properties?.worldDirectorOwnership);
+    },
+    withMarker(record: LocationSceneObject, marker: WorldDirectorOwnershipMarker): LocationSceneObject {
+      const existingValue = record.properties?.worldDirectorOwnership;
+      assertMarkerMayBeWritten(existingValue, marker);
+      return {
+        ...record,
+        properties: {
+          ...(record.properties || {}),
+          worldDirectorOwnership: cloneMarker(marker),
+        },
+      };
+    },
+  } satisfies WorldDirectorOwnershipAdapter<LocationSceneObject>,
+  entityCard: {
+    read(record: EntityCard): WorldDirectorOwnershipMarker | null {
+      return parseOwnershipMarker(record.metadata?.worldDirectorOwnership);
+    },
+    withMarker(record: EntityCard, marker: WorldDirectorOwnershipMarker): EntityCard {
+      const existingValue = record.metadata?.worldDirectorOwnership;
+      assertMarkerMayBeWritten(existingValue, marker);
+      return {
+        ...record,
+        metadata: {
+          ...(record.metadata || {}),
+          worldDirectorOwnership: cloneMarker(marker),
+        },
+      };
+    },
+  } satisfies WorldDirectorOwnershipAdapter<EntityCard>,
+  historicalEvidence: {
+    read(record: HistoricalEvidence): WorldDirectorOwnershipMarker | null {
+      return parseOwnershipMarker(record.metadata?.worldDirectorOwnership);
+    },
+    withMarker(record: HistoricalEvidence, marker: WorldDirectorOwnershipMarker): HistoricalEvidence {
+      const existingValue = record.metadata?.worldDirectorOwnership;
+      assertMarkerMayBeWritten(existingValue, marker);
+      return {
+        ...record,
+        metadata: {
+          ...(record.metadata || {}),
+          worldDirectorOwnership: cloneMarker(marker),
+        },
+      };
+    },
+  } satisfies WorldDirectorOwnershipAdapter<HistoricalEvidence>,
+  knowledgeFact: {
+    read(record: KnowledgeFact): WorldDirectorOwnershipMarker | null {
+      return parseOwnershipMarker(record.metadata?.worldDirectorOwnership);
+    },
+    withMarker(record: KnowledgeFact, marker: WorldDirectorOwnershipMarker): KnowledgeFact {
+      const existingValue = record.metadata?.worldDirectorOwnership;
+      assertMarkerMayBeWritten(existingValue, marker);
+      return {
+        ...record,
+        metadata: {
+          ...(record.metadata || {}),
+          worldDirectorOwnership: cloneMarker(marker),
+        },
+      };
+    },
+  } satisfies WorldDirectorOwnershipAdapter<KnowledgeFact>,
+};
 

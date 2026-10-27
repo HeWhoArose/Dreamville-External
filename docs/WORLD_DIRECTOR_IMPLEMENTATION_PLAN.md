@@ -584,3 +584,17 @@ Before any production preparation write is introduced, the implementation design
 
 No production writes are authorized by this design note. Next implementation slice should be tests and contract types for stable preparation identity + owned-record reconciliation, while keeping the coordinator disabled/read-only until durable recovery and lifecycle gates pass.
 
+### 2.13 Pure stable-identity and ownership contract prototype (2026-10-27)
+
+Added `server/domain/worldDirectorPreparationContract.ts` as a **pure contract module**, deliberately not wired into production scene mutation paths:
+
+- `buildWorldDirectorStableRecordId()` requires explicit StoryRun ID, preparation key, record kind, role, and scope. It produces a deterministic, delimiter-safe ID from all five inputs and rejects blank or overlong identity parts. It does not infer keys from narration or wall-clock time and does not use a short hash as the sole identity.
+- `classifyWorldDirectorOwnership()` distinguishes `CREATE`, `RECONCILE_OWNED`, and `CONFLICT`. Only a record carrying the current contract version and matching preparation key + role is considered owned by that preparation. Unmarked/authored records, foreign preparation ownership, and older ownership-contract versions are conflicts requiring explicit handling.
+- Added focused tests for repeatability, distinct preparation keys, location scope, role separation, invalid input, matching ownership, unrelated ownership, and version mismatch.
+
+This is a contract prototype, not a preparation coordinator and not proof of the full lifecycle. The ID format and ownership-marker persistence must be reviewed against all canonical owners before production adoption. In particular, each owner needs an explicit place to store ownership metadata; the current test covers the pure decision rule, not storage adapters, entity/knowledge/Chronicle ownership persistence, reconciliation mutations, or crash recovery.
+
+Commit `99a631d656ca2c646007d4b7fba4045a3b083f95` adds the pure contract module. Commit `fa26d08a589a1acfb98fbea95cfa0c9175681060` adds its focused tests. Exact-head CI for the test commit is pending verification.
+
+Next gate: verify CI, then add owner-adapter contract tests proving that existing authored objects are never adopted or overwritten, records owned by the same preparation reconcile deterministically, and identity conflicts yield an incomplete/conflict result. Do not enable production writes or claim crash recovery until durable transaction recovery is designed and demonstrated.
+

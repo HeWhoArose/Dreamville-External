@@ -654,3 +654,29 @@ Exact-head CI for `95c0a88f01de27620c303106f61a58f59541eb64` succeeded in all th
 
 Next: design explicit per-owner read/write adapters that preserve unrelated metadata and return the typed decision without mutation on conflicts. Then test create → repeat → reconcile → conflict behavior for each supported owner and add fault-injection/restart coverage before any production scene-preparation writes are enabled.
 
+### 2.16 Explicit ownership metadata adapters (2026-10-27)
+
+Added `worldDirectorOwnershipAdapters` to `server/domain/worldDirectorPreparationContract.ts` for four current canonical record shapes:
+
+- `sceneObject`: stores the marker under `properties.worldDirectorOwnership`.
+- `entityCard`: stores the marker under `metadata.worldDirectorOwnership`.
+- `historicalEvidence`: stores the marker under `metadata.worldDirectorOwnership`.
+- `knowledgeFact`: stores the marker under `metadata.worldDirectorOwnership`.
+
+Each adapter has a typed `read()` and pure `withMarker()` transformation. The transformation returns a new record, merges rather than replaces unrelated properties/metadata, and refuses to replace a different or malformed existing ownership marker. The optional `KnowledgeFact.metadata` extension is structured provenance only; it does not grant Phase 8 actor knowledge.
+
+Focused tests cover:
+- Marker attachment/readback and preservation of unrelated metadata.
+- Input immutability for scene objects.
+- Rejection of a conflicting marker rather than silently changing ownership.
+- Export/import and file-backed persistence for scene objects, entity cards, Chronicle evidence, and knowledge facts.
+
+Exact-head CI for `8f3edd4c3a27cea0e93ec5c4e3df2a36b45c74a0` succeeded in all three workflows:
+- Dreamville Verification run `40490508862`: **1,572 passed, 0 failed**, production build succeeded.
+- Dreamville Release Gate run `40490508867`: **1,572 passed, 0 failed**, release checks and production build succeeded.
+- Additional Dreamville Verification run `40490508856`: **1,572 passed, 0 failed**, production build succeeded.
+
+These are **marker storage adapters**, not complete owner mutation adapters. They are not wired to production preparation, and callers must first use `evaluateWorldDirectorOwnerRecord()` to distinguish absent records from existing unmarked/foreign records. A full create/repeat/reconcile/conflict coordinator is still not implemented.
+
+Next gate: test a pure owner-record planning/reconciliation operation that returns a proposed canonical record without writing it, proves repeated preparation is idempotent, and leaves conflicting existing records unchanged. Then add owner-specific persistence/restart and interruption tests. Phase 0 remains open; production scene-preparation writes stay disabled.
+

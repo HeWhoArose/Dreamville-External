@@ -141,6 +141,51 @@ The first test is deliberately a **negative/control test**: an investigation hoo
 
 **Phase 0 exit rule:** no scene-preparation implementation that mutates canonical state begins until (a) this cross-profile contract is reviewed, (b) the isolated-shack integration test is executable and its result recorded, (c) owner/persistence contracts for scene objects, entities, events, Chronicle and knowledge have been checked, and (d) entry-path review states which callers prepare, which merely project, and which resolve actions. Live provider/UI acceptance remains a later player-run gate.
 
+
+
+### 2.9 Canonical preparation ownership contract
+
+The source review establishes the following boundaries. World Director may coordinate requirements and return a preparation report, but must not become a parallel persistence authority.
+
+| Fact category | Canonical owner / supported mutation path | Preparation contract |
+|---|---|---|
+| Location, environment, discrete scene objects | `GeographyGraph`, reached through `WorldRepository.getGeographyGraph(storyId)`; scene-object mutation methods include `addSceneObject`, `patchSceneObject`, and `removeSceneObject`. | Reconcile the destination's existing objects before adding anything. Use stable IDs and explicit provenance. A prose description, sensory string, or starting-situation hook is not itself a discrete object. |
+| NPC/entity identity, lifecycle, presence and location | `EntityRegistry` behind `WorldRepository` methods such as `saveEntityCard`, `instantiateEntityFromTemplate`, `cloneEntityCard`, and lifecycle methods; player/NPC lifecycle has its own repository methods. | Reuse existing canonical entities where identity matches. Keep presence, alive/dead state, location, and viewer visibility distinct. A dead/absent entity card alone is not proof that a physical body is a visible scene object. |
+| Committed current-world event / action outcome | Existing canonical command/event path, including `CanonicalCommandEngine` and the StoryRun canonical event log. Simulation event paths already transact and record associated Chronicle evidence. | Do not write directly to an event log from a readiness checker. Incident creation must define a committed event identity and transaction semantics before a coordinator invokes it. |
+| Historical evidence and chronicle | `HistoricalChronicleEngine` obtained from `WorldRepository`; runtime evidence is transactional, while `recordBootstrapEvidence` is explicitly bootstrap-only. | Historical recordkeeping must not be confused with a currently visible scene event. The generic story-genesis evidence is not a substitute for a prepared incident or visible body/clue. |
+| Player knowledge and discovery | `WorldRepository.addKnowledgeFact`, authorized-knowledge projections, and existing discovery/interaction command paths. | Scene preparation may establish that a fact/object exists; it must not automatically grant the player knowledge of hidden evidence or conclusions. Existence, discoverability, discovery, and learned interpretation are separate states. |
+| Player-visible scene projection | `CurrentSituationBuilder.build()` and its player-safe projection. | Read-only projection consumes canonical state and epistemic rules. It must not repair missing state or mutate canon while assembling a prompt. |
+| Ambient population and activity | `WorldActivityDirector.ensureAmbientPopulation()` plus its activity/event projection. | Continue to reuse this owner. It is not an incident generator and must not satisfy scenario-specific victim/evidence requirements by inventing an ambient NPC. |
+| Preparation coordination and diagnostics | World Director. | Select a conservative profile, reconcile required facts with canonical owners, report missing/uncertain requirements, and invoke existing mutation authorities only after a transaction/idempotency contract is approved. It must not own a shadow copy of objects, entities, events, or knowledge. |
+
+#### Universal scene-preparation result
+
+Every profile must use the same outer result contract; profile-specific requirements are policies, not separate competing world systems:
+
+- `profile`: the selected scene intent/profile and selection confidence/provenance.
+- `status`: `READY`, `READY_WITH_UNCERTAINTY`, `INCOMPLETE`, or `NOT_APPLICABLE`.
+- `requirements`: requirement identifiers with status (`SATISFIED`, `MISSING`, `UNCERTAIN`, `NOT_REQUIRED`) and evidence references.
+- `canonicalChanges`: stable references to records actually committed by their owners; empty for a read-only assessment or failed preparation.
+- `issues`: actionable codes, not just prose, including whether the issue is safe to defer or requires stopping scene generation.
+- `idempotencyKey` / preparation revision: enough to reconcile a repeated preparation request without duplicate entities, objects, incidents, events, or Chronicle records.
+- `visibility` and `knowledge` are evaluated independently from existence. Hidden objects may satisfy an existence requirement without satisfying a visible-anchor requirement.
+
+The outer contract does not imply every profile must create objects or events. A sparse room, quiet arrival, rest scene, or uncertain-occupancy scene may legitimately be ready with few/no entities. Profile policies must define positive requirements and negative cases so “more populated” is never treated as synonymous with “better prepared.”
+
+#### Investigation-specific policy (first vertical slice only)
+
+An investigation fixture may require a committed incident reference, a physical victim/body representation when the premise says a body is present, one or more canonical evidence anchors, and explicit visibility/discovery rules. It must distinguish established facts from hypotheses and unknowns. The coordinator may not invent a culprit, motive, cause of death, forensic result, or witness knowledge merely to satisfy readiness. The body is a scene object or other explicit physical-presence representation linked to the victim identity; the dead victim entity itself is not automatically projected as a living nearby entity.
+
+#### Transaction and lifecycle rules still to prove before write implementation
+
+1. Choose the established canonical command transaction boundary for multi-owner preparation and demonstrate rollback if any required mutation fails. Do not assume GeographyGraph, EntityRegistry, Chronicle and knowledge writes are automatically atomic merely because they are reachable from one repository.
+2. Derive stable incident/object/entity/event IDs from the authored scenario identity or a persisted preparation key, following existing deterministic-ID conventions; retries must reconcile rather than reset player changes.
+3. Persist a preparation marker/revision with canonical references, not a second copy of prepared facts. On reload, resolve references from their owners and verify that the prepared scene still exists.
+4. Define lifecycle transitions for discovered, consumed, moved, destroyed, or otherwise changed scene objects. Re-preparation must preserve legitimate player/world changes and only repair missing requirements that remain justified.
+5. Keep profile selection conservative. A text classifier can suggest a profile but cannot prove the facts implied by the premise exist. Ambiguous scenes should yield uncertainty or ask for authored clarification rather than inventing canon.
+
+These are design gates, not implemented behavior. Phase 0 stays open until transaction ownership and the required persistence/idempotency tests are validated.
+
 ## 3. Scope and Non-Goals
 
 ### In scope

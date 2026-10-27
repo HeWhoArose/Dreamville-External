@@ -1241,3 +1241,113 @@ test('World Director rejects command-ID reuse with a different payload after rep
     rmSync(tempDirectory, { recursive: true, force: true });
   }
 });
+
+test('World Director staged commit save failure rolls back and leaves batching usable for the next command', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const { PersistentGameStore } = await import('../server/services/persistentGameStore');
+
+  const previousPersistencePath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'dreamville-world-director-failed-commit-'));
+  const persistencePath = join(tempDirectory, 'dreambook.json');
+  const originalSave = PersistentGameStore.prototype.save;
+  let saveCount = 0;
+  let failNextSave = false;
+
+  try {
+    process.env.DREAMBOOK_PERSISTENCE_PATH = persistencePath;
+    PersistentGameStore.prototype.save = function (data) {
+      if (this.getPath() === persistencePath) {
+        saveCount += 1;
+        if (failNextSave) {
+          failNextSave = false;
+          throw new Error('injected staged commit persistence failure');
+        }
+      }
+      return originalSave.call(this, data);
+    };
+
+    const repository = new InMemoryWorldRepository();
+    const storyId = 'wd_atomic_commit_failure';
+    const actorId = 'wd_atomic_commit_failure_actor';
+    repository.seedStory(storyId);
+    const location = repository.getGeographyGraph(storyId).getAllNodes()[0];
+    assert.ok(location, 'fixture needs a canonical location');
+    saveCount = 0;
+    failNextSave = true;
+
+    const failedCommand = {
+      commandId: 'wd_atomic_commit_failure_001',
+      storyId,
+      actorId,
+      type: 'INTERACT' as const,
+      payload: { action: 'PREPARE_FAILING_SCENE', preparationKey: 'fixture:failed-commit' },
+      source: 'SYSTEM' as const,
+      transactionMode: 'STAGED' as const,
+    };
+    const failedResult = await canonicalCommandEngine.execute(repository, failedCommand, async (_command, context) => {
+      const added = context.repository.getGeographyGraph(storyId).addSceneObject(location.id, {
+        id: 'wd_atomic_commit_failure_clue',
+        name: 'Must not survive failed commit',
+        kind: 'ITEM',
+        visible: true,
+        provenance: 'world_director_failed_commit_test',
+      });
+      assert.equal(added.success, true);
+      return { success: true, data: { sceneObjectId: 'wd_atomic_commit_failure_clue' }, summary: 'Attempted a commit that will fail at persistence.' };
+    });
+
+    assert.equal(failedResult.success, false, 'a failed durable flush must fail the staged command');
+    assert.match(failedResult.errorReason || '', /injected staged commit persistence failure/);
+    assert.equal(saveCount, 2, 'the failed commit flush must be followed by a durable pre-state restore');
+
+    const afterFailure = new InMemoryWorldRepository();
+    assert.equal(
+      afterFailure.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_atomic_commit_failure_clue'),
+      false,
+      'a scene object from a failed staged commit must not survive repository reload',
+    );
+    assert.equal(
+      afterFailure.getCanonicalCommandEvents(storyId).some((event: any) => event.commandId === failedCommand.commandId),
+      false,
+      'a failed staged commit must not leave a committed command event',
+    );
+
+    saveCount = 0;
+    const recoveryCommand = {
+      commandId: 'wd_atomic_commit_failure_002',
+      storyId,
+      actorId,
+      type: 'INTERACT' as const,
+      payload: { action: 'PREPARE_RECOVERY_SCENE', preparationKey: 'fixture:recovery-commit' },
+      source: 'SYSTEM' as const,
+      transactionMode: 'STAGED' as const,
+    };
+    const recoveryResult = await canonicalCommandEngine.execute(repository, recoveryCommand, async (_command, context) => {
+      const added = context.repository.getGeographyGraph(storyId).addSceneObject(location.id, {
+        id: 'wd_atomic_commit_recovery_clue',
+        name: 'Recovery commit clue',
+        kind: 'ITEM',
+        visible: true,
+        provenance: 'world_director_failed_commit_test',
+      });
+      assert.equal(added.success, true);
+      return { success: true, data: { sceneObjectId: 'wd_atomic_commit_recovery_clue' }, summary: 'Committed after recovering from a failed flush.' };
+    });
+
+    assert.equal(recoveryResult.success, true, 'a subsequent staged command must still commit after the prior save failure');
+    assert.equal(saveCount, 1, 'the subsequent command must flush exactly once, proving the batch depth recovered');
+    const afterRecovery = new InMemoryWorldRepository();
+    assert.equal(
+      afterRecovery.getGeographyGraph(storyId).getNode(location.id)?.sceneObjects?.some((object) => object.id === 'wd_atomic_commit_recovery_clue'),
+      true,
+    );
+    assert.ok(afterRecovery.getCanonicalCommandEvents(storyId).some((event: any) => event.commandId === recoveryCommand.commandId));
+  } finally {
+    PersistentGameStore.prototype.save = originalSave;
+    if (previousPersistencePath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+    else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPersistencePath;
+    rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});
+

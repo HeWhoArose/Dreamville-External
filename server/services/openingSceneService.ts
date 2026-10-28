@@ -527,9 +527,14 @@ export class OpeningSceneService {
 			},
 		};
 
-		run.openingScene = openingScene;
-		run.runtimeState = {
-			...(run.runtimeState || {}),
+		// Opening preparation may commit through a staged canonical transaction, which
+		// replaces the repository's StoryRun snapshot. Merge the opening projection onto
+		// that latest run so we do not overwrite newly prepared canonical timeline state
+		// with the stale reference captured before preparation began.
+		const latestRun = worldRepo.getStoryRun(storyId) || run;
+		latestRun.openingScene = openingScene;
+		latestRun.runtimeState = {
+			...(latestRun.runtimeState || {}),
 			openingNarrativeContext: {
 				research: researchPacket,
 				generation: generationMeta,
@@ -537,7 +542,7 @@ export class OpeningSceneService {
 				capturedAt: new Date().toISOString(),
 			},
 		};
-		worldRepo.registerStoryRun(run);
+		worldRepo.registerStoryRun(latestRun);
 		serverMockAuthority.recordOpeningScene(storyId, openingScene);
 
 		return openingScene;

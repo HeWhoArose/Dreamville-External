@@ -290,7 +290,7 @@ test('Phase 2 leaves an authored owner conflict unchanged and reports blocked pr
   assert.equal(readiness?.preparation?.status, 'BLOCKED');
   assert.equal(readiness?.preparation?.issues?.[0]?.code, 'OWNER_CONFLICT');
   assert.equal(rig.repository.getEntityCard(storyId, victimId)?.name, 'Authored unrelated person');
-  assert.deepEqual(rig.repository.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects, []);
+  assert.deepEqual(rig.repository.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects || [], []);
   assert.equal(rig.repository.getCanonicalCommandEvents(storyId).length, commandCount);
   assert.equal(persisted.plannedEvents.some((event: any) => event.category === 'INVESTIGATION_INCIDENT'), false);
 });

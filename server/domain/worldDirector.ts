@@ -8,6 +8,8 @@
 
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { WorldDirectorPreparationResult } from '../services/worldDirectorPreparationService';
+import { isPublicArchetype, normalizeLocationArchetype } from './locationArchetypes';
+import { resolveSpatialLineOfSight, type SpatialObstacle } from './spatialAuthority';
 import {
   WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY,
   WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES,
@@ -18,7 +20,7 @@ import {
   type WorldDirectorInvestigationSceneContractReport,
 } from './worldDirectorPreparationContract';
 
-export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'GENERAL';
+export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'PUBLIC_SOCIAL' | 'ORDINARY_ROOM' | 'TRAVEL_ARRIVAL' | 'EXPLORATION' | 'COMBAT_CONTEXT' | 'GENERAL';
 
 export type WorldDirectorReadinessStatus =
   | 'READY'
@@ -75,6 +77,26 @@ export interface WorldDirectorReadinessIssue {
     | 'INVESTIGATION_VICTIM_NOT_ESTABLISHED'
     | 'INVESTIGATION_EVIDENCE_NOT_ESTABLISHED'
     | 'INVESTIGATION_UNRESOLVED_QUESTION'
+    | 'RESTRICTED_SITE_ACCESS_NOT_ESTABLISHED'
+    | 'RESTRICTED_SITE_BOUNDARY_NOT_VISIBLE'
+    | 'ABANDONED_SITE_ABSENCE_NOT_ESTABLISHED'
+    | 'ABANDONED_SITE_PHYSICAL_CUE_NOT_VISIBLE'
+    | 'PUBLIC_SOCIAL_OCCUPANCY_UNKNOWN'
+    | 'PUBLIC_SOCIAL_OCCUPANCY_NOT_INHABITED'
+    | 'PUBLIC_SOCIAL_ACTIVITY_NOT_ESTABLISHED'
+    | 'ORDINARY_ROOM_SCENE_ANCHOR_NOT_VISIBLE'
+    | 'ORDINARY_ROOM_OCCUPANCY_UNKNOWN'
+    | 'TRAVEL_ORIGIN_MISMATCH'
+    | 'TRAVEL_DESTINATION_UNAVAILABLE'
+    | 'TRAVEL_ARRIVAL_PENDING'
+    | 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE'
+    | 'EXPLORATION_DISCOVERIES_UNRESOLVED'
+    | 'COMBAT_PLAYER_CONTEXT_UNAVAILABLE'
+    | 'COMBAT_PLAYER_NOT_IN_ENCOUNTER'
+    | 'COMBAT_PLAYER_NOT_ACTIVE'
+    | 'COMBAT_OPPONENT_NOT_VISIBLE'
+    | 'COMBAT_POSITION_UNAVAILABLE'
+    | 'COMBAT_LINE_OF_SIGHT_BLOCKED'
     | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
@@ -93,6 +115,16 @@ export interface WorldDirectorReadinessReport {
     visibleEntities: number;
     visibleEvents: number;
   };
+  /** Canonical intended destination while the player is still en route. */
+  travelDestinationLocationId?: string;
+  /** Player-visible tactical facts; concealed participants are excluded. */
+  combatContext?: {
+    phase: 'ACTIVE';
+    currentRound: number;
+    visibleLivingOpponents: number;
+    nearestOpponentDistanceCells?: number;
+    nearestOpponentLineOfSight?: 'CLEAR' | 'BLOCKED';
+  };
 }
 
 /**
@@ -102,6 +134,10 @@ export interface WorldDirectorReadinessReport {
 function isInvestigationPremise(value: string): boolean {
   return /\b(?:murder|murdered|homicide|corpse|dead body|crime scene|victim|forensic examination)\b/i.test(value)
     || /\binvestigat\w{0,12}.{0,48}\b(?:death|body|victim|crime|murder)\b/i.test(value);
+}
+
+function isExplorationPremise(value: string): boolean {
+  return /\b(?:explor\w*|scout\w*|survey\w*|reconnoit\w*)\b/i.test(value);
 }
 
 function normalizedVisibleObjects(objects: WorldDirectorSceneObjectEvidence[]) {
@@ -284,7 +320,294 @@ export class WorldDirector {
       visibleEvents: events.length,
     };
 
+    const activeCombat = input.worldRepo && input.storyId
+      ? input.worldRepo.getCombatEngine(input.storyId)
+      : undefined;
+    if (activeCombat?.getCombatPhase() === 'ACTIVE') {
+      const player = input.worldRepo!.getPlayerLifecycle(input.storyId!);
+      const actorId = player?.actorId;
+      const issues: WorldDirectorReadinessIssue[] = [];
+      let combatContext: WorldDirectorReadinessReport['combatContext'];
+      if (!actorId) {
+        issues.push({
+          code: 'COMBAT_PLAYER_CONTEXT_UNAVAILABLE',
+          requirement: 'Resolve the player actor before projecting active combat context',
+          message: 'Active combat has no canonical player actor context; use no actor-specific battlefield details.',
+        });
+      } else {
+        const projection = activeCombat.projectCombatForActor(actorId);
+        const playerParticipant = projection.participants.find((participant) => participant.id === actorId);
+        if (!playerParticipant) {
+          issues.push({
+            code: 'COMBAT_PLAYER_NOT_IN_ENCOUNTER',
+            requirement: 'The canonical player actor participates in the active encounter',
+            message: 'The player actor is not present in the projected active encounter; do not narrate combat participation or proximity.',
+          });
+        }
+        const opponents = projection.participants.filter((participant) =>
+          participant.team === 'enemies' && !participant.isDead,
+        );
+        if (playerParticipant && (playerParticipant.isDead || playerParticipant.hpCurrent <= 0)) {
+          issues.push({
+            code: 'COMBAT_PLAYER_NOT_ACTIVE',
+            requirement: 'The player actor is conscious and active in the encounter',
+            message: 'The player actor is not in an active condition for this encounter; do not narrate active player combat participation.',
+          });
+        }
+        if (playerParticipant && !opponents.length) {
+          issues.push({
+            code: 'COMBAT_OPPONENT_NOT_VISIBLE',
+            requirement: 'At least one living opponent is visible in the player-scoped combat projection',
+            message: 'No living opponent is established in the player-visible encounter projection; do not identify or describe an unseen opponent.',
+          });
+        }
+        if (playerParticipant && !playerParticipant.isDead && playerParticipant.hpCurrent > 0 && opponents.length) {
+          const positioned = opponents
+            .filter((opponent) => Number.isFinite(opponent.x) && Number.isFinite(opponent.y))
+            .map((opponent) => ({
+              distance: Math.hypot(opponent.x - playerParticipant.x, opponent.y - playerParticipant.y),
+              opponent,
+            }))
+            .sort((a, b) => a.distance - b.distance);
+          if (!Number.isFinite(playerParticipant.x) || !Number.isFinite(playerParticipant.y) || !positioned.length) {
+            issues.push({
+              code: 'COMBAT_POSITION_UNAVAILABLE',
+              requirement: 'Use canonical player and opponent positions for tactical range',
+              message: 'A player-visible combat participant has no usable canonical grid position; do not infer tactical range or relative placement.',
+            });
+          } else {
+            const spatialObstacles: SpatialObstacle[] = (projection.obstacles || []).map((obstacle, index) => ({
+              id: `combat_obstacle_${index + 1}_${obstacle.x}_${obstacle.y}`,
+              minX: obstacle.x,
+              maxX: obstacle.x,
+              minY: obstacle.y,
+              maxY: obstacle.y,
+              blocksMovement: obstacle.isImpassable !== false,
+              blocksSight: obstacle.isImpassable !== false,
+            }));
+            const nearest = positioned[0];
+            const lineOfSight = resolveSpatialLineOfSight(
+              { x: playerParticipant.x, y: playerParticipant.y },
+              { x: nearest.opponent.x, y: nearest.opponent.y },
+              spatialObstacles,
+            );
+            combatContext = {
+              phase: 'ACTIVE',
+              currentRound: projection.currentRound,
+              visibleLivingOpponents: opponents.length,
+              nearestOpponentDistanceCells: Number(nearest.distance.toFixed(2)),
+              nearestOpponentLineOfSight: lineOfSight.clear ? 'CLEAR' : 'BLOCKED',
+            };
+            if (!lineOfSight.clear) {
+              issues.push({
+                code: 'COMBAT_LINE_OF_SIGHT_BLOCKED',
+                requirement: 'Respect canonical obstacles between the player and the nearest visible opponent',
+                message: 'A canonical battlefield obstacle blocks the line of sight to the nearest player-visible opponent; do not imply a clear shot or unobstructed view.',
+              });
+            }
+          }
+        }
+      }
+      return {
+        profile: 'COMBAT_CONTEXT',
+        status: issues.some((issue) => issue.code !== 'COMBAT_LINE_OF_SIGHT_BLOCKED')
+          ? 'INCOMPLETE'
+          : issues.length ? 'READY_WITH_UNCERTAINTY' : 'READY',
+        issues,
+        evidenceCounts,
+        ...(combatContext ? { combatContext } : {}),
+      };
+    }
+
+    const travelingPlayer = input.worldRepo && input.storyId
+      ? input.worldRepo.getPlayerLifecycle(input.storyId)
+      : undefined;
+    const journey = travelingPlayer?.activeJourney;
+    if (travelingPlayer?.isTraveling && journey) {
+      const currentLocationId = travelingPlayer.locationId;
+      const destination = input.worldRepo!.getGeographyGraph(input.storyId!).getNode(journey.destinationLocationId);
+      const issues: WorldDirectorReadinessIssue[] = [];
+      if (currentLocationId !== journey.originLocationId) {
+        issues.push({
+          code: 'TRAVEL_ORIGIN_MISMATCH',
+          requirement: 'Keep the canonical player location anchored to the journey origin until completion',
+          message: 'The active journey origin does not match the player’s canonical location; do not infer an arrival or silently repair spatial state.',
+        });
+      }
+      if (!destination || !destination.accessible) {
+        issues.push({
+          code: 'TRAVEL_DESTINATION_UNAVAILABLE',
+          requirement: 'Resolve the active journey destination from accessible canonical geography',
+          message: 'The active journey destination is missing or inaccessible in canonical geography; do not narrate arrival there.',
+        });
+      }
+      if (!issues.length) {
+        issues.push({
+          code: 'TRAVEL_ARRIVAL_PENDING',
+          requirement: 'Keep the intended destination visible without claiming arrival before canonical completion',
+          message: `The player is still traveling toward ${destination!.name}; preserve that destination and do not claim arrival until canonical spatial state changes.`,
+        });
+      }
+      return {
+        profile: 'TRAVEL_ARRIVAL',
+        status: issues.some((issue) => issue.code !== 'TRAVEL_ARRIVAL_PENDING') ? 'INCOMPLETE' : 'READY_WITH_UNCERTAINTY',
+        issues,
+        evidenceCounts,
+        travelDestinationLocationId: journey.destinationLocationId,
+      };
+    }
+
     if (!isInvestigationPremise(String(input.startingSituation || ''))) {
+      const canonicalLocation = input.worldRepo && input.storyId && input.currentLocationId
+        ? input.worldRepo.getGeographyGraph(input.storyId).getNode(input.currentLocationId)
+        : undefined;
+      if (String(canonicalLocation?.archetype || '').trim().toUpperCase() === 'RESTRICTED_SITE') {
+        const population = canonicalLocation?.population;
+        const issues: WorldDirectorReadinessIssue[] = [];
+        if (population?.status !== 'RESTRICTED' || population.accessControlled !== true) {
+          issues.push({
+            code: 'RESTRICTED_SITE_ACCESS_NOT_ESTABLISHED',
+            requirement: 'Canonical restricted occupancy with explicit access control',
+            message: 'The location is authored as a restricted site, but its canonical occupancy does not establish restricted, access-controlled entry.',
+          });
+        }
+        const visibleBoundary = normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).some((object) =>
+          /\b(?:seal(?:ed)?|grille|warden|access|restrict(?:ed|ion)?|lock(?:ed)?|gate|guard|authoriz\w*)\b/i.test(searchableObjectText(object)),
+        );
+        if (!visibleBoundary) {
+          issues.push({
+            code: 'RESTRICTED_SITE_BOUNDARY_NOT_VISIBLE',
+            requirement: 'A visible canonical cue establishes the access boundary',
+            message: 'The restricted site has no visible canonical boundary cue, so narration must not imply that the player can perceive one.',
+          });
+        }
+        return {
+          profile: 'RESTRICTED_SITE',
+          status: issues.length ? 'INCOMPLETE' : 'READY',
+          issues,
+          evidenceCounts,
+        };
+      }
+      if (String(canonicalLocation?.archetype || '').trim().toUpperCase() === 'ABANDONED_SITE') {
+        const population = canonicalLocation?.population;
+        const issues: WorldDirectorReadinessIssue[] = [];
+        if (population?.status !== 'ABANDONED' || population.expectedPopulation !== 'NONE') {
+          issues.push({
+            code: 'ABANDONED_SITE_ABSENCE_NOT_ESTABLISHED',
+            requirement: 'Canonical ABANDONED occupancy with no expected resident population',
+            message: 'The location is authored as an abandoned site, but its canonical occupancy does not explicitly establish that ordinary resident population is absent.',
+          });
+        }
+        const physicalCues = [
+          ...(Array.isArray(canonicalLocation?.environment?.features) ? canonicalLocation.environment.features : []),
+          ...normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).map(searchableObjectText),
+        ].join(' ').toLowerCase();
+        if (!/\b(?:flood(?:ed|ing)?|collaps(?:e|ed|ing)|ruin(?:ed)?|derelict|broken|overgrown|evacuat\w*|sealed|vacant|deserted|charred|crumbl\w*|decay(?:ed|ing)?)\b/i.test(physicalCues)) {
+          issues.push({
+            code: 'ABANDONED_SITE_PHYSICAL_CUE_NOT_VISIBLE',
+            requirement: 'Visible canonical environmental or object evidence of abandonment',
+            message: 'The abandoned site has no visible canonical physical cue supporting its condition; narration must not invent one.',
+          });
+        }
+        return {
+          profile: 'ABANDONED_SITE',
+          status: issues.length ? 'INCOMPLETE' : 'READY',
+          issues,
+          evidenceCounts,
+        };
+      }
+      const canonicalArchetype = normalizeLocationArchetype(canonicalLocation?.archetype);
+      if (canonicalArchetype && isPublicArchetype(canonicalArchetype)) {
+        const population = canonicalLocation?.population;
+        const issues: WorldDirectorReadinessIssue[] = [];
+        let status: WorldDirectorReadinessStatus = 'READY';
+        if (population?.status === 'UNKNOWN' || !population?.status) {
+          status = 'READY_WITH_UNCERTAINTY';
+          issues.push({
+            code: 'PUBLIC_SOCIAL_OCCUPANCY_UNKNOWN',
+            requirement: 'Preserve unknown public-place occupancy as uncertainty',
+            message: 'Occupancy at this public or social location is unknown; use only visible occupants and established aggregate activity without claiming presence or absence beyond that evidence.',
+          });
+        } else if (population.status !== 'INHABITED' || population.expectedPopulation === 'NONE') {
+          status = 'INCOMPLETE';
+          issues.push({
+            code: 'PUBLIC_SOCIAL_OCCUPANCY_NOT_INHABITED',
+            requirement: 'Canonical inhabited occupancy for a public/social scene profile',
+            message: 'The public/social location is not canonically established as inhabited; do not generate ordinary crowd activity from its archetype alone.',
+          });
+        } else if (!entities.length && !String(canonicalLocation?.environment?.ambientActivity || '').trim()) {
+          status = 'INCOMPLETE';
+          issues.push({
+            code: 'PUBLIC_SOCIAL_ACTIVITY_NOT_ESTABLISHED',
+            requirement: 'A visible occupant or authored aggregate activity cue',
+            message: 'The location is marked inhabited, but no visible occupant or canonical aggregate activity cue is available to ground social-scene narration.',
+          });
+        }
+        return {
+          profile: 'PUBLIC_SOCIAL',
+          status,
+          issues,
+          evidenceCounts,
+        };
+      }
+      if (canonicalArchetype === 'ROOM') {
+        const issues: WorldDirectorReadinessIssue[] = [];
+        const visibleFeatures = [
+          ...(Array.isArray(canonicalLocation?.environment?.features) ? canonicalLocation.environment.features : []),
+          ...normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).map(searchableObjectText),
+        ].filter((feature) => String(feature || '').trim());
+        if (!visibleFeatures.length) {
+          issues.push({
+            code: 'ORDINARY_ROOM_SCENE_ANCHOR_NOT_VISIBLE',
+            requirement: 'At least one visible canonical room feature or scene object',
+            message: 'The room has no visible canonical physical anchor, so narration must not supply furnishings or other concrete room details.',
+          });
+        }
+        const population = canonicalLocation?.population;
+        const occupancyUnknown = !population?.status || population.status === 'UNKNOWN';
+        if (occupancyUnknown) {
+          issues.push({
+            code: 'ORDINARY_ROOM_OCCUPANCY_UNKNOWN',
+            requirement: 'Keep unknown room occupancy unresolved',
+            message: 'Room occupancy is unknown; use only listed visible occupants and do not infer that the room is occupied or empty.',
+          });
+        }
+        return {
+          profile: 'ORDINARY_ROOM',
+          status: !visibleFeatures.length
+            ? 'INCOMPLETE'
+            : occupancyUnknown
+              ? 'READY_WITH_UNCERTAINTY'
+              : 'READY',
+          issues,
+          evidenceCounts,
+        };
+      }
+      if (isExplorationPremise(String(input.startingSituation || ''))) {
+        const visibleAnchors = [
+          ...(Array.isArray(canonicalLocation?.environment?.features) ? canonicalLocation.environment.features : []),
+          ...normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).map(searchableObjectText),
+        ].filter((anchor) => String(anchor || '').trim());
+        const issues: WorldDirectorReadinessIssue[] = [];
+        if (!visibleAnchors.length) {
+          issues.push({
+            code: 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE',
+            requirement: 'At least one visible canonical environment feature or scene object',
+            message: 'The exploration scene has no visible canonical anchor; do not invent terrain, landmarks, paths, or objects.',
+          });
+        }
+        issues.push({
+          code: 'EXPLORATION_DISCOVERIES_UNRESOLVED',
+          requirement: 'Treat undiscovered details as unknown until a canonical search or observation reveals them',
+          message: 'The exploratory destination is not evidence that a hidden feature or discovery exists; reveal only details established by canonical scene evidence or a committed search.',
+        });
+        return {
+          profile: 'EXPLORATION',
+          status: visibleAnchors.length ? 'READY_WITH_UNCERTAINTY' : 'INCOMPLETE',
+          issues,
+          evidenceCounts,
+        };
+      }
       return {
         profile: 'GENERAL',
         status: 'NOT_APPLICABLE',

@@ -8,6 +8,8 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { resolveGroundedObservation, SceneInteractionAuthority } from '../server/domain/sceneInteractionAuthority';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { WorldDirector } from '../server/domain/worldDirector';
+import { expandLocationStructure } from '../server/domain/locationArchetypes';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 
 async function withDurablePersistence<T>(callback: () => Promise<T>): Promise<T> {
@@ -742,6 +744,588 @@ test('opening population preserves authored RESTRICTED occupancy and never seeds
   assert.equal(opening.startingLocationName, 'Elysium Solar Citadel Archive');
 });
 
+
+test('Phase 5 restricted-site readiness requires canonical access controls and a visible boundary across opening and reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_restricted_site_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Elysium Solar Citadel Archive',
+      { status: 'RESTRICTED', expectedPopulation: 'NONE', accessControlled: true, explanation: 'Closed to public access.', provenance: 'AUTHORED' },
+      false,
+    );
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const originalLocation = graph.getNode(rig.locationId)!;
+    graph.addNode({
+      ...originalLocation,
+      archetype: 'RESTRICTED_SITE',
+      sceneObjects: [{
+        id: 'phase5_visible_access_boundary_' + storyId,
+        name: 'sealed grille',
+        kind: 'STRUCTURE',
+        description: 'A sealed grille marks the controlled entrance.',
+        visible: true,
+      }],
+    });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    const opening = await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const ready = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(ready?.profile, 'RESTRICTED_SITE');
+    assert.equal(ready?.status, 'READY');
+    assert.deepEqual(ready?.issues, []);
+    assert.equal(opening.startingLocationName, 'Elysium Solar Citadel Archive');
+
+    const expectedLocation = graph.getNode(rig.locationId);
+    const repeat = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the archive entrance.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      sceneObjects: expectedLocation?.sceneObjects,
+    });
+    assert.deepEqual(WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the archive entrance.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      sceneObjects: expectedLocation?.sceneObjects,
+    }), repeat, 'reassessment must be deterministic and idempotent');
+    assert.deepEqual(graph.getNode(rig.locationId), expectedLocation,
+      'readiness assessment must not mutate canonical geography');
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)!;
+    const reloadedReadiness = reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(reloadedLocation.archetype, 'RESTRICTED_SITE');
+    assert.equal(reloadedLocation.population?.status, 'RESTRICTED');
+    assert.equal(reloadedReadiness?.status, 'READY');
+    assert.deepEqual(reloadedReadiness, ready, 'the profile report and canonical evidence must survive repository reload');
+
+    rig.repository.getGeographyGraph(storyId).addNode({
+      ...reloadedLocation,
+      population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+      sceneObjects: [],
+    });
+    const incomplete = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the archive entrance.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(incomplete.profile, 'RESTRICTED_SITE');
+    assert.equal(incomplete.status, 'INCOMPLETE');
+    assert.deepEqual(incomplete.issues.map((issue) => issue.code), [
+      'RESTRICTED_SITE_ACCESS_NOT_ESTABLISHED',
+      'RESTRICTED_SITE_BOUNDARY_NOT_VISIBLE',
+    ]);
+  });
+});
+
+test('Phase 5 abandoned-site readiness distinguishes explicit absence from unknown and preserves visible occupants', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_abandoned_site_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Sunken Scriptorium',
+      { status: 'ABANDONED', expectedPopulation: 'NONE', explanation: 'Evacuated after the archive flooded.', provenance: 'AUTHORED' },
+      false,
+    );
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const originalLocation = graph.getNode(rig.locationId)!;
+    graph.addNode({
+      ...originalLocation,
+      archetype: 'ABANDONED_SITE',
+      environment: { features: ['flooded archive shelves'] },
+      sceneObjects: [{
+        id: 'phase5_abandoned_physical_cue_' + storyId,
+        name: 'waterline marks',
+        kind: 'ENVIRONMENTAL_FEATURE',
+        description: 'A high waterline darkens the lower stone shelves.',
+        visible: true,
+      }],
+    });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const ready = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(ready?.profile, 'ABANDONED_SITE');
+    assert.equal(ready?.status, 'READY');
+    assert.deepEqual(ready?.issues, []);
+
+    const occupantReport = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Exploring the flooded archive.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      visibleEntities: [{ name: 'A scavenger', role: 'intruder', presence: 'present', visibleToPlayer: true }],
+    });
+    assert.equal(occupantReport.status, 'READY', 'a visible trespasser does not erase the canonical abandoned-site designation');
+    assert.equal(occupantReport.evidenceCounts.visibleEntities, 1, 'visible occupants remain represented independently of resident-population status');
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)!;
+    const reloadedReadiness = reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(reloadedLocation.archetype, 'ABANDONED_SITE');
+    assert.equal(reloadedLocation.population?.status, 'ABANDONED');
+    assert.equal(reloadedReadiness?.status, 'READY');
+    assert.deepEqual(reloadedReadiness, ready, 'abandoned-site readiness and canonical evidence must survive reload');
+
+    graph.addNode({
+      ...reloadedLocation,
+      population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+      environment: { features: [] },
+      sceneObjects: [],
+    });
+    const incomplete = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Exploring the archive.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(incomplete.profile, 'ABANDONED_SITE');
+    assert.equal(incomplete.status, 'INCOMPLETE');
+    assert.deepEqual(incomplete.issues.map((issue) => issue.code), [
+      'ABANDONED_SITE_ABSENCE_NOT_ESTABLISHED',
+      'ABANDONED_SITE_PHYSICAL_CUE_NOT_VISIBLE',
+    ]);
+  });
+});
+
+test('Phase 5 public/social readiness grounds activity, preserves unknown occupancy, and survives regeneration and reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_public_social_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Lantern Market',
+      { status: 'INHABITED', expectedPopulation: 'MODERATE', provenance: 'AUTHORED' },
+      false,
+    );
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const location = graph.getNode(rig.locationId)!;
+    graph.addNode({
+      ...location,
+      archetype: 'MARKET',
+      environment: { features: ['market stalls'], ambientActivity: 'Vendors arrange produce along the public walk.' },
+    });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const ready = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(ready?.profile, 'PUBLIC_SOCIAL');
+    assert.equal(ready?.status, 'READY');
+
+    const ambientPeople = () => rig.repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
+      card.metadata?.ambientPopulation === true && card.worldState?.locationId === rig.locationId
+    );
+    const firstPopulation = ambientPeople().map((person: any) => person.id).sort();
+    assert.ok(firstPopulation.length > 0, 'the canonical market occupancy policy should establish its eligible ambient population');
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      forceRegenerate: true,
+      allowDeterministicFallback: true,
+    });
+    assert.deepEqual(ambientPeople().map((person: any) => person.id).sort(), firstPopulation,
+      'regeneration must not duplicate canonically seeded public activity');
+    const repeatedReadiness = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Finding a place to ask about work.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      visibleEntities: [],
+    });
+    assert.equal(repeatedReadiness.profile, 'PUBLIC_SOCIAL');
+    assert.equal(repeatedReadiness.status, 'READY', 'authored aggregate activity can ground a scene without naming occupants');
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)!;
+    const reloadedReadiness = reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(reloadedLocation.archetype, 'MARKET');
+    assert.equal(reloadedReadiness?.profile, 'PUBLIC_SOCIAL');
+    assert.equal(reloadedReadiness?.status, 'READY');
+    assert.deepEqual(reloadedReadiness, rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness);
+
+    const original = reloadedLocation;
+    graph.addNode({
+      ...original,
+      population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+      environment: { features: [] },
+    });
+    const unknown = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Looking around the market.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(unknown.status, 'READY_WITH_UNCERTAINTY');
+    assert.deepEqual(unknown.issues.map((issue) => issue.code), ['PUBLIC_SOCIAL_OCCUPANCY_UNKNOWN']);
+
+    graph.addNode({
+      ...original,
+      population: { status: 'INHABITED', expectedPopulation: 'MODERATE', provenance: 'AUTHORED' },
+      environment: { features: [] },
+    });
+    const unsupportedActivity = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Looking around the market.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      visibleEntities: [],
+    });
+    assert.equal(unsupportedActivity.status, 'INCOMPLETE');
+    assert.deepEqual(unsupportedActivity.issues.map((issue) => issue.code), ['PUBLIC_SOCIAL_ACTIVITY_NOT_ESTABLISHED']);
+
+    const visibleOccupant = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Looking around the market.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      visibleEntities: [{ name: 'A stallholder', role: 'vendor', presence: 'present', visibleToPlayer: true }],
+    });
+    assert.equal(visibleOccupant.status, 'READY', 'a visible occupant can ground public activity without an ambient prose note');
+    assert.equal(visibleOccupant.evidenceCounts.visibleEntities, 1);
+  });
+});
+
+test('Phase 5 ordinary-room profile generates canonical furnishing anchors without inventing occupancy', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_ordinary_room_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Wayfarer Guest Room',
+      { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+      false,
+    );
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const location = graph.getNode(rig.locationId)!;
+    const expandedRoom = expandLocationStructure(
+      { ...location, archetype: 'ROOM' },
+      { locationId: rig.locationId, generateDefaults: true },
+    );
+    assert.equal(expandedRoom.archetype, 'ROOM');
+    assert.equal(expandedRoom.population?.status, 'UNKNOWN', 'room defaults must not infer occupancy');
+    assert.ok(expandedRoom.sceneObjects?.some((object) => object.visible && object.name === 'small wooden table'));
+    graph.addNode({ ...location, ...expandedRoom });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const firstRun = rig.repository.getStoryRun(storyId);
+    const readiness = firstRun.runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(readiness?.profile, 'ORDINARY_ROOM');
+    assert.equal(readiness?.status, 'READY_WITH_UNCERTAINTY');
+    assert.ok(readiness?.issues.some((issue: any) => issue.code === 'ORDINARY_ROOM_OCCUPANCY_UNKNOWN'));
+    const firstObjectIds = graph.getNode(rig.locationId)?.sceneObjects?.map((object) => object.id).sort();
+
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      forceRegenerate: true,
+      allowDeterministicFallback: true,
+    });
+    assert.deepEqual(graph.getNode(rig.locationId)?.sceneObjects?.map((object) => object.id).sort(), firstObjectIds,
+      'repeated opening generation must not duplicate or replace canonical room furnishings');
+    const repeated = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the guest room.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      sceneObjects: graph.getNode(rig.locationId)?.sceneObjects,
+    });
+    assert.equal(repeated.profile, 'ORDINARY_ROOM');
+    assert.equal(repeated.status, 'READY_WITH_UNCERTAINTY');
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)!;
+    const reloadedReadiness = reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(reloadedLocation.archetype, 'ROOM');
+    assert.equal(reloadedLocation.population?.status, 'UNKNOWN');
+    assert.deepEqual(reloadedLocation.sceneObjects?.map((object) => object.id).sort(), firstObjectIds);
+    assert.equal(reloadedReadiness?.profile, 'ORDINARY_ROOM');
+    assert.equal(reloadedReadiness?.status, 'READY_WITH_UNCERTAINTY');
+
+    graph.addNode({
+      ...reloadedLocation,
+      environment: { features: [] },
+      sceneObjects: [{
+        id: 'hidden_room_object_' + storyId,
+        name: 'concealed wall cabinet',
+        kind: 'STRUCTURE',
+        description: 'A concealed cabinet sits behind the panel.',
+        visible: false,
+      }],
+    });
+    const incomplete = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the guest room.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      sceneObjects: [],
+    });
+    assert.equal(incomplete.status, 'INCOMPLETE');
+    assert.deepEqual(incomplete.issues.map((issue) => issue.code), [
+      'ORDINARY_ROOM_SCENE_ANCHOR_NOT_VISIBLE',
+      'ORDINARY_ROOM_OCCUPANCY_UNKNOWN',
+    ]);
+  });
+});
+
+test('Phase 5 travel readiness preserves the intended destination until canonical arrival across reload', async () => {
+  await withDurablePersistence(async () => {
+  const storyId = 'phase5_travel_arrival_' + Date.now();
+  const rig = buildOpeningRig(storyId, 'Departure Waystation', { status: 'UNKNOWN', provenance: 'UNKNOWN' }, false);
+  const graph = rig.repository.getGeographyGraph(storyId);
+  const origin = graph.getNode(rig.locationId)!;
+  const destinationId = 'loc_travel_destination_' + storyId;
+  graph.addNode({
+    ...origin,
+    id: destinationId,
+    name: 'Northwatch Gate',
+    accessible: true,
+  });
+  const player = rig.repository.getPlayerLifecycle(storyId)!;
+  const journey = {
+    id: 'journey_' + storyId,
+    actorId: player.actorId,
+    originLocationId: rig.locationId,
+    destinationLocationId: destinationId,
+    routeLocationIds: [rig.locationId, destinationId],
+    currentWaypointIndex: 0,
+    totalDistanceKm: 8,
+    traveledDistanceKm: 2,
+    speedKmPerHour: 4,
+    departureTime: { totalElapsedSeconds: 100 },
+    estimatedArrivalTime: { totalElapsedSeconds: 7300 },
+    status: 'in_progress',
+  } as any;
+  rig.repository.updatePlayerLifecycle(storyId, player.copyWith({ activeJourney: journey }));
+  rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+  const reloadedRepository = new InMemoryWorldRepository();
+  const reloadedPlayer = reloadedRepository.getPlayerLifecycle(storyId)!;
+  assert.equal(reloadedPlayer.locationId, rig.locationId);
+  assert.equal(reloadedPlayer.activeJourney?.destinationLocationId, destinationId);
+
+  const report = WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Traveling toward Northwatch Gate.',
+    worldRepo: reloadedRepository,
+    storyId,
+    currentLocationId: reloadedPlayer.locationId,
+  });
+  assert.equal(report.profile, 'TRAVEL_ARRIVAL');
+  assert.equal(report.status, 'READY_WITH_UNCERTAINTY');
+  assert.equal(report.travelDestinationLocationId, destinationId);
+  assert.match(report.issues[0].message, /Northwatch Gate/);
+  assert.match(report.issues[0].message, /do not claim arrival/i);
+  assert.equal(reloadedRepository.getPlayerLifecycle(storyId)?.locationId, rig.locationId,
+    'assessment must leave canonical position at the journey origin');
+  assert.deepEqual(WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Traveling toward Northwatch Gate.',
+    worldRepo: reloadedRepository,
+    storyId,
+    currentLocationId: rig.locationId,
+  }), report, 'reassessment must be deterministic');
+
+  reloadedRepository.updatePlayerLifecycle(storyId, reloadedRepository.getPlayerLifecycle(storyId)!.copyWith({
+    locationId: destinationId,
+  }));
+  const conflict = WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Traveling toward Northwatch Gate.',
+    worldRepo: reloadedRepository,
+    storyId,
+    currentLocationId: destinationId,
+  });
+  assert.equal(conflict.profile, 'TRAVEL_ARRIVAL');
+  assert.equal(conflict.status, 'INCOMPLETE');
+  assert.ok(conflict.issues.some((issue) => issue.code === 'TRAVEL_ORIGIN_MISMATCH'));
+  });
+});
+
+test('Phase 5 exploration readiness grounds visible anchors and preserves unresolved details across reload', async () => {
+  await withDurablePersistence(async () => {
+  const storyId = 'phase5_exploration_' + Date.now();
+  const rig = buildOpeningRig(storyId, 'Northern Fringe', { status: 'UNKNOWN', provenance: 'UNKNOWN' }, false);
+  const graph = rig.repository.getGeographyGraph(storyId);
+  const location = graph.getNode(rig.locationId)!;
+  graph.addNode({
+    ...location,
+    environment: { features: [] },
+    sceneObjects: [{
+      id: 'concealed_exploration_anchor_' + storyId,
+      name: 'stone marker',
+      kind: 'STRUCTURE',
+      description: 'A marker stands beside a narrow track.',
+      visible: false,
+      properties: { discoverable: true },
+    }],
+  });
+  rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+  const reloadedRepository = new InMemoryWorldRepository();
+  const reloadedGraph = reloadedRepository.getGeographyGraph(storyId);
+  assert.equal(reloadedGraph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false);
+
+  const hiddenOnly = WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Scout the Northern Fringe.',
+    worldRepo: reloadedRepository,
+    storyId,
+    currentLocationId: rig.locationId,
+  });
+  assert.equal(hiddenOnly.profile, 'EXPLORATION');
+  assert.equal(hiddenOnly.status, 'INCOMPLETE');
+  assert.ok(hiddenOnly.issues.some((issue) => issue.code === 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE'));
+  assert.ok(hiddenOnly.issues.some((issue) => issue.code === 'EXPLORATION_DISCOVERIES_UNRESOLVED'));
+  assert.deepEqual(WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Scout the Northern Fringe.',
+    worldRepo: reloadedRepository,
+    storyId,
+    currentLocationId: rig.locationId,
+  }), hiddenOnly, 'repeated assessment must be deterministic for hidden-only exploration scenes');
+  assert.equal(reloadedGraph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
+    'assessment must not reveal a concealed object');
+
+  reloadedGraph.addNode({
+    ...reloadedGraph.getNode(rig.locationId)!,
+    environment: { features: ['uneven ground'] },
+  });
+  reloadedRepository.saveStoryRun(reloadedRepository.getStoryRun(storyId));
+  const groundedReload = new InMemoryWorldRepository();
+  const grounded = WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Scout the Northern Fringe.',
+    worldRepo: groundedReload,
+    storyId,
+    currentLocationId: rig.locationId,
+  });
+  assert.equal(grounded.profile, 'EXPLORATION');
+  assert.equal(grounded.status, 'READY_WITH_UNCERTAINTY');
+  assert.ok(grounded.issues.some((issue) => issue.code === 'EXPLORATION_DISCOVERIES_UNRESOLVED'));
+  assert.deepEqual(WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Scout the Northern Fringe.',
+    worldRepo: groundedReload,
+    storyId,
+    currentLocationId: rig.locationId,
+  }), grounded, 'repeated assessment must remain stable when a visible anchor exists');
+  assert.equal(groundedReload.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
+    'known surroundings do not authorize revealing concealed details');
+  });
+});
+
+test('Phase 5 combat-context readiness uses only the player-visible canonical encounter across reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_combat_context_' + Date.now();
+    const rig = buildOpeningRig(storyId, 'Border Watch', { status: 'UNKNOWN', provenance: 'UNKNOWN' }, false);
+    const player = rig.repository.getPlayerLifecycle(storyId)!;
+    const combat = rig.repository.getCombatEngine(storyId);
+    const participant = (id: string, name: string, team: 'player_allies' | 'enemies', conditions: string[] = []) => ({
+      id, name, x: team === 'player_allies' ? 1 : 3, y: 1, initiative: 10,
+      team, hpCurrent: 10, hpMax: 10, armorClass: 12, speedCells: 5,
+      attackBonus: 3, damageFormula: '1d6', conditions, isDead: false,
+    });
+    combat.addParticipant(participant(player.actorId, 'Kaelen Vane', 'player_allies'));
+    combat.addParticipant(participant('visible_scout_' + storyId, 'Border Scout', 'enemies'));
+    combat.addParticipant(participant('hidden_scout_' + storyId, 'Hidden Scout', 'enemies', ['Hidden']));
+    combat.setCombatPhase('ACTIVE', { encounterId: 'encounter_' + storyId, encounterSource: 'STORY' });
+    const run = rig.repository.getStoryRun(storyId);
+    run.startingSituation = {
+      summary: 'A border patrol closes in while Kaelen watches the perimeter.',
+      hook: 'The patrol has moved into the watch line.',
+      activity: 'watching the border',
+      situationType: 'pressure_event',
+    };
+    rig.repository.saveStoryRun(run);
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const openingReadiness = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(openingReadiness?.profile, 'COMBAT_CONTEXT',
+      'opening generation must attach the combat profile through the production readiness call site');
+    assert.equal(openingReadiness?.status, 'READY');
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    const reloaded = new InMemoryWorldRepository();
+    const assessment = () => WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'A border patrol closes in.',
+      worldRepo: reloaded,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    const report = assessment();
+    assert.equal(report.profile, 'COMBAT_CONTEXT');
+    assert.equal(report.status, 'READY');
+    assert.deepEqual(report.issues, []);
+    assert.equal(report.combatContext?.phase, 'ACTIVE');
+    assert.equal(report.combatContext?.visibleLivingOpponents, 1,
+      'concealed combatants must not count as player-visible threats');
+    assert.equal(report.combatContext?.nearestOpponentDistanceCells, 2);
+    assert.equal(report.combatContext?.nearestOpponentLineOfSight, 'CLEAR');
+    assert.deepEqual(assessment(), report, 'reassessment after repository reload must be deterministic');
+
+    reloaded.getCombatEngine(storyId).addObstacle({ x: 2, y: 1 });
+    reloaded.saveStoryRun(reloaded.getStoryRun(storyId));
+    const blockedReload = new InMemoryWorldRepository();
+    const obstructed = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'A border patrol closes in.',
+      worldRepo: blockedReload,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(obstructed.status, 'READY_WITH_UNCERTAINTY');
+    assert.equal(obstructed.combatContext?.nearestOpponentLineOfSight, 'BLOCKED');
+    assert.ok(obstructed.issues.some((issue) => issue.code === 'COMBAT_LINE_OF_SIGHT_BLOCKED'));
+
+    const projection = blockedReload.getCombatEngine(storyId).projectCombatForActor(player.actorId);
+    assert.ok(projection.participants.some((entry) => entry.name === 'Border Scout'));
+    assert.ok(!projection.participants.some((entry) => entry.name === 'Hidden Scout'),
+      'hidden combat participants must stay outside the player projection');
+    assert.equal(blockedReload.getCombatEngine(storyId).getCombatPhase(), 'ACTIVE');
+
+    const noVisibleOpponent = blockedReload.getCombatEngine(storyId);
+    noVisibleOpponent.getParticipants().filter((entry) => entry.team === 'enemies' && entry.name === 'Border Scout')
+      .forEach((entry) => noVisibleOpponent.getMutableParticipantsForSpellResolution().find((actual) => actual.id === entry.id)!.conditions = ['Hidden']);
+    const incomplete = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'A border patrol closes in.',
+      worldRepo: blockedReload,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(incomplete.status, 'INCOMPLETE');
+    assert.ok(incomplete.issues.some((issue) => issue.code === 'COMBAT_OPPONENT_NOT_VISIBLE'));
+    assert.doesNotMatch(JSON.stringify(incomplete), /Hidden Scout|Border Scout/,
+      'readiness must not reveal concealed opponent identity');
+
+    const missingPlayerStoryId = 'phase5_combat_missing_player_' + Date.now();
+    const missingPlayerRig = buildOpeningRig(missingPlayerStoryId, 'Border Watch', { status: 'UNKNOWN', provenance: 'UNKNOWN' });
+    const missingPlayerCombat = missingPlayerRig.repository.getCombatEngine(missingPlayerStoryId);
+    missingPlayerCombat.addParticipant(participant('unaccompanied_enemy', 'Unaccompanied Enemy', 'enemies'));
+    missingPlayerCombat.setCombatPhase('ACTIVE');
+    const missingPlayer = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'A border patrol closes in.',
+      worldRepo: missingPlayerRig.repository,
+      storyId: missingPlayerStoryId,
+      currentLocationId: missingPlayerRig.locationId,
+    });
+    assert.equal(missingPlayer.profile, 'COMBAT_CONTEXT');
+    assert.equal(missingPlayer.status, 'INCOMPLETE');
+    assert.ok(missingPlayer.issues.some((issue) => issue.code === 'COMBAT_PLAYER_NOT_IN_ENCOUNTER'));
+  });
+});
 
 test('opening semantic review rejects hidden canonical facts from both primary and repair candidates', async () => {
   const storyId = 'opening_semantic_hidden_fact_' + Date.now();

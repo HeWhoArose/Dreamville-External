@@ -405,6 +405,11 @@ test('Phase 3 opening and normal-turn projections share the prepared scene and t
     'opening and normal-turn contexts must use the same canonical occupancy state');
   assert.deepEqual(opening.environment, normalTurn.sceneEvidence.environment,
     'opening and normal-turn contexts must use the same canonical environment evidence');
+  assert.deepEqual(
+    opening.visibleEvents.map((event) => ({ id: event.id, summary: event.summary })),
+    normalTurn.visibleEvents.filter((event) => !event.locationId || event.locationId === opening.id).slice(0, 8).map((event) => ({ id: event.id, summary: event.summary })),
+    'opening and normal-turn contexts must agree on visible local events',
+  );
 
   const victimObservation = resolveGroundedObservation(normalTurn, 'I observe the victim.');
   assert.match(victimObservation.text || '', /Canonical scene evidence.*Victim body is present\./);
@@ -414,6 +419,10 @@ test('Phase 3 opening and normal-turn projections share the prepared scene and t
   const evidenceObservation = resolveGroundedObservation(normalTurn, 'I examine the clue.');
   assert.match(evidenceObservation.text || '', /Unexamined clue is present\./);
   assert.match(evidenceObservation.text || '', /A physical clue remains at the scene\./);
+
+  const environmentObservation = resolveGroundedObservation(normalTurn, 'I observe the environment.');
+  assert.match(environmentObservation.text || '', /Canonical occupancy at Isolated Shack: ABANDONED/);
+  assert.doesNotMatch(environmentObservation.text || '', /people are visible|a crowd/i);
 
   const bodyId = opening.sceneObjects.find((object) => object.name === 'Victim body')?.id;
   assert.ok(bodyId);

@@ -8,6 +8,7 @@
 
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { WorldDirectorPreparationResult } from '../services/worldDirectorPreparationService';
+import { isPublicArchetype, normalizeLocationArchetype } from './locationArchetypes';
 import {
   WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY,
   WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES,
@@ -18,7 +19,7 @@ import {
   type WorldDirectorInvestigationSceneContractReport,
 } from './worldDirectorPreparationContract';
 
-export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'GENERAL';
+export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'PUBLIC_SOCIAL' | 'GENERAL';
 
 export type WorldDirectorReadinessStatus =
   | 'READY'
@@ -79,6 +80,9 @@ export interface WorldDirectorReadinessIssue {
     | 'RESTRICTED_SITE_BOUNDARY_NOT_VISIBLE'
     | 'ABANDONED_SITE_ABSENCE_NOT_ESTABLISHED'
     | 'ABANDONED_SITE_PHYSICAL_CUE_NOT_VISIBLE'
+    | 'PUBLIC_SOCIAL_OCCUPANCY_UNKNOWN'
+    | 'PUBLIC_SOCIAL_OCCUPANCY_NOT_INHABITED'
+    | 'PUBLIC_SOCIAL_ACTIVITY_NOT_ESTABLISHED'
     | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
@@ -343,6 +347,40 @@ export class WorldDirector {
         return {
           profile: 'ABANDONED_SITE',
           status: issues.length ? 'INCOMPLETE' : 'READY',
+          issues,
+          evidenceCounts,
+        };
+      }
+      const canonicalArchetype = normalizeLocationArchetype(canonicalLocation?.archetype);
+      if (canonicalArchetype && isPublicArchetype(canonicalArchetype)) {
+        const population = canonicalLocation?.population;
+        const issues: WorldDirectorReadinessIssue[] = [];
+        let status: WorldDirectorReadinessStatus = 'READY';
+        if (population?.status === 'UNKNOWN' || !population?.status) {
+          status = 'READY_WITH_UNCERTAINTY';
+          issues.push({
+            code: 'PUBLIC_SOCIAL_OCCUPANCY_UNKNOWN',
+            requirement: 'Preserve unknown public-place occupancy as uncertainty',
+            message: 'Occupancy at this public or social location is unknown; use only visible occupants and established aggregate activity without claiming presence or absence beyond that evidence.',
+          });
+        } else if (population.status !== 'INHABITED' || population.expectedPopulation === 'NONE') {
+          status = 'INCOMPLETE';
+          issues.push({
+            code: 'PUBLIC_SOCIAL_OCCUPANCY_NOT_INHABITED',
+            requirement: 'Canonical inhabited occupancy for a public/social scene profile',
+            message: 'The public/social location is not canonically established as inhabited; do not generate ordinary crowd activity from its archetype alone.',
+          });
+        } else if (!entities.length && !String(canonicalLocation?.environment?.ambientActivity || '').trim()) {
+          status = 'INCOMPLETE';
+          issues.push({
+            code: 'PUBLIC_SOCIAL_ACTIVITY_NOT_ESTABLISHED',
+            requirement: 'A visible occupant or authored aggregate activity cue',
+            message: 'The location is marked inhabited, but no visible occupant or canonical aggregate activity cue is available to ground social-scene narration.',
+          });
+        }
+        return {
+          profile: 'PUBLIC_SOCIAL',
+          status,
           issues,
           evidenceCounts,
         };

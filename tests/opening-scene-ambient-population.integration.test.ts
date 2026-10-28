@@ -899,6 +899,106 @@ test('Phase 5 abandoned-site readiness distinguishes explicit absence from unkno
   });
 });
 
+test('Phase 5 public/social readiness grounds activity, preserves unknown occupancy, and survives regeneration and reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_public_social_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Lantern Market',
+      { status: 'INHABITED', expectedPopulation: 'MODERATE', provenance: 'AUTHORED' },
+      false,
+    );
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const location = graph.getNode(rig.locationId)!;
+    graph.addNode({
+      ...location,
+      archetype: 'MARKET',
+      environment: { features: ['market stalls'], ambientActivity: 'Vendors arrange produce along the public walk.' },
+    });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const ready = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(ready?.profile, 'PUBLIC_SOCIAL');
+    assert.equal(ready?.status, 'READY');
+
+    const ambientPeople = () => rig.repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
+      card.metadata?.ambientPopulation === true && card.worldState?.locationId === rig.locationId
+    );
+    const firstPopulation = ambientPeople().map((person: any) => person.id).sort();
+    assert.ok(firstPopulation.length > 0, 'the canonical market occupancy policy should establish its eligible ambient population');
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      forceRegenerate: true,
+      allowDeterministicFallback: true,
+    });
+    assert.deepEqual(ambientPeople().map((person: any) => person.id).sort(), firstPopulation,
+      'regeneration must not duplicate canonically seeded public activity');
+    const repeatedReadiness = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Finding a place to ask about work.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      visibleEntities: [],
+    });
+    assert.equal(repeatedReadiness.profile, 'PUBLIC_SOCIAL');
+    assert.equal(repeatedReadiness.status, 'READY', 'authored aggregate activity can ground a scene without naming occupants');
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)!;
+    const reloadedReadiness = reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(reloadedLocation.archetype, 'MARKET');
+    assert.equal(reloadedReadiness?.profile, 'PUBLIC_SOCIAL');
+    assert.equal(reloadedReadiness?.status, 'READY');
+    assert.deepEqual(reloadedReadiness, rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness);
+
+    const original = reloadedLocation;
+    graph.addNode({
+      ...original,
+      population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+      environment: { features: [] },
+    });
+    const unknown = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Looking around the market.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(unknown.status, 'READY_WITH_UNCERTAINTY');
+    assert.deepEqual(unknown.issues.map((issue) => issue.code), ['PUBLIC_SOCIAL_OCCUPANCY_UNKNOWN']);
+
+    graph.addNode({
+      ...original,
+      population: { status: 'INHABITED', expectedPopulation: 'MODERATE', provenance: 'AUTHORED' },
+      environment: { features: [] },
+    });
+    const unsupportedActivity = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Looking around the market.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      visibleEntities: [],
+    });
+    assert.equal(unsupportedActivity.status, 'INCOMPLETE');
+    assert.deepEqual(unsupportedActivity.issues.map((issue) => issue.code), ['PUBLIC_SOCIAL_ACTIVITY_NOT_ESTABLISHED']);
+
+    const visibleOccupant = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Looking around the market.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      visibleEntities: [{ name: 'A stallholder', role: 'vendor', presence: 'present', visibleToPlayer: true }],
+    });
+    assert.equal(visibleOccupant.status, 'READY', 'a visible occupant can ground public activity without an ambient prose note');
+    assert.equal(visibleOccupant.evidenceCounts.visibleEntities, 1);
+  });
+});
+
 test('opening semantic review rejects hidden canonical facts from both primary and repair candidates', async () => {
   const storyId = 'opening_semantic_hidden_fact_' + Date.now();
   const rig = buildOpeningRig(

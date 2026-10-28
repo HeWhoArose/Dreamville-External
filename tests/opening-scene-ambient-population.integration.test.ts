@@ -8,6 +8,7 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { resolveGroundedObservation, SceneInteractionAuthority } from '../server/domain/sceneInteractionAuthority';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { WorldDirector } from '../server/domain/worldDirector';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 
 async function withDurablePersistence<T>(callback: () => Promise<T>): Promise<T> {
@@ -742,6 +743,87 @@ test('opening population preserves authored RESTRICTED occupancy and never seeds
   assert.equal(opening.startingLocationName, 'Elysium Solar Citadel Archive');
 });
 
+
+test('Phase 5 restricted-site readiness requires canonical access controls and a visible boundary across opening and reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_restricted_site_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Elysium Solar Citadel Archive',
+      { status: 'RESTRICTED', expectedPopulation: 'NONE', accessControlled: true, explanation: 'Closed to public access.', provenance: 'AUTHORED' },
+      false,
+    );
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const originalLocation = graph.getNode(rig.locationId)!;
+    graph.addNode({
+      ...originalLocation,
+      archetype: 'RESTRICTED_SITE',
+      sceneObjects: [{
+        id: 'phase5_visible_access_boundary_' + storyId,
+        name: 'sealed grille',
+        kind: 'STRUCTURE',
+        description: 'A sealed grille marks the controlled entrance.',
+        visible: true,
+      }],
+    });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    const opening = await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const ready = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(ready?.profile, 'RESTRICTED_SITE');
+    assert.equal(ready?.status, 'READY');
+    assert.deepEqual(ready?.issues, []);
+    assert.equal(opening.startingLocationName, 'Elysium Solar Citadel Archive');
+
+    const expectedLocation = graph.getNode(rig.locationId);
+    const repeat = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the archive entrance.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      sceneObjects: expectedLocation?.sceneObjects,
+    });
+    assert.deepEqual(WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the archive entrance.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      sceneObjects: expectedLocation?.sceneObjects,
+    }), repeat, 'reassessment must be deterministic and idempotent');
+    assert.deepEqual(graph.getNode(rig.locationId), expectedLocation,
+      'readiness assessment must not mutate canonical geography');
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)!;
+    const reloadedReadiness = reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(reloadedLocation.archetype, 'RESTRICTED_SITE');
+    assert.equal(reloadedLocation.population?.status, 'RESTRICTED');
+    assert.equal(reloadedReadiness?.status, 'READY');
+    assert.deepEqual(reloadedReadiness, ready, 'the profile report and canonical evidence must survive repository reload');
+
+    rig.repository.getGeographyGraph(storyId).addNode({
+      ...reloadedLocation,
+      population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+      sceneObjects: [],
+    });
+    const incomplete = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the archive entrance.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(incomplete.profile, 'RESTRICTED_SITE');
+    assert.equal(incomplete.status, 'INCOMPLETE');
+    assert.deepEqual(incomplete.issues.map((issue) => issue.code), [
+      'RESTRICTED_SITE_ACCESS_NOT_ESTABLISHED',
+      'RESTRICTED_SITE_BOUNDARY_NOT_VISIBLE',
+    ]);
+  });
+});
 
 test('opening semantic review rejects hidden canonical facts from both primary and repair candidates', async () => {
   const storyId = 'opening_semantic_hidden_fact_' + Date.now();

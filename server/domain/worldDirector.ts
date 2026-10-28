@@ -18,7 +18,7 @@ import {
   type WorldDirectorInvestigationSceneContractReport,
 } from './worldDirectorPreparationContract';
 
-export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'GENERAL';
+export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'GENERAL';
 
 export type WorldDirectorReadinessStatus =
   | 'READY'
@@ -75,6 +75,8 @@ export interface WorldDirectorReadinessIssue {
     | 'INVESTIGATION_VICTIM_NOT_ESTABLISHED'
     | 'INVESTIGATION_EVIDENCE_NOT_ESTABLISHED'
     | 'INVESTIGATION_UNRESOLVED_QUESTION'
+    | 'RESTRICTED_SITE_ACCESS_NOT_ESTABLISHED'
+    | 'RESTRICTED_SITE_BOUNDARY_NOT_VISIBLE'
     | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
@@ -285,6 +287,36 @@ export class WorldDirector {
     };
 
     if (!isInvestigationPremise(String(input.startingSituation || ''))) {
+      const canonicalLocation = input.worldRepo && input.storyId && input.currentLocationId
+        ? input.worldRepo.getGeographyGraph(input.storyId).getNode(input.currentLocationId)
+        : undefined;
+      if (String(canonicalLocation?.archetype || '').trim().toUpperCase() === 'RESTRICTED_SITE') {
+        const population = canonicalLocation?.population;
+        const issues: WorldDirectorReadinessIssue[] = [];
+        if (population?.status !== 'RESTRICTED' || population.accessControlled !== true) {
+          issues.push({
+            code: 'RESTRICTED_SITE_ACCESS_NOT_ESTABLISHED',
+            requirement: 'Canonical restricted occupancy with explicit access control',
+            message: 'The location is authored as a restricted site, but its canonical occupancy does not establish restricted, access-controlled entry.',
+          });
+        }
+        const visibleBoundary = normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).some((object) =>
+          /\b(?:seal(?:ed)?|grille|warden|access|restrict(?:ed|ion)?|lock(?:ed)?|gate|guard|authoriz\w*)\b/i.test(searchableObjectText(object)),
+        );
+        if (!visibleBoundary) {
+          issues.push({
+            code: 'RESTRICTED_SITE_BOUNDARY_NOT_VISIBLE',
+            requirement: 'A visible canonical cue establishes the access boundary',
+            message: 'The restricted site has no visible canonical boundary cue, so narration must not imply that the player can perceive one.',
+          });
+        }
+        return {
+          profile: 'RESTRICTED_SITE',
+          status: issues.length ? 'INCOMPLETE' : 'READY',
+          issues,
+          evidenceCounts,
+        };
+      }
       return {
         profile: 'GENERAL',
         status: 'NOT_APPLICABLE',

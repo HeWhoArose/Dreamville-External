@@ -80,9 +80,10 @@ export class PersistentGameStore {
     const directory = dirname(this.filePath);
     mkdirSync(directory, { recursive: true });
 
-    if (existsSync(this.filePath)) {
-      this.createSnapshot();
-    }
+    // The primary remains intact until the atomic rename, so a pre-save
+    // snapshot is redundant. Snapshot the committed file after rename instead;
+    // this preserves the configured history depth at roughly one snapshot per
+    // successful save.
 
     const temporaryPath = `${this.filePath}.tmp`;
     // Compact serialization: pretty-printing multiplied file size ~4x and pushed

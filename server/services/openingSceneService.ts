@@ -1044,7 +1044,7 @@ export class OpeningSceneService {
 
 		const visibleObjectSentence = visibleSceneObjects.length
 			? `Visible scene evidence includes ${visibleSceneObjects.map((object) =>
-				`${object.name}${object.description ? `: ${object.description}` : ''}`
+				`${object.name}${object.description ? `: ${String(object.description).trim().replace(/[.!?]+$/, '')}` : ''}`
 			).join('; ')}.`
 			: '';
 		const environmentFeatures = (location.environment?.features || []).map((feature) => String(feature || '').trim()).filter(Boolean).slice(0, 6);

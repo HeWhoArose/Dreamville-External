@@ -942,6 +942,14 @@ test('Phase 4 deterministic opening fallback preserves visible evidence and dist
         : status === 'RESTRICTED' ? 'The archive door is sealed.' : undefined,
       provenance: status === 'UNKNOWN' ? 'UNKNOWN' : 'AUTHORED',
     });
+    const run = rig.repository.getStoryRun(storyId);
+    run.startingSituation = {
+      summary: 'Kaelen is checking the Isolated Shack for signs of recent activity.',
+      hook: 'A recent disturbance at the shack remains unexplained.',
+      activity: 'checking the scene',
+      situationType: 'pressure_event',
+    };
+    rig.repository.saveStoryRun(run);
     const graph = rig.repository.getGeographyGraph(storyId);
     const location = graph.getNode(rig.locationId)!;
     graph.addNode({
@@ -967,7 +975,7 @@ test('Phase 4 deterministic opening fallback preserves visible evidence and dist
   };
 
   const unknown = renderFallback('phase4_fallback_unknown_' + Date.now(), 'UNKNOWN');
-  assert.match(unknown, /overall occupancy is unknown/i);
+  assert.match(unknown, /whether anyone else is nearby remains unknown/i);
   assert.doesNotMatch(unknown, /the shack is empty|nobody is here|no one is anywhere/i);
   assert.match(unknown, /Marked fragment: A three-pronged mark is pressed into the metal surface\./);
   assert.match(unknown, /a collapsed worktable; a narrow service hatch/i);

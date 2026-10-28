@@ -195,7 +195,11 @@ test('Phase 19: corrupted primary persistence can recover from the latest durabl
 
     const recovered = new InMemoryWorldRepository();
     assert.equal(recovered.getWorldTemplate('recoverable_world')?.title, 'Recoverable World');
-    assert.equal(recovered.getUserData('recovery', 'marker')?.value, 'recoverable');
+    assert.equal(
+      recovered.getUserData('recovery', 'marker')?.value,
+      'newer',
+      'corrupt-primary recovery must restore the latest successfully committed state, not only its predecessor',
+    );
   });
 });
 

@@ -197,11 +197,12 @@ test('World Director opening integration exposes an investigation premise with n
   );
 });
 
-test('World Director opening integration reads investigation anchors from their canonical owners', async () => {
+test('World Director opening integration reads investigation anchors from their canonical owners and persists readiness across reload', async () => {
+  await withDurablePersistence(async () => {
   const storyId = 'opening_investigation_canonical_anchors_' + Date.now();
   const rig = buildOpeningRig(storyId, 'Isolated Shack', {
     status: 'ABANDONED', expectedPopulation: 'NONE', provenance: 'AUTHORED',
-  });
+  }, false);
   const run = rig.repository.getStoryRun(storyId);
   run.startingSituation = {
     summary: 'Kaelen Voss is investigating a fresh murder scene inside the isolated shack.',
@@ -236,6 +237,19 @@ test('World Director opening integration reads investigation anchors from their 
   assert.deepEqual(readiness?.issues, []);
   assert.deepEqual(readiness?.investigationRequirements?.map((requirement: any) => requirement.status),
     ['SATISFIED', 'SATISFIED', 'SATISFIED', 'SATISFIED']);
+
+  const reloadedRepository = new InMemoryWorldRepository();
+  const reloadedRun = reloadedRepository.getStoryRun(storyId);
+  const reloadedReadiness = reloadedRun?.runtimeState?.openingNarrativeContext?.sceneReadiness;
+  assert.equal(reloadedReadiness?.profile, 'INVESTIGATION');
+  assert.equal(reloadedReadiness?.status, 'READY');
+  assert.deepEqual(reloadedReadiness?.issues, []);
+  assert.deepEqual(
+    reloadedReadiness?.investigationRequirements?.map((requirement: any) => requirement.status),
+    ['SATISFIED', 'SATISFIED', 'SATISFIED', 'SATISFIED'],
+    'the persisted readiness report must survive repository reconstruction without being recomputed from prose',
+  );
+  });
 });
 test('opening scene seeds and projects canonical ambient people before generating a public citadel opening', async () => {
   const storyId = 'opening_population_public_' + Date.now();

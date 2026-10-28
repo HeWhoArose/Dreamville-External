@@ -1086,9 +1086,10 @@ test('Phase 5 ordinary-room profile generates canonical furnishing anchors witho
   });
 });
 
-test('Phase 5 travel readiness preserves the intended destination until canonical arrival', () => {
+test('Phase 5 travel readiness preserves the intended destination until canonical arrival across reload', async () => {
+  await withDurablePersistence(async () => {
   const storyId = 'phase5_travel_arrival_' + Date.now();
-  const rig = buildOpeningRig(storyId, 'Departure Waystation', { status: 'UNKNOWN', provenance: 'UNKNOWN' });
+  const rig = buildOpeningRig(storyId, 'Departure Waystation', { status: 'UNKNOWN', provenance: 'UNKNOWN' }, false);
   const graph = rig.repository.getGeographyGraph(storyId);
   const origin = graph.getNode(rig.locationId)!;
   const destinationId = 'loc_travel_destination_' + storyId;
@@ -1114,44 +1115,52 @@ test('Phase 5 travel readiness preserves the intended destination until canonica
     status: 'in_progress',
   } as any;
   rig.repository.updatePlayerLifecycle(storyId, player.copyWith({ activeJourney: journey }));
+  rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+  const reloadedRepository = new InMemoryWorldRepository();
+  const reloadedPlayer = reloadedRepository.getPlayerLifecycle(storyId)!;
+  assert.equal(reloadedPlayer.locationId, rig.locationId);
+  assert.equal(reloadedPlayer.activeJourney?.destinationLocationId, destinationId);
 
   const report = WorldDirector.assessOpeningSceneReadiness({
     startingSituation: 'Traveling toward Northwatch Gate.',
-    worldRepo: rig.repository,
+    worldRepo: reloadedRepository,
     storyId,
-    currentLocationId: rig.locationId,
+    currentLocationId: reloadedPlayer.locationId,
   });
   assert.equal(report.profile, 'TRAVEL_ARRIVAL');
   assert.equal(report.status, 'READY_WITH_UNCERTAINTY');
   assert.equal(report.travelDestinationLocationId, destinationId);
   assert.match(report.issues[0].message, /Northwatch Gate/);
   assert.match(report.issues[0].message, /do not claim arrival/i);
-  assert.equal(rig.repository.getPlayerLifecycle(storyId)?.locationId, rig.locationId,
+  assert.equal(reloadedRepository.getPlayerLifecycle(storyId)?.locationId, rig.locationId,
     'assessment must leave canonical position at the journey origin');
   assert.deepEqual(WorldDirector.assessOpeningSceneReadiness({
     startingSituation: 'Traveling toward Northwatch Gate.',
-    worldRepo: rig.repository,
+    worldRepo: reloadedRepository,
     storyId,
     currentLocationId: rig.locationId,
   }), report, 'reassessment must be deterministic');
 
-  rig.repository.updatePlayerLifecycle(storyId, rig.repository.getPlayerLifecycle(storyId)!.copyWith({
+  reloadedRepository.updatePlayerLifecycle(storyId, reloadedRepository.getPlayerLifecycle(storyId)!.copyWith({
     locationId: destinationId,
   }));
   const conflict = WorldDirector.assessOpeningSceneReadiness({
     startingSituation: 'Traveling toward Northwatch Gate.',
-    worldRepo: rig.repository,
+    worldRepo: reloadedRepository,
     storyId,
     currentLocationId: destinationId,
   });
   assert.equal(conflict.profile, 'TRAVEL_ARRIVAL');
   assert.equal(conflict.status, 'INCOMPLETE');
   assert.ok(conflict.issues.some((issue) => issue.code === 'TRAVEL_ORIGIN_MISMATCH'));
+  });
 });
 
-test('Phase 5 exploration readiness grounds visible anchors and leaves undiscovered details unresolved', () => {
+test('Phase 5 exploration readiness grounds visible anchors and preserves unresolved details across reload', async () => {
+  await withDurablePersistence(async () => {
   const storyId = 'phase5_exploration_' + Date.now();
-  const rig = buildOpeningRig(storyId, 'Northern Fringe', { status: 'UNKNOWN', provenance: 'UNKNOWN' });
+  const rig = buildOpeningRig(storyId, 'Northern Fringe', { status: 'UNKNOWN', provenance: 'UNKNOWN' }, false);
   const graph = rig.repository.getGeographyGraph(storyId);
   const location = graph.getNode(rig.locationId)!;
   graph.addNode({
@@ -1166,10 +1175,14 @@ test('Phase 5 exploration readiness grounds visible anchors and leaves undiscove
       properties: { discoverable: true },
     }],
   });
+  rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+  const reloadedRepository = new InMemoryWorldRepository();
+  const reloadedGraph = reloadedRepository.getGeographyGraph(storyId);
+  assert.equal(reloadedGraph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false);
 
   const hiddenOnly = WorldDirector.assessOpeningSceneReadiness({
     startingSituation: 'Scout the Northern Fringe.',
-    worldRepo: rig.repository,
+    worldRepo: reloadedRepository,
     storyId,
     currentLocationId: rig.locationId,
   });
@@ -1177,24 +1190,73 @@ test('Phase 5 exploration readiness grounds visible anchors and leaves undiscove
   assert.equal(hiddenOnly.status, 'INCOMPLETE');
   assert.ok(hiddenOnly.issues.some((issue) => issue.code === 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE'));
   assert.ok(hiddenOnly.issues.some((issue) => issue.code === 'EXPLORATION_DISCOVERIES_UNRESOLVED'));
-  assert.equal(graph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
+  assert.equal(reloadedGraph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
     'assessment must not reveal a concealed object');
 
-  graph.addNode({
-    ...graph.getNode(rig.locationId)!,
+  reloadedGraph.addNode({
+    ...reloadedGraph.getNode(rig.locationId)!,
     environment: { features: ['uneven ground'] },
   });
+  reloadedRepository.saveStoryRun(reloadedRepository.getStoryRun(storyId));
+  const groundedReload = new InMemoryWorldRepository();
   const grounded = WorldDirector.assessOpeningSceneReadiness({
     startingSituation: 'Scout the Northern Fringe.',
-    worldRepo: rig.repository,
+    worldRepo: groundedReload,
     storyId,
     currentLocationId: rig.locationId,
   });
   assert.equal(grounded.profile, 'EXPLORATION');
   assert.equal(grounded.status, 'READY_WITH_UNCERTAINTY');
   assert.ok(grounded.issues.some((issue) => issue.code === 'EXPLORATION_DISCOVERIES_UNRESOLVED'));
-  assert.equal(graph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
+  assert.equal(groundedReload.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
     'known surroundings do not authorize revealing concealed details');
+  });
+});
+
+test('Phase 5 combat-context readiness uses only the player-visible canonical encounter across reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_combat_context_' + Date.now();
+    const rig = buildOpeningRig(storyId, 'Border Watch', { status: 'UNKNOWN', provenance: 'UNKNOWN' }, false);
+    const player = rig.repository.getPlayerLifecycle(storyId)!;
+    const combat = rig.repository.getCombatEngine(storyId);
+    const participant = (id: string, name: string, team: 'player_allies' | 'enemies', conditions: string[] = []) => ({
+      id, name, x: team === 'player_allies' ? 1 : 3, y: 1, initiative: 10,
+      team, hpCurrent: 10, hpMax: 10, armorClass: 12, speedCells: 5,
+      attackBonus: 3, damageFormula: '1d6', conditions, isDead: false,
+    });
+    combat.addParticipant(participant(player.actorId, 'Kaelen Vane', 'player_allies'));
+    combat.addParticipant(participant('visible_scout_' + storyId, 'Border Scout', 'enemies'));
+    combat.addParticipant(participant('hidden_scout_' + storyId, 'Hidden Scout', 'enemies', ['Hidden']));
+    combat.setCombatPhase('ACTIVE', { encounterId: 'encounter_' + storyId, encounterSource: 'STORY' });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    const reloaded = new InMemoryWorldRepository();
+    const assessment = () => WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'A border patrol closes in.',
+      worldRepo: reloaded,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    const report = assessment();
+    assert.equal(report.profile, 'COMBAT_CONTEXT');
+    assert.equal(report.status, 'READY');
+    assert.deepEqual(report.issues, []);
+    assert.deepEqual(assessment(), report, 'reassessment after repository reload must be deterministic');
+    const projection = reloaded.getCombatEngine(storyId).projectCombatForActor(player.actorId);
+    assert.ok(projection.participants.some((entry) => entry.name === 'Border Scout'));
+    assert.ok(!projection.participants.some((entry) => entry.name === 'Hidden Scout'),
+      'hidden combat participants must stay outside the player projection');
+    assert.equal(reloaded.getCombatEngine(storyId).getCombatPhase(), 'ACTIVE');
+
+    const noVisibleOpponent = reloaded.getCombatEngine(storyId);
+    noVisibleOpponent.getParticipants().filter((entry) => entry.team === 'enemies' && entry.name === 'Border Scout')
+      .forEach((entry) => noVisibleOpponent.getMutableParticipantsForSpellResolution().find((actual) => actual.id === entry.id)!.conditions = ['Hidden']);
+    const incomplete = assessment();
+    assert.equal(incomplete.status, 'INCOMPLETE');
+    assert.ok(incomplete.issues.some((issue) => issue.code === 'COMBAT_OPPONENT_NOT_VISIBLE'));
+    assert.doesNotMatch(JSON.stringify(incomplete), /Hidden Scout|Border Scout/,
+      'readiness must not reveal concealed opponent identity');
+  });
 });
 
 test('opening semantic review rejects hidden canonical facts from both primary and repair candidates', async () => {

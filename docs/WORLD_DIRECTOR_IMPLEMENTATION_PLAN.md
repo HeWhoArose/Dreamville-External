@@ -890,3 +890,13 @@ The first exact-head CI attempt passed lint and type-check but exposed two integ
 Exact pushed code commit `b84477274a01eea72a96f03a0287bab720f48fbb` passed Dreamville Verification runs `40654785049` and `40654785316`, plus Dreamville Release Gate `40654785065`. Each suite reports **1,585 passed, 0 failed**; lint/type-check and production builds also succeeded. The conflict/no-partial-write test and the first-preparation/regeneration/reload test both passed.
 
 This verifies the first Phase 2 vertical slice only. Character-authoring UI, normal-turn coordinator integration, broader lifecycle transitions, and live Story UI acceptance remain out of scope. Production preparation writes remain reachable only for runs carrying the explicit structured seed.
+
+### 2.31 Phase 3 shared-scene projection and targeted observation — FIRST SLICE VERIFIED (2026-10-28)
+
+Opening generation and ordinary turns already project through `CurrentSituationBuilder`. The gap was in targeted observation: `resolveGroundedObservation()` answered from aggregate occupancy and did not use a specifically named visible scene object. It now resolves a directly targeted visible canonical scene object first, including the investigation-role aliases “victim/body/corpse” and “clue/evidence,” and returns only the object’s owner-backed name and description. Concealed objects remain excluded because the shared player-visible projection omits them.
+
+Added a Phase 3 integration regression comparing opening and normal-turn sets for canonical scene objects, visible living occupants, visible local events, environment evidence, and occupancy. The same test checks “observe the victim,” “examine the clue,” and “observe the environment” grounding, then changes a canonical scene-object property and verifies force regeneration preserves it.
+
+Exact pushed code head `684e0b635cc7a613371cd687d77803cd323d6207` passed Dreamville Verification runs `40671130735` and `40671130791`, plus Dreamville Release Gate `40671130757`. Each suite reports **1,586 passed, 0 failed**; type-check, release contracts, and production builds succeeded.
+
+This is a verified Phase 3 slice, not Phase 3 completion. Remaining coverage includes the full live action submission/narration path for victim and environment observations, hidden-clue discovery and targeted examination through the scene interaction owner, and revisit/reload tests for discovered, consumed, moved, or otherwise changed objects. No live Story UI or real-provider acceptance is claimed.

@@ -859,3 +859,12 @@ After the atomic primary-file rename, the store now also snapshots the newly com
 Source commit: `2c523a49decceb02fdba1b5fcb76a6833b753919`. Regression commit: `f2a9bdf15bd5d2c00edc020ecb033db8acc6c96e`.
 
 This improves recovery from a corrupt primary when a post-commit snapshot was successfully created. It does not prove fsync/power-loss durability, guarantee the latest state if snapshot creation itself fails, or provide cross-process write coordination. Production World Director preparation writes remain disabled pending exact-head verification and the remaining implementation gates.
+
+
+### 2.28 Opening-readiness report persistence across repository reconstruction — IMPLEMENTED; exact-head CI pending (2026-10-28)
+
+Extended the owner-backed opening integration fixture to use file-backed persistence. It now verifies that a READY investigation report, its empty issue list, and all four satisfied requirement statuses survive reconstruction of `InMemoryWorldRepository`. This is a persistence assertion for the diagnostic report only; it does not introduce a prepared-scene marker or enable scene-preparation writes.
+
+Test commit: `1908b2a3ff4eacb3333fbcdb7f36c9932de8bc0a`.
+
+The latest-snapshot recovery change in §2.27 and this reload regression must both pass on the same exact branch head before their gates are marked verified.

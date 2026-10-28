@@ -776,6 +776,17 @@ test('opening semantic review rejects hidden canonical facts from both primary a
     provenance: 'AUTHORED_HIDDEN_CANON',
   });
 
+  const supportedPreparedFactReview = rig.orchestrator.validateOpeningNarrativeCandidate({
+    storyId,
+    repository: rig.repository,
+    narration: [
+      'At Cycle 42, Hero Vael stands within Elysium Solar Citadel as activity carries through its public arcade.',
+      'A brass seal bears three filed notches, clearly visible on its surface. Hero Vael takes note of the mark while the next choice remains open.',
+    ].join('\n\n'),
+  });
+  assert.equal(supportedPreparedFactReview.valid, true,
+    supportedPreparedFactReview.errorReason || 'the review should accept a directly supported visible canonical scene object');
+
   const originalExecute = rig.orchestrator.executeTaskGeneration;
   const hiddenFactNarrative = [
     'At Cycle 42, Hero Vael stands within Elysium Solar Citadel. Footsteps cross the pale stone arcade while people carry out their recorded routines.',

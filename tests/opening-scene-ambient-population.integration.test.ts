@@ -580,6 +580,76 @@ test('Phase 3 concealed investigation evidence stays hidden until canonical sear
   });
 });
 
+test('Phase 3 picked-up investigation evidence stays removed from scene projections after regeneration and reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'opening_investigation_pickup_reload_' + Date.now();
+    const rig = buildOpeningRig(storyId, 'Isolated Shack', {
+      status: 'ABANDONED', expectedPopulation: 'NONE', provenance: 'AUTHORED',
+    }, false);
+    const run = rig.repository.getStoryRun(storyId);
+    const characterId = run.protagonist.characterId;
+    run.startingSituation = {
+      summary: 'Kaelen Voss is investigating a fresh murder scene inside the isolated shack.',
+      hook: 'A fresh murder has been reported at the shack.',
+      activity: 'examining the scene',
+      situationType: 'pressure_event',
+      worldDirectorInvestigation: {
+        schemaVersion: 1,
+        profile: 'INVESTIGATION',
+        preparationKey: 'fixture:isolated-shack-pickup:v1',
+        sourceRef: `${characterId}:startingSituation`,
+        claimKind: 'AUTHORED_TRUTH',
+        victim: { name: 'Unknown victim' },
+        body: { name: 'Victim body', description: 'A body lies at the scene.', visible: true, discoverable: true },
+        evidence: [{ slot: 'primary-clue', name: 'Takeable clue', description: 'A marked fragment lies at the scene.', visible: true, discoverable: true }],
+      },
+    };
+    rig.repository.saveStoryRun(run);
+
+    const opening = await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+    const clue = opening.sceneObjects.find((object: any) => object.name === 'Takeable clue');
+    assert.ok(clue, 'prepared investigation clue should be in the opening projection');
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const patched = graph.patchSceneObject(rig.locationId, clue.id, {
+      properties: { ...(clue.properties || {}), takeable: true, itemCategory: 'Quest' },
+    });
+    assert.equal(patched.success, true);
+
+    const actorId = rig.repository.getPlayerLifecycle(storyId)!.actorId;
+    const pickup = SceneInteractionAuthority.resolve({
+      repository: rig.repository,
+      storyId,
+      actorId,
+      actionText: 'I pick up the takeable clue.',
+      locationId: rig.locationId,
+    });
+    assert.equal(pickup.kind, 'PICKUP');
+    assert.equal(pickup.committed, true, pickup.errorReason);
+    assert.ok(pickup.pickedUpItemId);
+    assert.ok(rig.repository.getInventoryEngine(storyId).getActorInventory(actorId).some((item: any) => item.id === pickup.pickedUpItemId));
+    assert.equal(graph.getNode(rig.locationId)?.sceneObjects?.some((object) => object.id === clue.id), false,
+      'pickup must remove the evidence from its canonical scene owner');
+
+    const nextSituation = CurrentSituationBuilder.build({ storyId, playerAction: 'I return to the clue location.', worldRepo: rig.repository });
+    assert.equal(nextSituation.sceneEvidence.objects.some((object) => object.id === clue.id), false,
+      'the next normal-turn scene projection must not restore picked-up evidence');
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    const regenerated = await OpeningSceneService.generateOpeningScene({
+      storyId, worldRepo: rig.repository, forceRegenerate: true, allowDeterministicFallback: true,
+    });
+    assert.equal(regenerated.sceneObjects.some((object: any) => object.id === clue.id), false,
+      'opening regeneration must not rematerialize picked-up evidence');
+
+    const reloaded = new InMemoryWorldRepository();
+    const reloadedLocation = reloaded.getGeographyGraph(storyId).getNode(rig.locationId);
+    assert.equal(reloadedLocation?.sceneObjects?.some((object) => object.id === clue.id), false,
+      'repository reload must preserve removal from the scene');
+    assert.ok(reloaded.getInventoryEngine(storyId).getActorInventory(actorId).some((item: any) => item.id === pickup.pickedUpItemId),
+      'repository reload must preserve the transferred evidence item');
+  });
+});
+
 test('opening scene seeds and projects canonical ambient people before generating a public citadel opening', async () => {
   const storyId = 'opening_population_public_' + Date.now();
   const rig = buildOpeningRig(

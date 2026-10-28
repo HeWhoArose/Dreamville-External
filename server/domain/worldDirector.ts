@@ -19,7 +19,7 @@ import {
   type WorldDirectorInvestigationSceneContractReport,
 } from './worldDirectorPreparationContract';
 
-export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'PUBLIC_SOCIAL' | 'ORDINARY_ROOM' | 'TRAVEL_ARRIVAL' | 'GENERAL';
+export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'PUBLIC_SOCIAL' | 'ORDINARY_ROOM' | 'TRAVEL_ARRIVAL' | 'EXPLORATION' | 'GENERAL';
 
 export type WorldDirectorReadinessStatus =
   | 'READY'
@@ -88,6 +88,8 @@ export interface WorldDirectorReadinessIssue {
     | 'TRAVEL_ORIGIN_MISMATCH'
     | 'TRAVEL_DESTINATION_UNAVAILABLE'
     | 'TRAVEL_ARRIVAL_PENDING'
+    | 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE'
+    | 'EXPLORATION_DISCOVERIES_UNRESOLVED'
     | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
@@ -117,6 +119,10 @@ export interface WorldDirectorReadinessReport {
 function isInvestigationPremise(value: string): boolean {
   return /\b(?:murder|murdered|homicide|corpse|dead body|crime scene|victim|forensic examination)\b/i.test(value)
     || /\binvestigat\w{0,12}.{0,48}\b(?:death|body|victim|crime|murder)\b/i.test(value);
+}
+
+function isExplorationPremise(value: string): boolean {
+  return /\\b(?:explor\\w*|scout\\w*|survey\\w*|reconnoit\\w*)\\b/i.test(value);
 }
 
 function normalizedVisibleObjects(objects: WorldDirectorSceneObjectEvidence[]) {
@@ -334,6 +340,36 @@ export class WorldDirector {
         issues,
         evidenceCounts,
         travelDestinationLocationId: journey.destinationLocationId,
+      };
+    }
+
+    if (!isInvestigationPremise(String(input.startingSituation || ''))
+      && isExplorationPremise(String(input.startingSituation || ''))) {
+      const canonicalLocation = input.worldRepo && input.storyId && input.currentLocationId
+        ? input.worldRepo.getGeographyGraph(input.storyId).getNode(input.currentLocationId)
+        : undefined;
+      const visibleAnchors = [
+        ...(Array.isArray(canonicalLocation?.environment?.features) ? canonicalLocation.environment.features : []),
+        ...normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).map(searchableObjectText),
+      ].filter((anchor) => String(anchor || '').trim());
+      const issues: WorldDirectorReadinessIssue[] = [];
+      if (!visibleAnchors.length) {
+        issues.push({
+          code: 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE',
+          requirement: 'At least one visible canonical environment feature or scene object',
+          message: 'The exploration scene has no visible canonical anchor; do not invent terrain, landmarks, paths, or objects.',
+        });
+      }
+      issues.push({
+        code: 'EXPLORATION_DISCOVERIES_UNRESOLVED',
+        requirement: 'Treat undiscovered details as unknown until a canonical search or observation reveals them',
+        message: 'The exploratory destination is not evidence that a hidden feature or discovery exists; reveal only details established by canonical scene evidence or a committed search.',
+      });
+      return {
+        profile: 'EXPLORATION',
+        status: visibleAnchors.length ? 'READY_WITH_UNCERTAINTY' : 'INCOMPLETE',
+        issues,
+        evidenceCounts,
       };
     }
 

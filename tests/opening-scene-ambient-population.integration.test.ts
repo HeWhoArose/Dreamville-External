@@ -1149,6 +1149,54 @@ test('Phase 5 travel readiness preserves the intended destination until canonica
   assert.ok(conflict.issues.some((issue) => issue.code === 'TRAVEL_ORIGIN_MISMATCH'));
 });
 
+test('Phase 5 exploration readiness grounds visible anchors and leaves undiscovered details unresolved', () => {
+  const storyId = 'phase5_exploration_' + Date.now();
+  const rig = buildOpeningRig(storyId, 'Northern Fringe', { status: 'UNKNOWN', provenance: 'UNKNOWN' });
+  const graph = rig.repository.getGeographyGraph(storyId);
+  const location = graph.getNode(rig.locationId)!;
+  graph.addNode({
+    ...location,
+    environment: { features: [] },
+    sceneObjects: [{
+      id: 'concealed_exploration_anchor_' + storyId,
+      name: 'stone marker',
+      kind: 'STRUCTURE',
+      description: 'A marker stands beside a narrow track.',
+      visible: false,
+      properties: { discoverable: true },
+    }],
+  });
+
+  const hiddenOnly = WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Scout the Northern Fringe.',
+    worldRepo: rig.repository,
+    storyId,
+    currentLocationId: rig.locationId,
+  });
+  assert.equal(hiddenOnly.profile, 'EXPLORATION');
+  assert.equal(hiddenOnly.status, 'INCOMPLETE');
+  assert.ok(hiddenOnly.issues.some((issue) => issue.code === 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE'));
+  assert.ok(hiddenOnly.issues.some((issue) => issue.code === 'EXPLORATION_DISCOVERIES_UNRESOLVED'));
+  assert.equal(graph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
+    'assessment must not reveal a concealed object');
+
+  graph.addNode({
+    ...graph.getNode(rig.locationId)!,
+    environment: { features: ['uneven ground'] },
+  });
+  const grounded = WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Scout the Northern Fringe.',
+    worldRepo: rig.repository,
+    storyId,
+    currentLocationId: rig.locationId,
+  });
+  assert.equal(grounded.profile, 'EXPLORATION');
+  assert.equal(grounded.status, 'READY_WITH_UNCERTAINTY');
+  assert.ok(grounded.issues.some((issue) => issue.code === 'EXPLORATION_DISCOVERIES_UNRESOLVED'));
+  assert.equal(graph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
+    'known surroundings do not authorize revealing concealed details');
+});
+
 test('opening semantic review rejects hidden canonical facts from both primary and repair candidates', async () => {
   const storyId = 'opening_semantic_hidden_fact_' + Date.now();
   const rig = buildOpeningRig(

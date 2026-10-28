@@ -877,7 +877,7 @@ Exact pushed code commit `85fe0f71400bce70fdc382ed6ef0942a1d5c5fc5` passed Dream
 
 **Phase 1 disposition: COMPLETE.** Its exit gate is met: the investigation fixture’s required anchors, uncertainty behavior, provenance, deterministic identity/idempotence, canonical owner persistence/recovery expectations, conflicts, and hidden-information boundary are specified and covered by automated tests. Production preparation writes remain disabled. Proceed to Phase 2 only through its coordinator/owner-write vertical-slice design; Phase 1 completion itself does not authorize scene mutation.
 
-### 2.30 Phase 2 authored-investigation first vertical slice — IMPLEMENTED; exact-head CI PENDING (2026-10-28)
+### 2.30 Phase 2 authored-investigation first vertical slice — IMPLEMENTED; exact-head CI VERIFIED (2026-10-28)
 
 Added an optional structured investigation seed to the confirmed starting-situation record. A narrative hook alone never authorizes preparation: the coordinator requires schema version, INVESTIGATION profile, stable preparation key, exact confirmed-character source reference, AUTHORED_TRUTH claim, victim identity, a visible/discoverable body, and at least one visible/discoverable evidence anchor. Unknown questions remain unresolved.
 
@@ -885,4 +885,8 @@ Opening generation now invokes the coordinator before projection. It plans stabl
 
 Focused integration coverage exercises an owner conflict with no partial canonical write, first preparation with an unresolved question, regeneration idempotency, and file-backed repository reconstruction. This is the first fixture only; the character authoring UI, normal-turn coordinator integration, broader lifecycle transitions, and live Story UI acceptance remain out of scope. Production preparation is reachable only for runs carrying the explicit structured seed.
 
-`git diff --check` passed locally. The local checkout has no installed test runner; exact-head GitHub CI is pending before this slice can be marked verified.
+The first exact-head CI attempt passed lint and type-check but exposed two integration failures. One was a fixture expectation for an uninitialized scene-object list; the other exposed a real stale-reference bug: opening generation saved the StoryRun captured before the staged preparation, which could discard the prepared incident's active event state. Opening generation now merges the projection onto the repository's latest StoryRun, preserving staged canonical records.
+
+Exact pushed code commit `b84477274a01eea72a96f03a0287bab720f48fbb` passed Dreamville Verification runs `40654785049` and `40654785316`, plus Dreamville Release Gate `40654785065`. Each suite reports **1,585 passed, 0 failed**; lint/type-check and production builds also succeeded. The conflict/no-partial-write test and the first-preparation/regeneration/reload test both passed.
+
+This verifies the first Phase 2 vertical slice only. Character-authoring UI, normal-turn coordinator integration, broader lifecycle transitions, and live Story UI acceptance remain out of scope. Production preparation writes remain reachable only for runs carrying the explicit structured seed.

@@ -482,11 +482,12 @@ test('Phase 3 full action path retains canonical observation evidence through na
     await serverMockAuthority.processCustomAction({
       type: 'CUSTOM_ACTION',
       storyId,
-      actionText: 'I observe the victim body.',
+      actionText: 'I examine the victim body.',
     } as any, 'phase3_observation_handoff_command', { bypassCapabilityAdvisor: true } as any);
 
     assert.match(narratorOutcome, /Victim body is present/);
     assert.match(narratorOutcome, /A body lies beside the collapsed worktable/);
+    assert.match(narratorOutcome, /Canonical examination: Victim body is present/);
     assert.match(String(narratorActionResolution?.actualEffect), /Grounded observation:.*Victim body is present/);
     assert.ok(narratorActionResolution?.evidenceIds?.includes(addObject.object?.id),
       'the narrator handoff should retain canonical scene-object evidence IDs');

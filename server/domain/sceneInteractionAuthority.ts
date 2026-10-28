@@ -3,7 +3,7 @@ import type { WorldRepository } from '../repositories/worldRepository';
 import type { CurrentSituation } from './currentSituation';
 import type { LocationSceneObject } from './types';
 
-export type SceneInteractionKind = 'NONE' | 'SEARCH' | 'PICKUP';
+export type SceneInteractionKind = 'NONE' | 'EXAMINE' | 'SEARCH' | 'PICKUP';
 
 export interface SceneInteractionStateChange {
   kind: 'SCENE_OBJECT' | 'INVENTORY';
@@ -33,6 +33,7 @@ export interface GroundedObservation {
 }
 
 const SEARCH_PATTERN = /\b(?:search|look for|look around|look about|rummage|scavenge|scour|hunt for|find|seek|check (?:for|around)|gather|pick through)\b/i;
+const EXAMINE_PATTERN = /\b(?:examine|examines|examined|inspect|inspects|inspected|study|studies|studied)\b/i;
 const PICKUP_PATTERN = /\b(?:pick up|picks up|picking up|take|takes|taking|grab|grabs|grabbing|collect|collects|collecting|lift|lifts|lifting|retrieve|retrieves|retrieving|pocket|pockets|pocketing)\b/i;
 
 const TARGET_STOP_WORDS = new Set([
@@ -191,7 +192,8 @@ export class SceneInteractionAuthority {
 
     const pickupIntent = PICKUP_PATTERN.test(actionText);
     const searchIntent = SEARCH_PATTERN.test(actionText);
-    if (!pickupIntent && !searchIntent) {
+    const examineIntent = EXAMINE_PATTERN.test(actionText);
+    if (!pickupIntent && !searchIntent && !examineIntent) {
       return { kind: 'NONE', attempted: false, committed: false, canonicalStateChanges: [], evidence: [] };
     }
 
@@ -200,6 +202,22 @@ export class SceneInteractionAuthority {
 
     if (pickupIntent) {
       return this.pickUp({ repository, storyId, actorId, locationId, requested, sceneObjects });
+    }
+    if (!searchIntent && examineIntent) {
+      const visibleMatch = sortedMatches(sceneObjects.filter((object) => object.visible !== false), requested)[0];
+      if (!visibleMatch) {
+        return {
+          kind: 'EXAMINE', attempted: true, committed: false,
+          feedback: 'No visible canonical scene object matches what is being examined.',
+          canonicalStateChanges: [], evidence: [],
+        };
+      }
+      return {
+        kind: 'EXAMINE', attempted: true, committed: false,
+        feedback: `Canonical examination: ${visibleMatch.name} is present${visibleMatch.description ? ` — ${visibleMatch.description}` : ''}. Examination does not move or take it.`,
+        discoveredObjectId: visibleMatch.id,
+        canonicalStateChanges: [], evidence: [visibleMatch.id],
+      };
     }
     return this.search({ repository, storyId, locationId, requested, sceneObjects, location });
   }
@@ -225,7 +243,7 @@ export class SceneInteractionAuthority {
         feedback: `Canonical scene evidence: ${visibleMatch.name} is present in ${location.name}${visibleMatch.description ? ` — ${visibleMatch.description}` : ''}. Searching does not move or take it.`,
         discoveredObjectId: visibleMatch.id,
         canonicalStateChanges: [],
-        evidence: [visibleMatch.name, ...(visibleMatch.tags || [])],
+        evidence: [visibleMatch.id],
       };
     }
 
@@ -253,7 +271,7 @@ export class SceneInteractionAuthority {
             value: { locationId, visible: true, discovered: true },
             metadata: { source: 'canonical_scene_search' },
           }],
-          evidence: [concealedMatch.name, ...(concealedMatch.tags || [])],
+          evidence: [concealedMatch.id],
         };
       }
     }

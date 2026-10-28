@@ -227,6 +227,9 @@ test('World Director opening integration reads investigation anchors from their 
   }).success, true);
 
   await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+  assert.ok(rig.prompts.length > 0);
+  assert.ok(rig.prompts.every(({ prompt }) => !prompt.includes('Victim body') && !prompt.includes('Unexamined clue')),
+    'hidden but discoverable physical anchors may satisfy readiness but must stay out of the narrator’s player-visible context');
   const readiness = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
   assert.equal(readiness?.profile, 'INVESTIGATION');
   assert.equal(readiness?.status, 'READY');

@@ -441,6 +441,60 @@ test('Phase 3 opening and normal-turn projections share the prepared scene and t
   assert.ok(revisitedTurn.sceneEvidence.objects.some((object) => object.id === bodyId));
 });
 
+test('Phase 3 full action path retains canonical observation evidence through narration handoff', async () => {
+  const { worldRepository } = await import('../server/repositories/worldRepository');
+  const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
+  const storyId = 'phase3_live_observation_handoff_' + Date.now();
+  worldRepository.seedStory(storyId);
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  assert.ok(player?.locationId, 'seeded player needs a canonical location');
+  const locationId = player!.locationId;
+  const addObject = worldRepository.getGeographyGraph(storyId).addSceneObject(locationId, {
+    id: 'phase3_observation_body_' + Date.now(),
+    name: 'Victim body',
+    kind: 'OTHER',
+    visible: true,
+    description: 'A body lies beside the collapsed worktable.',
+    properties: { worldDirectorRole: 'INVESTIGATION_BODY' },
+  } as any);
+  assert.equal(addObject.success, true);
+
+  const orchestrator: any = worldRepository.getAiOrchestrator();
+  const originalGenerateNarrativeOnly = orchestrator.generateNarrativeOnly;
+  let narratorOutcome = '';
+  let narratorActionResolution: any;
+  orchestrator.generateNarrativeOnly = async (params: any) => {
+    narratorOutcome = String(params?.committedOutcome || '');
+    narratorActionResolution = params?.actionResolution;
+    return {
+      success: true,
+      source: 'AI_PRIMARY',
+      providerId: 'phase3-test-provider',
+      modelId: 'phase3-test-model',
+      turnPackage: {
+        narrative: ['The observation remains grounded in the scene.'],
+        dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [], visualCues: [],
+      },
+    };
+  };
+
+  try {
+    await serverMockAuthority.processCustomAction({
+      type: 'CUSTOM_ACTION',
+      storyId,
+      actionText: 'I observe the victim body.',
+    } as any, 'phase3_observation_handoff_command', { bypassCapabilityAdvisor: true } as any);
+
+    assert.match(narratorOutcome, /Victim body is present/);
+    assert.match(narratorOutcome, /A body lies beside the collapsed worktable/);
+    assert.match(String(narratorActionResolution?.actualEffect), /Grounded observation:.*Victim body is present/);
+    assert.ok(narratorActionResolution?.evidenceIds?.includes(addObject.object?.id),
+      'the narrator handoff should retain canonical scene-object evidence IDs');
+  } finally {
+    orchestrator.generateNarrativeOnly = originalGenerateNarrativeOnly;
+  }
+});
+
 test('Phase 3 concealed investigation evidence stays hidden until canonical search, then survives regeneration and reload', async () => {
   await withDurablePersistence(async () => {
     const storyId = 'opening_investigation_discovery_' + Date.now();

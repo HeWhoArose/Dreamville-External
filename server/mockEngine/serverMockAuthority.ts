@@ -991,12 +991,6 @@ export class ServerMockAuthority {
     let committedOutcome = itemUseBlocked
       ? 'The requested item is not available in the actor inventory. Do not narrate the item as if it was used.'
       : '';
-    if (sceneResolution.attempted && sceneResolution.feedback) {
-      committedOutcome = [committedOutcome, sceneResolution.feedback].filter(Boolean).join(' ');
-    }
-    if (groundedObservation.relevant && groundedObservation.text) {
-      committedOutcome = [committedOutcome, groundedObservation.text].filter(Boolean).join(' ');
-    }
     if (storyCheck) {
       const testLabel = storyCheck.testType === 'SAVING_THROW'
         ? storyCheck.ability + ' saving throw'
@@ -1027,6 +1021,15 @@ export class ServerMockAuthority {
       } else {
         committedOutcome = 'This is an ordinary narrative/world action. No special capability was invoked. Narrate the physical and sensory result naturally and continue the scene.';
       }
+    }
+    // Add owner-backed scene results after the generic/check outcome is built.
+    // Otherwise the ordinary-action branch overwrites observation or interaction
+    // evidence before it reaches the narrator.
+    if (sceneResolution.attempted && sceneResolution.feedback) {
+      committedOutcome = [committedOutcome, sceneResolution.feedback].filter(Boolean).join(' ');
+    }
+    if (groundedObservation.relevant && groundedObservation.text) {
+      committedOutcome = [committedOutcome, groundedObservation.text].filter(Boolean).join(' ');
     }
 
     const canonicalEventForResolution = canonicalCommandId

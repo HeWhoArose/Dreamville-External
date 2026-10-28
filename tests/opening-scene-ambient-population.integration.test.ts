@@ -1190,6 +1190,12 @@ test('Phase 5 exploration readiness grounds visible anchors and preserves unreso
   assert.equal(hiddenOnly.status, 'INCOMPLETE');
   assert.ok(hiddenOnly.issues.some((issue) => issue.code === 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE'));
   assert.ok(hiddenOnly.issues.some((issue) => issue.code === 'EXPLORATION_DISCOVERIES_UNRESOLVED'));
+  assert.deepEqual(WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Scout the Northern Fringe.',
+    worldRepo: reloadedRepository,
+    storyId,
+    currentLocationId: rig.locationId,
+  }), hiddenOnly, 'repeated assessment must be deterministic for hidden-only exploration scenes');
   assert.equal(reloadedGraph.getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
     'assessment must not reveal a concealed object');
 
@@ -1208,6 +1214,12 @@ test('Phase 5 exploration readiness grounds visible anchors and preserves unreso
   assert.equal(grounded.profile, 'EXPLORATION');
   assert.equal(grounded.status, 'READY_WITH_UNCERTAINTY');
   assert.ok(grounded.issues.some((issue) => issue.code === 'EXPLORATION_DISCOVERIES_UNRESOLVED'));
+  assert.deepEqual(WorldDirector.assessOpeningSceneReadiness({
+    startingSituation: 'Scout the Northern Fringe.',
+    worldRepo: groundedReload,
+    storyId,
+    currentLocationId: rig.locationId,
+  }), grounded, 'repeated assessment must remain stable when a visible anchor exists');
   assert.equal(groundedReload.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.[0].visible, false,
     'known surroundings do not authorize revealing concealed details');
   });
@@ -1256,6 +1268,21 @@ test('Phase 5 combat-context readiness uses only the player-visible canonical en
     assert.ok(incomplete.issues.some((issue) => issue.code === 'COMBAT_OPPONENT_NOT_VISIBLE'));
     assert.doesNotMatch(JSON.stringify(incomplete), /Hidden Scout|Border Scout/,
       'readiness must not reveal concealed opponent identity');
+
+    const missingPlayerStoryId = 'phase5_combat_missing_player_' + Date.now();
+    const missingPlayerRig = buildOpeningRig(missingPlayerStoryId, 'Border Watch', { status: 'UNKNOWN', provenance: 'UNKNOWN' });
+    const missingPlayerCombat = missingPlayerRig.repository.getCombatEngine(missingPlayerStoryId);
+    missingPlayerCombat.addParticipant(participant('unaccompanied_enemy', 'Unaccompanied Enemy', 'enemies'));
+    missingPlayerCombat.setCombatPhase('ACTIVE');
+    const missingPlayer = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'A border patrol closes in.',
+      worldRepo: missingPlayerRig.repository,
+      storyId: missingPlayerStoryId,
+      currentLocationId: missingPlayerRig.locationId,
+    });
+    assert.equal(missingPlayer.profile, 'COMBAT_CONTEXT');
+    assert.equal(missingPlayer.status, 'INCOMPLETE');
+    assert.ok(missingPlayer.issues.some((issue) => issue.code === 'COMBAT_PLAYER_NOT_IN_ENCOUNTER'));
   });
 });
 

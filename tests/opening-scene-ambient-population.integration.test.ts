@@ -911,6 +911,59 @@ test('opening presentation review rejects time-of-day claims that contradict the
   assert.match(result.errorReason || '', /temporal|canonical world time/i);
 });
 
+test('Phase 4 deterministic opening fallback preserves visible evidence and distinguishes unknown, restricted, and abandoned occupancy', () => {
+  const renderFallback = (storyId: string, status: 'UNKNOWN' | 'RESTRICTED' | 'ABANDONED') => {
+    const rig = buildOpeningRig(storyId, 'Isolated Shack', {
+      status,
+      expectedPopulation: status === 'ABANDONED' ? 'NONE' : undefined,
+      accessControlled: status === 'RESTRICTED',
+      explanation: status === 'ABANDONED'
+        ? 'The shack was evacuated after the collapse.'
+        : status === 'RESTRICTED' ? 'The archive door is sealed.' : undefined,
+      provenance: status === 'UNKNOWN' ? 'UNKNOWN' : 'AUTHORED',
+    });
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const location = graph.getNode(rig.locationId)!;
+    graph.addNode({
+      ...location,
+      environment: { ...(location.environment || {}), features: ['a collapsed worktable', 'a narrow service hatch'] },
+    } as any);
+    graph.addSceneObject(rig.locationId, {
+      id: `visible_clue_${storyId}`,
+      name: 'Marked fragment',
+      kind: 'OTHER',
+      visible: true,
+      description: 'A three-pronged mark is pressed into the metal surface.',
+    });
+    graph.addSceneObject(rig.locationId, {
+      id: `hidden_clue_${storyId}`,
+      name: 'Concealed thread',
+      kind: 'OTHER',
+      visible: false,
+      description: 'A blue thread is caught beneath the hatch hinge.',
+    });
+    const facts = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: rig.repository }).rawOpeningFacts;
+    return OpeningSceneService.synthesizeDeterministicOpening(facts, storyId, null).narrativeText;
+  };
+
+  const unknown = renderFallback('phase4_fallback_unknown_' + Date.now(), 'UNKNOWN');
+  assert.match(unknown, /overall occupancy is unknown/i);
+  assert.doesNotMatch(unknown, /the shack is empty|nobody is here|no one is anywhere/i);
+  assert.match(unknown, /Marked fragment: A three-pronged mark is pressed into the metal surface\./);
+  assert.match(unknown, /a collapsed worktable; a narrow service hatch/i);
+  assert.doesNotMatch(unknown, /Concealed thread|blue thread/i,
+    'deterministic fallback must use only the player-visible projection');
+
+  const restricted = renderFallback('phase4_fallback_restricted_' + Date.now(), 'RESTRICTED');
+  assert.match(restricted, /Access is restricted.*No authorized occupant is individually visible/i);
+  assert.doesNotMatch(restricted, /abandoned|no current occupants are established/i);
+
+  const abandoned = renderFallback('phase4_fallback_abandoned_' + Date.now(), 'ABANDONED');
+  assert.match(abandoned, /abandoned site: The shack was evacuated after the collapse/i);
+  assert.doesNotMatch(abandoned, /everyday pace|continues without disturbance/i,
+    'explicit absence must not be replaced by generic activity prose');
+});
+
 test('opening population and opening scene survive repository reload without duplicate residents on regeneration', async () => {
   await withDurablePersistence(async () => {
     const storyId = 'opening_population_reload_' + Date.now();

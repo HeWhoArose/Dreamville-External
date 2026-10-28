@@ -825,6 +825,80 @@ test('Phase 5 restricted-site readiness requires canonical access controls and a
   });
 });
 
+test('Phase 5 abandoned-site readiness distinguishes explicit absence from unknown and preserves visible occupants', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_abandoned_site_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Sunken Scriptorium',
+      { status: 'ABANDONED', expectedPopulation: 'NONE', explanation: 'Evacuated after the archive flooded.', provenance: 'AUTHORED' },
+      false,
+    );
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const originalLocation = graph.getNode(rig.locationId)!;
+    graph.addNode({
+      ...originalLocation,
+      archetype: 'ABANDONED_SITE',
+      environment: { features: ['flooded archive shelves'] },
+      sceneObjects: [{
+        id: 'phase5_abandoned_physical_cue_' + storyId,
+        name: 'waterline marks',
+        kind: 'ENVIRONMENTAL_FEATURE',
+        description: 'A high waterline darkens the lower stone shelves.',
+        visible: true,
+      }],
+    });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const ready = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(ready?.profile, 'ABANDONED_SITE');
+    assert.equal(ready?.status, 'READY');
+    assert.deepEqual(ready?.issues, []);
+
+    const occupantReport = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Exploring the flooded archive.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      visibleEntities: [{ name: 'A scavenger', role: 'intruder', presence: 'present', visibleToPlayer: true }],
+    });
+    assert.equal(occupantReport.status, 'READY', 'a visible trespasser does not erase the canonical abandoned-site designation');
+    assert.equal(occupantReport.evidenceCounts.visibleEntities, 1, 'visible occupants remain represented independently of resident-population status');
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)!;
+    const reloadedReadiness = reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(reloadedLocation.archetype, 'ABANDONED_SITE');
+    assert.equal(reloadedLocation.population?.status, 'ABANDONED');
+    assert.equal(reloadedReadiness?.status, 'READY');
+    assert.deepEqual(reloadedReadiness, ready, 'abandoned-site readiness and canonical evidence must survive reload');
+
+    graph.addNode({
+      ...reloadedLocation,
+      population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+      environment: { features: [] },
+      sceneObjects: [],
+    });
+    const incomplete = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Exploring the archive.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(incomplete.profile, 'ABANDONED_SITE');
+    assert.equal(incomplete.status, 'INCOMPLETE');
+    assert.deepEqual(incomplete.issues.map((issue) => issue.code), [
+      'ABANDONED_SITE_ABSENCE_NOT_ESTABLISHED',
+      'ABANDONED_SITE_PHYSICAL_CUE_NOT_VISIBLE',
+    ]);
+  });
+});
+
 test('opening semantic review rejects hidden canonical facts from both primary and repair candidates', async () => {
   const storyId = 'opening_semantic_hidden_fact_' + Date.now();
   const rig = buildOpeningRig(

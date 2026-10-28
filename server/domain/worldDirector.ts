@@ -18,7 +18,7 @@ import {
   type WorldDirectorInvestigationSceneContractReport,
 } from './worldDirectorPreparationContract';
 
-export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'GENERAL';
+export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'GENERAL';
 
 export type WorldDirectorReadinessStatus =
   | 'READY'
@@ -77,6 +77,8 @@ export interface WorldDirectorReadinessIssue {
     | 'INVESTIGATION_UNRESOLVED_QUESTION'
     | 'RESTRICTED_SITE_ACCESS_NOT_ESTABLISHED'
     | 'RESTRICTED_SITE_BOUNDARY_NOT_VISIBLE'
+    | 'ABANDONED_SITE_ABSENCE_NOT_ESTABLISHED'
+    | 'ABANDONED_SITE_PHYSICAL_CUE_NOT_VISIBLE'
     | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
@@ -312,6 +314,34 @@ export class WorldDirector {
         }
         return {
           profile: 'RESTRICTED_SITE',
+          status: issues.length ? 'INCOMPLETE' : 'READY',
+          issues,
+          evidenceCounts,
+        };
+      }
+      if (String(canonicalLocation?.archetype || '').trim().toUpperCase() === 'ABANDONED_SITE') {
+        const population = canonicalLocation?.population;
+        const issues: WorldDirectorReadinessIssue[] = [];
+        if (population?.status !== 'ABANDONED' || population.expectedPopulation !== 'NONE') {
+          issues.push({
+            code: 'ABANDONED_SITE_ABSENCE_NOT_ESTABLISHED',
+            requirement: 'Canonical ABANDONED occupancy with no expected resident population',
+            message: 'The location is authored as an abandoned site, but its canonical occupancy does not explicitly establish that ordinary resident population is absent.',
+          });
+        }
+        const physicalCues = [
+          ...(Array.isArray(canonicalLocation?.environment?.features) ? canonicalLocation.environment.features : []),
+          ...normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).map(searchableObjectText),
+        ].join(' ').toLowerCase();
+        if (!/\b(?:flood(?:ed|ing)?|collaps(?:e|ed|ing)|ruin(?:ed)?|derelict|broken|overgrown|evacuat\w*|sealed|vacant|deserted|charred|crumbl\w*|decay(?:ed|ing)?)\b/i.test(physicalCues)) {
+          issues.push({
+            code: 'ABANDONED_SITE_PHYSICAL_CUE_NOT_VISIBLE',
+            requirement: 'Visible canonical environmental or object evidence of abandonment',
+            message: 'The abandoned site has no visible canonical physical cue supporting its condition; narration must not invent one.',
+          });
+        }
+        return {
+          profile: 'ABANDONED_SITE',
           status: issues.length ? 'INCOMPLETE' : 'READY',
           issues,
           evidenceCounts,

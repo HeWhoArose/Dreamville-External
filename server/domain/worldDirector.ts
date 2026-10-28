@@ -122,7 +122,7 @@ function isInvestigationPremise(value: string): boolean {
 }
 
 function isExplorationPremise(value: string): boolean {
-  return /\\b(?:explor\\w*|scout\\w*|survey\\w*|reconnoit\\w*)\\b/i.test(value);
+  return /\b(?:explor\w*|scout\w*|survey\w*|reconnoit\w*)\b/i.test(value);
 }
 
 function normalizedVisibleObjects(objects: WorldDirectorSceneObjectEvidence[]) {

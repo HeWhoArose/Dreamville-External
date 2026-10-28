@@ -854,9 +854,9 @@ The current branch has been re-audited against the Phase 0 exit criteria. This f
 
 The persistence store previously created snapshots only before replacing the primary file. That meant a successful save followed by primary-file corruption could recover the previous save rather than the most recently committed state. This is distinct from the staged-transaction rollback regression in §2.20, which protects against resurrecting a failed scene preparation.
 
-After the atomic primary-file rename, the store now also snapshots the newly committed primary state. Post-commit snapshot creation and pruning remain maintenance operations: failures are logged and do not turn an already committed write into a failed transaction. The durable-persistence regression now corrupts the primary after two successful writes and asserts recovery returns the second value (`newer`), not the earlier value (`recoverable`).
+After the atomic primary-file rename, the store snapshots the newly committed primary state. It no longer writes a redundant pre-save snapshot: the primary remains intact until the atomic rename, and one post-commit snapshot per successful save preserves the configured history depth. Post-commit snapshot creation and pruning remain maintenance operations: failures are logged and do not turn an already committed write into a failed transaction. The durable-persistence regression now corrupts the primary after two successful writes and asserts recovery returns the second value (`newer`), not the earlier value (`recoverable`).
 
-Source commit: `2c523a49decceb02fdba1b5fcb76a6833b753919`. Regression commit: `f2a9bdf15bd5d2c00edc020ecb033db8acc6c96e`.
+Source commits: `2c523a49decceb02fdba1b5fcb76a6833b753919` and `16c6a94d9286a1dfc2b8ce8401b66cba667472e8`. Regression commit: `f2a9bdf15bd5d2c00edc020ecb033db8acc6c96e`.
 
 This improves recovery from a corrupt primary when a post-commit snapshot was successfully created. It does not prove fsync/power-loss durability, guarantee the latest state if snapshot creation itself fails, or provide cross-process write coordination. Production World Director preparation writes remain disabled pending exact-head verification and the remaining implementation gates.
 

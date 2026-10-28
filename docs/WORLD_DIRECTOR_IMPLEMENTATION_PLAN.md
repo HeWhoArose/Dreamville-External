@@ -848,3 +848,14 @@ The current branch has been re-audited against the Phase 0 exit criteria. This f
 
 **Phase 0 disposition: COMPLETE.** The current source map, focused reproducible gap, supported primary cause, canonical-owner responsibilities, and current automated evidence are recorded. Phase 1 contract work may proceed; production scene-preparation mutation remains disabled.
 
+
+
+### 2.27 Recover the latest committed state after primary-file corruption — IMPLEMENTED; exact-head CI pending (2026-10-28)
+
+The persistence store previously created snapshots only before replacing the primary file. That meant a successful save followed by primary-file corruption could recover the previous save rather than the most recently committed state. This is distinct from the staged-transaction rollback regression in §2.20, which protects against resurrecting a failed scene preparation.
+
+After the atomic primary-file rename, the store now also snapshots the newly committed primary state. Post-commit snapshot creation and pruning remain maintenance operations: failures are logged and do not turn an already committed write into a failed transaction. The durable-persistence regression now corrupts the primary after two successful writes and asserts recovery returns the second value (`newer`), not the earlier value (`recoverable`).
+
+Source commit: `2c523a49decceb02fdba1b5fcb76a6833b753919`. Regression commit: `f2a9bdf15bd5d2c00edc020ecb033db8acc6c96e`.
+
+This improves recovery from a corrupt primary when a post-commit snapshot was successfully created. It does not prove fsync/power-loss durability, guarantee the latest state if snapshot creation itself fails, or provide cross-process write coordination. Production World Director preparation writes remain disabled pending exact-head verification and the remaining implementation gates.

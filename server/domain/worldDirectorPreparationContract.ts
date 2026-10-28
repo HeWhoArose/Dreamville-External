@@ -12,6 +12,13 @@ import type { KnowledgeFact, LocationSceneObject } from './types';
 
 export const WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION = 1 as const;
 
+export const WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY = 'INVESTIGATION_INCIDENT' as const;
+export const WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES = {
+  victim: 'INVESTIGATION_VICTIM',
+  body: 'INVESTIGATION_BODY',
+  evidence: 'INVESTIGATION_EVIDENCE',
+} as const;
+
 /**
  * Investigation claims keep authored scenario truth, committed canonical
  * records, generated suggestions, and unanswered questions distinct. Narrative
@@ -146,7 +153,7 @@ export function assessWorldDirectorInvestigationClaim(
 }
 
 export interface WorldDirectorInvestigationIncidentRef {
-  owner: 'CANONICAL_EVENT';
+  owner: 'WORLD_TIMELINE';
   recordRef: string;
   locationId: string;
   state: 'COMMITTED_ACTIVE' | 'PROPOSED' | 'HISTORICAL';
@@ -177,6 +184,11 @@ export interface WorldDirectorInvestigationSceneContractInput {
   victim?: WorldDirectorInvestigationVictimRef;
   body?: WorldDirectorInvestigationBodyRef;
   evidence?: WorldDirectorInvestigationPhysicalAnchorRef[];
+  referenceConflicts?: Array<{
+    requirementId: WorldDirectorInvestigationRequirementId;
+    code: 'INCIDENT_REFERENCE_CONFLICT' | 'VICTIM_REFERENCE_CONFLICT' | 'BODY_REFERENCE_CONFLICT';
+    recordRefs: string[];
+  }>;
   unresolvedQuestions?: string[];
 }
 
@@ -193,9 +205,41 @@ export interface WorldDirectorInvestigationRequirementResult {
   reason?: string;
 }
 
+export type WorldDirectorInvestigationIssueCode =
+  | 'SCENE_LOCATION_MISSING'
+  | 'INCIDENT_REFERENCE_CONFLICT'
+  | 'INCIDENT_REFERENCE_MISSING'
+  | 'INCIDENT_OWNER_CONFLICT'
+  | 'INCIDENT_NOT_COMMITTED_ACTIVE'
+  | 'INCIDENT_LOCATION_MISMATCH'
+  | 'VICTIM_REFERENCE_MISSING'
+  | 'VICTIM_REFERENCE_CONFLICT'
+  | 'VICTIM_OWNER_CONFLICT'
+  | 'VICTIM_NOT_COMMITTED'
+  | 'BODY_REFERENCE_MISSING'
+  | 'BODY_REFERENCE_CONFLICT'
+  | 'BODY_OWNER_CONFLICT'
+  | 'BODY_NOT_PRESENT'
+  | 'BODY_LOCATION_MISMATCH'
+  | 'BODY_VICTIM_LINK_MISMATCH'
+  | 'BODY_NOT_DISCOVERABLE'
+  | 'EVIDENCE_REFERENCE_MISSING'
+  | 'EVIDENCE_OWNER_CONFLICT'
+  | 'EVIDENCE_NOT_PRESENT'
+  | 'EVIDENCE_LOCATION_MISMATCH'
+  | 'EVIDENCE_NOT_DISCOVERABLE';
+
+export interface WorldDirectorInvestigationIssue {
+  code: WorldDirectorInvestigationIssueCode;
+  requirementId: WorldDirectorInvestigationRequirementId;
+  recordRef?: string;
+  recoveryAction: string;
+}
+
 export interface WorldDirectorInvestigationSceneContractReport {
   status: 'READY' | 'READY_WITH_UNCERTAINTY' | 'INCOMPLETE';
   requirements: WorldDirectorInvestigationRequirementResult[];
+  issues: WorldDirectorInvestigationIssue[];
   unresolvedQuestions: string[];
 }
 
@@ -215,8 +259,59 @@ export function assessWorldDirectorInvestigationSceneContract(
   const incident = input.incident;
   const victim = input.victim;
   const body = input.body;
+  const evidenceRecords = Array.isArray(input.evidence) ? input.evidence : [];
+  const issues: WorldDirectorInvestigationIssue[] = [];
+  const addIssue = (
+    code: WorldDirectorInvestigationIssueCode,
+    requirementId: WorldDirectorInvestigationRequirementId,
+    recoveryAction: string,
+    recordRef?: string,
+  ) => issues.push({ code, requirementId, recoveryAction, ...(recordRef ? { recordRef } : {}) });
+
+  if (!locationId) {
+    addIssue('SCENE_LOCATION_MISSING', 'CURRENT_INCIDENT', 'Resolve the canonical current location before assessing this scene.');
+  }
+
+  if (!incident) {
+    addIssue('INCIDENT_REFERENCE_MISSING', 'CURRENT_INCIDENT', 'Author or resolve the required incident through its canonical event owner.');
+  } else if (incident.owner !== 'WORLD_TIMELINE') {
+    addIssue('INCIDENT_OWNER_CONFLICT', 'CURRENT_INCIDENT', 'Read the incident from the canonical world timeline; do not adopt a record from another owner.', incident.recordRef);
+  } else if (!nonEmptyRecordRef(incident.recordRef)) {
+    addIssue('INCIDENT_REFERENCE_MISSING', 'CURRENT_INCIDENT', 'Repair the missing incident record reference from its canonical owner.');
+  } else if (incident.state !== 'COMMITTED_ACTIVE') {
+    addIssue('INCIDENT_NOT_COMMITTED_ACTIVE', 'CURRENT_INCIDENT', 'Commit an authorized active incident through its canonical owner; proposals and historical events do not qualify.', incident.recordRef);
+  } else if (incident.locationId !== locationId) {
+    addIssue('INCIDENT_LOCATION_MISMATCH', 'CURRENT_INCIDENT', 'Revisit the incident location or correct its canonical location reference.', incident.recordRef);
+  }
+
+  if (!victim) {
+    addIssue('VICTIM_REFERENCE_MISSING', 'VICTIM_IDENTITY', 'Resolve the victim identity through EntityRegistry or keep the requirement explicitly incomplete.');
+  } else if (victim.owner !== 'ENTITY_REGISTRY') {
+    addIssue('VICTIM_OWNER_CONFLICT', 'VICTIM_IDENTITY', 'Read the victim identity from EntityRegistry; do not adopt a record from another owner.', victim.recordRef);
+  } else if (!nonEmptyRecordRef(victim.recordRef)) {
+    addIssue('VICTIM_REFERENCE_MISSING', 'VICTIM_IDENTITY', 'Repair the missing victim record reference from EntityRegistry.');
+  } else if (victim.state !== 'COMMITTED') {
+    addIssue('VICTIM_NOT_COMMITTED', 'VICTIM_IDENTITY', 'Commit the authorized victim identity through EntityRegistry before treating it as scene truth.', victim.recordRef);
+  }
+
+  if (!body) {
+    addIssue('BODY_REFERENCE_MISSING', 'VICTIM_BODY', 'Resolve a body scene object through GeographyGraph and link it to the canonical victim record.');
+  } else if (body.owner !== 'GEOGRAPHY_GRAPH') {
+    addIssue('BODY_OWNER_CONFLICT', 'VICTIM_BODY', 'Read the body from GeographyGraph; do not adopt a body record from another owner.', body.recordRef);
+  } else if (!nonEmptyRecordRef(body.recordRef)) {
+    addIssue('BODY_REFERENCE_MISSING', 'VICTIM_BODY', 'Repair the missing body record reference from GeographyGraph.');
+  } else if (body.presence !== 'PRESENT') {
+    addIssue('BODY_NOT_PRESENT', 'VICTIM_BODY', 'Confirm physical presence through GeographyGraph; an absent or consumed body cannot satisfy this scene. ', body.recordRef);
+  } else if (body.locationId !== locationId) {
+    addIssue('BODY_LOCATION_MISMATCH', 'VICTIM_BODY', 'Revisit the body location or correct the canonical scene-object location.', body.recordRef);
+  } else if (!victim || body.representsVictimRef !== victim.recordRef) {
+    addIssue('BODY_VICTIM_LINK_MISMATCH', 'VICTIM_BODY', 'Resolve the body-to-victim link from canonical records; do not infer identity from prose.', body.recordRef);
+  } else if (!body.visibleToPlayer && !body.discoverable) {
+    addIssue('BODY_NOT_DISCOVERABLE', 'VICTIM_BODY', 'Make the present body visible or discoverable only if canonical scene policy allows it.', body.recordRef);
+  }
+
   const incidentValid = Boolean(
-    locationId && incident?.owner === 'CANONICAL_EVENT' &&
+    locationId && incident?.owner === 'WORLD_TIMELINE' &&
     incident.state === 'COMMITTED_ACTIVE' &&
     nonEmptyRecordRef(incident.recordRef) && incident.locationId === locationId,
   );
@@ -230,13 +325,42 @@ export function assessWorldDirectorInvestigationSceneContract(
     (body.visibleToPlayer || body.discoverable) && victimValid &&
     body.representsVictimRef === victim?.recordRef,
   );
-  const validEvidence = (input.evidence || []).filter((evidence) =>
+  const validEvidence = evidenceRecords.filter((evidence) =>
     evidence?.owner === 'GEOGRAPHY_GRAPH' &&
     nonEmptyRecordRef(evidence.recordRef) &&
     evidence.locationId === locationId &&
     evidence.presence === 'PRESENT' &&
     (evidence.visibleToPlayer || evidence.discoverable),
   );
+
+  if (!validEvidence.length) {
+    if (!evidenceRecords.length) {
+      addIssue('EVIDENCE_REFERENCE_MISSING', 'DISCOVERABLE_EVIDENCE', 'Resolve at least one evidence record through GeographyGraph.');
+    } else {
+      for (const candidate of evidenceRecords) {
+        if (candidate?.owner !== 'GEOGRAPHY_GRAPH') {
+          addIssue('EVIDENCE_OWNER_CONFLICT', 'DISCOVERABLE_EVIDENCE', 'Read evidence from GeographyGraph; do not adopt a record from another owner.', candidate?.recordRef);
+        } else if (!nonEmptyRecordRef(candidate.recordRef)) {
+          addIssue('EVIDENCE_REFERENCE_MISSING', 'DISCOVERABLE_EVIDENCE', 'Repair the missing evidence record reference from GeographyGraph.');
+        } else if (candidate.presence !== 'PRESENT') {
+          addIssue('EVIDENCE_NOT_PRESENT', 'DISCOVERABLE_EVIDENCE', 'Confirm the evidence remains physically present; consumed or removed objects do not satisfy readiness.', candidate.recordRef);
+        } else if (candidate.locationId !== locationId) {
+          addIssue('EVIDENCE_LOCATION_MISMATCH', 'DISCOVERABLE_EVIDENCE', 'Revisit the evidence location or correct the canonical scene-object location.', candidate.recordRef);
+        } else if (!candidate.visibleToPlayer && !candidate.discoverable) {
+          addIssue('EVIDENCE_NOT_DISCOVERABLE', 'DISCOVERABLE_EVIDENCE', 'Make the evidence visible or searchable only if canonical scene policy allows it.', candidate.recordRef);
+        }
+      }
+    }
+  }
+
+  for (const conflict of Array.isArray(input.referenceConflicts) ? input.referenceConflicts : []) {
+    addIssue(
+      conflict.code,
+      conflict.requirementId,
+      'Resolve the competing canonical references explicitly; do not select or merge one by guesswork.',
+      conflict.recordRefs.filter(nonEmptyRecordRef).join(', ') || undefined,
+    );
+  }
 
   const requirements: WorldDirectorInvestigationRequirementResult[] = [
     {
@@ -265,7 +389,7 @@ export function assessWorldDirectorInvestigationSceneContract(
     },
   ];
 
-  const unresolvedQuestions = (input.unresolvedQuestions || [])
+  const unresolvedQuestions = (Array.isArray(input.unresolvedQuestions) ? input.unresolvedQuestions : [])
     .map((question) => String(question || '').trim())
     .filter(Boolean);
   const hasMissingRequirements = requirements.some((requirement) => requirement.status === 'MISSING');
@@ -277,6 +401,7 @@ export function assessWorldDirectorInvestigationSceneContract(
         ? 'READY_WITH_UNCERTAINTY'
         : 'READY',
     requirements,
+    issues,
     unresolvedQuestions,
   };
 }

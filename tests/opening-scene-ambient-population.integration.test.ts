@@ -178,9 +178,13 @@ test('World Director opening integration exposes an investigation premise with n
   assert.equal(readiness?.profile, 'INVESTIGATION');
   assert.equal(readiness?.status, 'INCOMPLETE');
   assert.deepEqual(
+    readiness?.investigationRequirements?.map((requirement: any) => requirement.status),
+    ['MISSING', 'MISSING', 'MISSING', 'MISSING'],
+    'opening integration must surface each absent canonical investigation anchor',
+  );
+  assert.deepEqual(
     readiness?.issues?.map((issue: any) => issue.code),
-    ['INVESTIGATION_VICTIM_NOT_ESTABLISHED', 'INVESTIGATION_EVIDENCE_NOT_ESTABLISHED'],
-    'opening integration must surface that the premise did not materialize canonical victim/clue anchors',
+    ['INCIDENT_REFERENCE_MISSING', 'VICTIM_REFERENCE_MISSING', 'BODY_REFERENCE_MISSING', 'EVIDENCE_REFERENCE_MISSING'],
   );
   assert.deepEqual(
     rig.repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
@@ -193,6 +197,43 @@ test('World Director opening integration exposes an investigation premise with n
   );
 });
 
+test('World Director opening integration reads investigation anchors from their canonical owners', async () => {
+  const storyId = 'opening_investigation_canonical_anchors_' + Date.now();
+  const rig = buildOpeningRig(storyId, 'Isolated Shack', {
+    status: 'ABANDONED', expectedPopulation: 'NONE', provenance: 'AUTHORED',
+  });
+  const run = rig.repository.getStoryRun(storyId);
+  run.startingSituation = {
+    summary: 'Kaelen Voss is investigating a fresh murder scene inside the isolated shack.',
+    hook: 'A fresh murder has been reported at the shack.',
+    activity: 'examining the scene',
+    situationType: 'pressure_event',
+  };
+  run.plannedEvents = [{ id: 'incident_shack_murder', category: 'INVESTIGATION_INCIDENT', locationId: rig.locationId, status: 'ACTIVE' }];
+  run.eventStates = { ...run.eventStates, incident_shack_murder: { id: 'incident_shack_murder', status: 'ACTIVE' } };
+  rig.repository.saveStoryRun(run);
+  const victim = rig.repository.saveEntityCard(storyId, {
+    id: 'victim_shack_identity', name: 'Unknown victim', kind: 'CHARACTER',
+    metadata: { worldDirectorRole: 'INVESTIGATION_VICTIM' },
+  });
+  const geography = rig.repository.getGeographyGraph(storyId);
+  assert.equal(geography.addSceneObject(rig.locationId, {
+    id: 'body_shack_scene_object', name: 'Victim body', kind: 'OTHER', visible: false,
+    properties: { worldDirectorRole: 'INVESTIGATION_BODY', representsVictimRef: victim.id, discoverable: true },
+  }).success, true);
+  assert.equal(geography.addSceneObject(rig.locationId, {
+    id: 'evidence_shack_scene_object', name: 'Unexamined clue', kind: 'OTHER', visible: false,
+    properties: { worldDirectorRole: 'INVESTIGATION_EVIDENCE', discoverable: true },
+  }).success, true);
+
+  await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+  const readiness = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+  assert.equal(readiness?.profile, 'INVESTIGATION');
+  assert.equal(readiness?.status, 'READY');
+  assert.deepEqual(readiness?.issues, []);
+  assert.deepEqual(readiness?.investigationRequirements?.map((requirement: any) => requirement.status),
+    ['SATISFIED', 'SATISFIED', 'SATISFIED', 'SATISFIED']);
+});
 test('opening scene seeds and projects canonical ambient people before generating a public citadel opening', async () => {
   const storyId = 'opening_population_public_' + Date.now();
   const rig = buildOpeningRig(

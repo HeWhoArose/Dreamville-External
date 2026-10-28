@@ -825,6 +825,13 @@ Exact-head CI at `d998270ac7733294ab368e170b1971785e030239` passed Dreamville Ve
 
 Phase 1 remains open until the readiness contract consumes actual authorized canonical projections and defines conflict/error/recovery results for owner references. Production preparation writes remain disabled.
 
+### 2.26 Phase 1 opening-readiness owner integration — IMPLEMENTED LOCALLY; CI PENDING (2026-10-28)
+
+The opening readiness assessment now receives the repository, story ID, and canonical current location. For investigation premises it resolves only explicit owner-backed markers: active timeline incident, EntityRegistry victim identity, GeographyGraph body linked to that victim, and present visible/discoverable evidence at the same location. It returns the structured contract report, requirement statuses, and explicit issue/recovery codes for missing, conflicting, misowned, inactive, off-location, unlinked, absent, or undiscoverable references. The legacy visible-text assessment remains available to callers that do not provide canonical owner context.
+
+Integration coverage now checks both absent anchors (all four requirements incomplete, no ambient NPC substitute) and a valid owner-backed scene (all requirements satisfied). The hidden but discoverable body and clue case verifies that private physical evidence can meet readiness without being exposed as visible.
+
+This remains diagnostic only. It does not create or repair incident, victim, body, or evidence records. Local test execution is unavailable because this checkout has no installed `tsx` dependency; exact-head GitHub CI is required before this ledger entry is considered verified. Phase 1 remains open.
 ### 2.23 Final Phase 0 source, regression, and owner/recovery audit — COMPLETE (2026-10-27)
 
 The current branch has been re-audited against the Phase 0 exit criteria. This final disposition supersedes earlier interim ledger entries in §§2.9–2.22 that said Phase 0 remained open or CI was pending. It closes the baseline/source-trace phase; it does not enable production scene-preparation writes.

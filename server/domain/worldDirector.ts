@@ -6,6 +6,17 @@
  * It does not create facts or replace any canonical authority.
  */
 
+import type { WorldRepository } from '../repositories/worldRepository';
+import {
+  WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY,
+  WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES,
+  assessWorldDirectorInvestigationSceneContract,
+  type WorldDirectorInvestigationIssueCode,
+  type WorldDirectorInvestigationRequirementResult,
+  type WorldDirectorInvestigationSceneContractInput,
+  type WorldDirectorInvestigationSceneContractReport,
+} from './worldDirectorPreparationContract';
+
 export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'GENERAL';
 
 export type WorldDirectorReadinessStatus =
@@ -51,21 +62,29 @@ export interface OpeningSceneReadinessInput {
   visibleEvents?: WorldDirectorEventEvidence[];
   /** Canonically recorded open questions; these are uncertainty, not missing facts to invent. */
   unresolvedQuestions?: string[];
+  /** When supplied, readiness is resolved against the canonical owner records. */
+  worldRepo?: WorldRepository;
+  storyId?: string;
+  currentLocationId?: string;
 }
 
 export interface WorldDirectorReadinessIssue {
   code:
     | 'INVESTIGATION_VICTIM_NOT_ESTABLISHED'
     | 'INVESTIGATION_EVIDENCE_NOT_ESTABLISHED'
-    | 'INVESTIGATION_UNRESOLVED_QUESTION';
+    | 'INVESTIGATION_UNRESOLVED_QUESTION'
+    | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
+  recoveryAction?: string;
 }
 
 export interface WorldDirectorReadinessReport {
   profile: WorldDirectorSceneProfile;
   status: WorldDirectorReadinessStatus;
   issues: WorldDirectorReadinessIssue[];
+  investigationRequirements?: WorldDirectorInvestigationRequirementResult[];
+  investigationSceneContract?: WorldDirectorInvestigationSceneContractReport;
   evidenceCounts: {
     visibleSceneObjects: number;
     visibleEntities: number;
@@ -107,6 +126,135 @@ function searchableEntityText(entity: WorldDirectorEntityEvidence): string {
     .filter(Boolean).join(' ').toLowerCase();
 }
 
+function investigationSceneContractFromOwners(
+  repository: WorldRepository,
+  storyId: string,
+  requestedLocationId: string,
+): WorldDirectorInvestigationSceneContractInput {
+  const location = repository.getGeographyGraph(storyId).getNode(requestedLocationId);
+  const locationId = location?.id || '';
+  const run = repository.getStoryRun(storyId);
+  const plannedEvents = Array.isArray(run?.plannedEvents) ? run.plannedEvents : [];
+  const eventStates = run?.eventStates || {};
+  const investigationEvents = plannedEvents.filter((event: any) =>
+    event?.category === WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY,
+  );
+  const activeEvents = investigationEvents.filter((event: any) =>
+    (eventStates[event.id]?.status || event.status) === 'ACTIVE',
+  );
+  const referenceConflicts: NonNullable<WorldDirectorInvestigationSceneContractInput['referenceConflicts']> = [];
+  let incident: WorldDirectorInvestigationSceneContractInput['incident'];
+  if (activeEvents.length === 1) {
+    const event = activeEvents[0];
+    incident = {
+      owner: 'WORLD_TIMELINE',
+      recordRef: String(event.id || ''),
+      locationId: String(event.locationId || ''),
+      state: 'COMMITTED_ACTIVE',
+    };
+  } else if (activeEvents.length > 1) {
+    referenceConflicts.push({
+      requirementId: 'CURRENT_INCIDENT',
+      code: 'INCIDENT_REFERENCE_CONFLICT',
+      recordRefs: activeEvents.map((event: any) => String(event.id || '')).filter(Boolean),
+    });
+  } else if (investigationEvents.length > 1) {
+    referenceConflicts.push({
+      requirementId: 'CURRENT_INCIDENT',
+      code: 'INCIDENT_REFERENCE_CONFLICT',
+      recordRefs: investigationEvents.map((event: any) => String(event.id || '')).filter(Boolean),
+    });
+  } else if (investigationEvents.length === 1) {
+    const event = investigationEvents[0];
+    const state = eventStates[event.id]?.status || event.status;
+    incident = {
+      owner: 'WORLD_TIMELINE',
+      recordRef: String(event.id || ''),
+      locationId: String(event.locationId || ''),
+      state: state === 'COMPLETED' || state === 'RESOLVED' ? 'HISTORICAL' : 'PROPOSED',
+    };
+  }
+
+  const entityCards = repository.getEntityCards(storyId);
+  const victimCandidates = entityCards.filter((card) =>
+    card.metadata?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.victim,
+  );
+  const sceneObjects = Array.isArray(location?.sceneObjects) ? location.sceneObjects : [];
+  const bodyCandidates = sceneObjects.filter((object) =>
+    object.properties?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.body,
+  );
+  const bodyVictimRefs = new Set(bodyCandidates
+    .map((object) => String(object.properties?.representsVictimRef || '').trim())
+    .filter(Boolean));
+  const linkedVictims = victimCandidates.filter((victim) => bodyVictimRefs.has(victim.id));
+  const usableVictims = linkedVictims.length ? linkedVictims : victimCandidates;
+
+  let victim: WorldDirectorInvestigationSceneContractInput['victim'];
+  if (usableVictims.length === 1) {
+    victim = { owner: 'ENTITY_REGISTRY', recordRef: usableVictims[0].id, state: 'COMMITTED' };
+  } else if (usableVictims.length > 1) {
+    referenceConflicts.push({
+      requirementId: 'VICTIM_IDENTITY',
+      code: 'VICTIM_REFERENCE_CONFLICT',
+      recordRefs: usableVictims.map((candidate) => candidate.id),
+    });
+  }
+
+  const linkedBodies = victim
+    ? bodyCandidates.filter((object) => object.properties?.representsVictimRef === victim!.recordRef)
+    : bodyCandidates;
+  let body: WorldDirectorInvestigationSceneContractInput['body'];
+  if (linkedBodies.length === 1) {
+    const object = linkedBodies[0];
+    body = {
+      owner: 'GEOGRAPHY_GRAPH',
+      recordRef: object.id,
+      locationId,
+      presence: 'PRESENT',
+      visibleToPlayer: object.visible !== false,
+      discoverable: object.properties?.discoverable === true,
+      representsVictimRef: String(object.properties?.representsVictimRef || ''),
+    };
+  } else if (linkedBodies.length > 1) {
+    referenceConflicts.push({
+      requirementId: 'VICTIM_BODY',
+      code: 'BODY_REFERENCE_CONFLICT',
+      recordRefs: linkedBodies.map((candidate) => candidate.id),
+    });
+  } else if (bodyCandidates.length === 1) {
+    const object = bodyCandidates[0];
+    body = {
+      owner: 'GEOGRAPHY_GRAPH',
+      recordRef: object.id,
+      locationId,
+      presence: 'PRESENT',
+      visibleToPlayer: object.visible !== false,
+      discoverable: object.properties?.discoverable === true,
+      representsVictimRef: String(object.properties?.representsVictimRef || ''),
+    };
+  }
+
+  const evidence = sceneObjects
+    .filter((object) => object.properties?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.evidence)
+    .map((object) => ({
+      owner: 'GEOGRAPHY_GRAPH' as const,
+      recordRef: object.id,
+      locationId,
+      presence: object.properties?.presence === 'ABSENT' ? 'ABSENT' as const : 'PRESENT' as const,
+      visibleToPlayer: object.visible !== false,
+      discoverable: object.properties?.discoverable === true,
+    }));
+
+  return {
+    currentLocationId: locationId,
+    incident,
+    victim,
+    body,
+    evidence,
+    referenceConflicts,
+  };
+}
+
 export class WorldDirector {
   /**
    * Checks whether a starting investigation is backed by visible canonical
@@ -130,6 +278,31 @@ export class WorldDirector {
         profile: 'GENERAL',
         status: 'NOT_APPLICABLE',
         issues: [],
+        evidenceCounts,
+      };
+    }
+
+    if (input.worldRepo && input.storyId && input.currentLocationId) {
+      const contractInput = investigationSceneContractFromOwners(
+        input.worldRepo,
+        input.storyId,
+        input.currentLocationId,
+      );
+      const investigationSceneContract = assessWorldDirectorInvestigationSceneContract({
+        ...contractInput,
+        unresolvedQuestions: input.unresolvedQuestions,
+      });
+      return {
+        profile: 'INVESTIGATION',
+        status: investigationSceneContract.status,
+        issues: investigationSceneContract.issues.map((issue) => ({
+          code: issue.code,
+          requirement: issue.requirementId,
+          message: issue.recoveryAction,
+          recoveryAction: issue.recoveryAction,
+        })),
+        investigationRequirements: investigationSceneContract.requirements,
+        investigationSceneContract,
         evidenceCounts,
       };
     }

@@ -156,6 +156,9 @@ export class OpeningSceneService {
 			sceneObjects: rawOpeningFacts.location.sceneObjects,
 			visibleEntities: rawOpeningFacts.location.visibleEntities,
 			visibleEvents: rawOpeningFacts.location.visibleEvents,
+			worldRepo,
+			storyId,
+			currentLocationId: rawOpeningFacts.location.id,
 		});
 		const authoredAgenda = worldRepo.getProtagonistAgenda?.(storyId) || null;
 		const authoredAgendaContext = authoredAgenda && typeof authoredAgenda.goal === 'string'

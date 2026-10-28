@@ -161,7 +161,7 @@ test('World Director investigation contract requires owner-backed incident, link
   const complete = assessWorldDirectorInvestigationSceneContract({
     currentLocationId: 'loc_isolated_shack',
     incident: {
-      owner: 'CANONICAL_EVENT',
+      owner: 'WORLD_TIMELINE',
       recordRef: 'event:shack-murder-01',
       locationId: 'loc_isolated_shack',
       state: 'COMMITTED_ACTIVE',
@@ -192,6 +192,7 @@ test('World Director investigation contract requires owner-backed incident, link
   });
 
   assert.equal(complete.status, 'READY_WITH_UNCERTAINTY');
+  assert.deepEqual(complete.issues, []);
   assert.ok(complete.requirements.every((requirement) => requirement.status === 'SATISFIED'));
   assert.deepEqual(complete.unresolvedQuestions, ['Who entered the shack?']);
   assert.deepEqual(
@@ -203,7 +204,7 @@ test('World Director investigation contract requires owner-backed incident, link
   const unsupported = assessWorldDirectorInvestigationSceneContract({
     currentLocationId: 'loc_isolated_shack',
     incident: {
-      owner: 'CANONICAL_EVENT',
+      owner: 'WORLD_TIMELINE',
       recordRef: 'event:proposed-murder',
       locationId: 'loc_isolated_shack',
       state: 'PROPOSED',
@@ -238,6 +239,40 @@ test('World Director investigation contract requires owner-backed incident, link
     ['CURRENT_INCIDENT', 'VICTIM_BODY', 'DISCOVERABLE_EVIDENCE'],
     'an uncommitted incident, mismatched/off-location body, or hidden undiscoverable evidence cannot satisfy readiness',
   );
+  assert.deepEqual(
+    unsupported.issues.map((issue) => issue.code),
+    ['INCIDENT_NOT_COMMITTED_ACTIVE', 'BODY_LOCATION_MISMATCH', 'EVIDENCE_LOCATION_MISMATCH'],
+    'the report should identify a repair or retry path for each invalid canonical reference',
+  );
+  assert.deepEqual(
+    assessWorldDirectorInvestigationSceneContract({
+      currentLocationId: 'loc_isolated_shack',
+      incident: { owner: 'ENTITY_REGISTRY', recordRef: 'event:misowned', locationId: 'loc_isolated_shack', state: 'COMMITTED_ACTIVE' } as any,
+      victim: { owner: 'GEOGRAPHY_GRAPH', recordRef: 'entity:misowned', state: 'COMMITTED' } as any,
+      body: {
+        owner: 'GEOGRAPHY_GRAPH',
+        recordRef: 'scene-object:wrong-victim',
+        locationId: 'loc_isolated_shack',
+        presence: 'PRESENT',
+        visibleToPlayer: true,
+        discoverable: true,
+        representsVictimRef: 'entity:somebody-else',
+      },
+      evidence: [
+        { owner: 'ENTITY_REGISTRY', recordRef: 'evidence:misowned', locationId: 'loc_isolated_shack', presence: 'PRESENT', visibleToPlayer: true, discoverable: true } as any,
+        { owner: 'GEOGRAPHY_GRAPH', recordRef: 'scene-object:hidden-clue', locationId: 'loc_isolated_shack', presence: 'PRESENT', visibleToPlayer: false, discoverable: false },
+      ],
+    }).issues.map((issue) => issue.code),
+    ['INCIDENT_OWNER_CONFLICT', 'VICTIM_OWNER_CONFLICT', 'BODY_VICTIM_LINK_MISMATCH', 'EVIDENCE_OWNER_CONFLICT', 'EVIDENCE_NOT_DISCOVERABLE'],
+    'wrong owners, conflicting body links, and concealed unsearchable clues need explicit diagnostics',
+  );
+
+  const malformedEvidence = assessWorldDirectorInvestigationSceneContract({
+    currentLocationId: 'loc_isolated_shack',
+    evidence: { recordRef: 'not-an-array' } as any,
+  });
+  assert.equal(malformedEvidence.status, 'INCOMPLETE');
+  assert.ok(malformedEvidence.issues.some((issue) => issue.code === 'EVIDENCE_REFERENCE_MISSING'));
 });
 
 test('World Director canonical-owner contract rolls back scene-object and Chronicle writes together', async () => {

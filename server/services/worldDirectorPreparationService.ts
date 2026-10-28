@@ -287,7 +287,7 @@ export class WorldDirectorPreparationService {
           return (role === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.body || role === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.evidence)
             && !desiredObjectIds.has(object.id);
         });
-        if (duplicateRole) return { success: false, errorReason: `OWNER_CONFLICT: preparation already owns a different ${duplicateRole.properties.worldDirectorRole} record (${duplicateRole.id}).` };
+        if (duplicateRole) return { success: false, errorReason: `OWNER_CONFLICT: preparation already owns a different ${duplicateRole.properties?.worldDirectorRole} record (${duplicateRole.id}).` };
 
         const canonicalChanges: string[] = [];
         if (incidentPlan.changed) {

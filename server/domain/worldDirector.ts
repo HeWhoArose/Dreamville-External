@@ -9,6 +9,7 @@
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { WorldDirectorPreparationResult } from '../services/worldDirectorPreparationService';
 import { isPublicArchetype, normalizeLocationArchetype } from './locationArchetypes';
+import { resolveSpatialLineOfSight, type SpatialObstacle } from './spatialAuthority';
 import {
   WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY,
   WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES,
@@ -92,7 +93,10 @@ export interface WorldDirectorReadinessIssue {
     | 'EXPLORATION_DISCOVERIES_UNRESOLVED'
     | 'COMBAT_PLAYER_CONTEXT_UNAVAILABLE'
     | 'COMBAT_PLAYER_NOT_IN_ENCOUNTER'
+    | 'COMBAT_PLAYER_NOT_ACTIVE'
     | 'COMBAT_OPPONENT_NOT_VISIBLE'
+    | 'COMBAT_POSITION_UNAVAILABLE'
+    | 'COMBAT_LINE_OF_SIGHT_BLOCKED'
     | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
@@ -113,6 +117,14 @@ export interface WorldDirectorReadinessReport {
   };
   /** Canonical intended destination while the player is still en route. */
   travelDestinationLocationId?: string;
+  /** Player-visible tactical facts; concealed participants are excluded. */
+  combatContext?: {
+    phase: 'ACTIVE';
+    currentRound: number;
+    visibleLivingOpponents: number;
+    nearestOpponentDistanceCells?: number;
+    nearestOpponentLineOfSight?: 'CLEAR' | 'BLOCKED';
+  };
 }
 
 /**
@@ -315,6 +327,7 @@ export class WorldDirector {
       const player = input.worldRepo!.getPlayerLifecycle(input.storyId!);
       const actorId = player?.actorId;
       const issues: WorldDirectorReadinessIssue[] = [];
+      let combatContext: WorldDirectorReadinessReport['combatContext'];
       if (!actorId) {
         issues.push({
           code: 'COMBAT_PLAYER_CONTEXT_UNAVAILABLE',
@@ -331,22 +344,78 @@ export class WorldDirector {
             message: 'The player actor is not present in the projected active encounter; do not narrate combat participation or proximity.',
           });
         }
-        const visibleOpponent = projection.participants.some((participant) =>
+        const opponents = projection.participants.filter((participant) =>
           participant.team === 'enemies' && !participant.isDead,
         );
-        if (playerParticipant && !visibleOpponent) {
+        if (playerParticipant && (playerParticipant.isDead || playerParticipant.hpCurrent <= 0)) {
+          issues.push({
+            code: 'COMBAT_PLAYER_NOT_ACTIVE',
+            requirement: 'The player actor is conscious and active in the encounter',
+            message: 'The player actor is not in an active condition for this encounter; do not narrate active player combat participation.',
+          });
+        }
+        if (playerParticipant && !opponents.length) {
           issues.push({
             code: 'COMBAT_OPPONENT_NOT_VISIBLE',
             requirement: 'At least one living opponent is visible in the player-scoped combat projection',
             message: 'No living opponent is established in the player-visible encounter projection; do not identify or describe an unseen opponent.',
           });
         }
+        if (playerParticipant && !playerParticipant.isDead && playerParticipant.hpCurrent > 0 && opponents.length) {
+          const positioned = opponents
+            .filter((opponent) => Number.isFinite(opponent.x) && Number.isFinite(opponent.y))
+            .map((opponent) => ({
+              distance: Math.hypot(opponent.x - playerParticipant.x, opponent.y - playerParticipant.y),
+              opponent,
+            }))
+            .sort((a, b) => a.distance - b.distance);
+          if (!Number.isFinite(playerParticipant.x) || !Number.isFinite(playerParticipant.y) || !positioned.length) {
+            issues.push({
+              code: 'COMBAT_POSITION_UNAVAILABLE',
+              requirement: 'Use canonical player and opponent positions for tactical range',
+              message: 'A player-visible combat participant has no usable canonical grid position; do not infer tactical range or relative placement.',
+            });
+          } else {
+            const spatialObstacles: SpatialObstacle[] = (projection.obstacles || []).map((obstacle, index) => ({
+              id: `combat_obstacle_${index + 1}_${obstacle.x}_${obstacle.y}`,
+              minX: obstacle.x,
+              maxX: obstacle.x,
+              minY: obstacle.y,
+              maxY: obstacle.y,
+              blocksMovement: obstacle.isImpassable !== false,
+              blocksSight: obstacle.isImpassable !== false,
+            }));
+            const nearest = positioned[0];
+            const lineOfSight = resolveSpatialLineOfSight(
+              { x: playerParticipant.x, y: playerParticipant.y },
+              { x: nearest.opponent.x, y: nearest.opponent.y },
+              spatialObstacles,
+            );
+            combatContext = {
+              phase: 'ACTIVE',
+              currentRound: projection.currentRound,
+              visibleLivingOpponents: opponents.length,
+              nearestOpponentDistanceCells: Number(nearest.distance.toFixed(2)),
+              nearestOpponentLineOfSight: lineOfSight.clear ? 'CLEAR' : 'BLOCKED',
+            };
+            if (!lineOfSight.clear) {
+              issues.push({
+                code: 'COMBAT_LINE_OF_SIGHT_BLOCKED',
+                requirement: 'Respect canonical obstacles between the player and the nearest visible opponent',
+                message: 'A canonical battlefield obstacle blocks the line of sight to the nearest player-visible opponent; do not imply a clear shot or unobstructed view.',
+              });
+            }
+          }
+        }
       }
       return {
         profile: 'COMBAT_CONTEXT',
-        status: issues.length ? 'INCOMPLETE' : 'READY',
+        status: issues.some((issue) => issue.code !== 'COMBAT_LINE_OF_SIGHT_BLOCKED')
+          ? 'INCOMPLETE'
+          : issues.length ? 'READY_WITH_UNCERTAINTY' : 'READY',
         issues,
         evidenceCounts,
+        ...(combatContext ? { combatContext } : {}),
       };
     }
 

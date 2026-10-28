@@ -831,14 +831,7 @@ The opening readiness assessment now receives the repository, story ID, and cano
 
 Integration coverage now checks both absent anchors (all four requirements incomplete, no ambient NPC substitute) and a valid owner-backed scene (all requirements satisfied). The hidden but discoverable body and clue case verifies that private physical evidence can meet readiness without being exposed as visible.
 
-This remains diagnostic only. It does not create or repair incident, victim, body, or evidence records. The local checkout had no installed `tsx` dependency, so verification ran in GitHub Actions. Exact-head CI at `a6ae2a3f63ea6f7ac41ff8ddb677da738c82741d` passed Dreamville Verification runs `40650405658` and `40650405608`, plus Dreamville Release Gate run `40650405691`. The verification log reports **1,583 passed, 0 failed**; type-check, release-contract checks, and production builds succeeded. Phase 1 was closed by §2.27; production preparation writes remain disabled.
-### 2.27 Phase 1 privacy boundary and exit gate — COMPLETE (2026-10-28)
-
-The owner-backed integration now has a privacy regression: a hidden but discoverable body and clue satisfy physical readiness, while neither object name is present in the narrator’s player-visible prompt context. The opening context continues to project only objects marked visible to the player; readiness reads the full canonical GeographyGraph solely to determine discoverability and physical completeness.
-
-Exact pushed code commit `85fe0f71400bce70fdc382ed6ef0942a1d5c5fc5` passed Dreamville Verification runs `40651222381` and `40651222374`, plus Dreamville Release Gate `40651222317`. The verification log reports **1,583 passed, 0 failed**; type-check, release contracts, and production builds succeeded. The added regression is covered by this run.
-
-**Phase 1 disposition: COMPLETE.** Its exit gate is met: the investigation fixture’s required anchors, uncertainty behavior, provenance, deterministic identity/idempotence, canonical owner persistence/recovery expectations, conflicts, and hidden-information boundary are specified and covered by automated tests. Production preparation writes remain disabled. Proceed to Phase 2 only through its coordinator/owner-write vertical-slice design; Phase 1 completion itself does not authorize scene mutation.
+This remains diagnostic only. It does not create or repair incident, victim, body, or evidence records. The local checkout had no installed `tsx` dependency, so verification ran in GitHub Actions. Exact-head CI at `a6ae2a3f63ea6f7ac41ff8ddb677da738c82741d` passed Dreamville Verification runs `40650405658` and `40650405608`, plus Dreamville Release Gate run `40650405691`. The verification log reports **1,583 passed, 0 failed**; type-check, release-contract checks, and production builds succeeded. Phase 1 was closed by §2.29; production preparation writes remain disabled.
 ### 2.23 Final Phase 0 source, regression, and owner/recovery audit — COMPLETE (2026-10-27)
 
 The current branch has been re-audited against the Phase 0 exit criteria. This final disposition supersedes earlier interim ledger entries in §§2.9–2.22 that said Phase 0 remained open or CI was pending. It closes the baseline/source-trace phase; it does not enable production scene-preparation writes.
@@ -857,7 +850,7 @@ The current branch has been re-audited against the Phase 0 exit criteria. This f
 
 
 
-### 2.27 Recover the latest committed state after primary-file corruption — IMPLEMENTED; exact-head CI pending (2026-10-28)
+### 2.27 Recover the latest committed state after primary-file corruption — VERIFIED (2026-10-28)
 
 The persistence store previously created snapshots only before replacing the primary file. That meant a successful save followed by primary-file corruption could recover the previous save rather than the most recently committed state. This is distinct from the staged-transaction rollback regression in §2.20, which protects against resurrecting a failed scene preparation.
 
@@ -865,13 +858,21 @@ After the atomic primary-file rename, the store snapshots the newly committed pr
 
 Source commits: `2c523a49decceb02fdba1b5fcb76a6833b753919` and `16c6a94d9286a1dfc2b8ce8401b66cba667472e8`. Regression commit: `f2a9bdf15bd5d2c00edc020ecb033db8acc6c96e`.
 
-This improves recovery from a corrupt primary when a post-commit snapshot was successfully created. It does not prove fsync/power-loss durability, guarantee the latest state if snapshot creation itself fails, or provide cross-process write coordination. Production World Director preparation writes remain disabled pending exact-head verification and the remaining implementation gates.
+This improves recovery from a corrupt primary when a post-commit snapshot was successfully created. It does not prove fsync/power-loss durability, guarantee the latest state if snapshot creation itself fails, or provide cross-process write coordination. The final exact-head evidence is recorded below; production World Director preparation writes remain disabled pending Phase 2.
 
 
-### 2.28 Opening-readiness report persistence across repository reconstruction — IMPLEMENTED; exact-head CI pending (2026-10-28)
+### 2.28 Opening-readiness report persistence across repository reconstruction — VERIFIED (2026-10-28)
 
 Extended the owner-backed opening integration fixture to use file-backed persistence. It now verifies that a READY investigation report, its empty issue list, and all four satisfied requirement statuses survive reconstruction of `InMemoryWorldRepository`. This is a persistence assertion for the diagnostic report only; it does not introduce a prepared-scene marker or enable scene-preparation writes.
 
 Test commit: `1908b2a3ff4eacb3333fbcdb7f36c9932de8bc0a`.
 
-The latest-snapshot recovery change in §2.27 and this reload regression must both pass on the same exact branch head before their gates are marked verified.
+Both §2.27 recovery and this reload regression passed on exact branch head `5e95b37154ca43d16be76736d40a2a6f5999a524`. Dreamville Verification runs `40651613705` and `40651613659`, plus Dreamville Release Gate run `40651613698`, all succeeded; the verification log reports **1,583 passed, 0 failed**, with type-check, release contracts, and production builds successful.
+
+### 2.29 Phase 1 privacy boundary and exit gate — COMPLETE (2026-10-28)
+
+The owner-backed integration now has a privacy regression: a hidden but discoverable body and clue satisfy physical readiness, while neither object name is present in the narrator’s player-visible prompt context. The opening context continues to project only objects marked visible to the player; readiness reads the full canonical GeographyGraph solely to determine discoverability and physical completeness.
+
+Exact pushed code commit `85fe0f71400bce70fdc382ed6ef0942a1d5c5fc5` passed Dreamville Verification runs `40651222381` and `40651222374`, plus Dreamville Release Gate `40651222317`. The verification log reports **1,583 passed, 0 failed**; type-check, release contracts, and production builds succeeded. The added regression is covered by this run.
+
+**Phase 1 disposition: COMPLETE.** Its exit gate is met: the investigation fixture’s required anchors, uncertainty behavior, provenance, deterministic identity/idempotence, canonical owner persistence/recovery expectations, conflicts, and hidden-information boundary are specified and covered by automated tests. Production preparation writes remain disabled. Proceed to Phase 2 only through its coordinator/owner-write vertical-slice design; Phase 1 completion itself does not authorize scene mutation.

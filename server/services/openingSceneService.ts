@@ -13,6 +13,7 @@ import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
 import { WorldDirector } from '../domain/worldDirector';
+import { WorldDirectorPreparationService } from './worldDirectorPreparationService';
 import { isOpeningDialogueSupportedByNarrative } from '../domain/openingSceneDialogueEvidence';
 import {
 	normalizeLocationSensory,
@@ -139,6 +140,7 @@ export class OpeningSceneService {
 		// same idempotent producer is used by ordinary live turns; a fresh public
 		// citadel/market must not open before its visible population exists.
 		const openingLocationId = run.startingLocationId || run.currentLocationId || worldRepo.getPlayerLifecycle(storyId)?.locationId || '';
+		const preparation = await WorldDirectorPreparationService.prepareOpeningInvestigation(worldRepo, storyId, openingLocationId);
 		if (openingLocationId) {
 			WorldActivityDirector.ensureAmbientPopulation(worldRepo, storyId, openingLocationId);
 		}
@@ -159,7 +161,10 @@ export class OpeningSceneService {
 			worldRepo,
 			storyId,
 			currentLocationId: rawOpeningFacts.location.id,
+			preparationKey: run.startingSituation?.worldDirectorInvestigation?.preparationKey,
+			unresolvedQuestions: run.startingSituation?.worldDirectorInvestigation?.unresolvedQuestions,
 		});
+		sceneReadiness.preparation = preparation;
 		const authoredAgenda = worldRepo.getProtagonistAgenda?.(storyId) || null;
 		const authoredAgendaContext = authoredAgenda && typeof authoredAgenda.goal === 'string'
 			&& authoredAgenda.goal.trim()

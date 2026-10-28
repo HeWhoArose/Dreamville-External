@@ -2355,6 +2355,26 @@ export interface StartingLocationConfig {
   coordinates?: { x: number; y: number };
 }
 
+export interface WorldDirectorInvestigationSeed {
+  schemaVersion: 1;
+  profile: 'INVESTIGATION';
+  /** Stable identity supplied with the confirmed starting-situation scenario. */
+  preparationKey: string;
+  /** Canonical confirmed-character source, such as `<characterId>:startingSituation`. */
+  sourceRef: string;
+  claimKind: 'AUTHORED_TRUTH';
+  victim: { name: string; species?: string };
+  body: { name: string; description?: string; visible: boolean; discoverable: boolean };
+  evidence: Array<{
+    slot: string;
+    name: string;
+    description?: string;
+    visible: boolean;
+    discoverable: boolean;
+  }>;
+  unresolvedQuestions?: string[];
+}
+
 export interface StartingSituationConfig {
   summary: string;
   hook: string;
@@ -2363,6 +2383,8 @@ export interface StartingSituationConfig {
   activity?: string;
   situationType?: OpeningSituationType;
   unsettled?: string;
+  /** Explicit confirmed scenario data; prose alone never authorizes preparation. */
+  worldDirectorInvestigation?: WorldDirectorInvestigationSeed;
 }
 
 export interface CharacterPortraitAsset {

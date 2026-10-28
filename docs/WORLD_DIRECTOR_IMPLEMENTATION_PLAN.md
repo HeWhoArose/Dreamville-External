@@ -876,3 +876,13 @@ The owner-backed integration now has a privacy regression: a hidden but discover
 Exact pushed code commit `85fe0f71400bce70fdc382ed6ef0942a1d5c5fc5` passed Dreamville Verification runs `40651222381` and `40651222374`, plus Dreamville Release Gate `40651222317`. The verification log reports **1,583 passed, 0 failed**; type-check, release contracts, and production builds succeeded. The added regression is covered by this run.
 
 **Phase 1 disposition: COMPLETE.** Its exit gate is met: the investigation fixture’s required anchors, uncertainty behavior, provenance, deterministic identity/idempotence, canonical owner persistence/recovery expectations, conflicts, and hidden-information boundary are specified and covered by automated tests. Production preparation writes remain disabled. Proceed to Phase 2 only through its coordinator/owner-write vertical-slice design; Phase 1 completion itself does not authorize scene mutation.
+
+### 2.30 Phase 2 authored-investigation first vertical slice — IMPLEMENTED; exact-head CI PENDING (2026-10-28)
+
+Added an optional structured investigation seed to the confirmed starting-situation record. A narrative hook alone never authorizes preparation: the coordinator requires schema version, INVESTIGATION profile, stable preparation key, exact confirmed-character source reference, AUTHORED_TRUTH claim, victim identity, a visible/discoverable body, and at least one visible/discoverable evidence anchor. Unknown questions remain unresolved.
+
+Opening generation now invokes the coordinator before projection. It plans stable incident, victim, body, and evidence identities; rejects existing owner conflicts before mutation; and commits the active timeline incident, dead victim EntityRegistry record, GeographyGraph objects, and a reference-only StoryRun manifest together through one staged canonical command. Repeated preparation and force regeneration reuse the durable command/manifest and do not reset scene state. The ordinary no-seed path remains read-only.
+
+Focused integration coverage exercises an owner conflict with no partial canonical write, first preparation with an unresolved question, regeneration idempotency, and file-backed repository reconstruction. This is the first fixture only; the character authoring UI, normal-turn coordinator integration, broader lifecycle transitions, and live Story UI acceptance remain out of scope. Production preparation is reachable only for runs carrying the explicit structured seed.
+
+`git diff --check` passed locally. The local checkout has no installed test runner; exact-head GitHub CI is pending before this slice can be marked verified.

@@ -251,6 +251,115 @@ test('World Director opening integration reads investigation anchors from their 
   );
   });
 });
+test('Phase 2 leaves an authored owner conflict unchanged and reports blocked preparation', async () => {
+  const { buildWorldDirectorStableRecordId } = await import('../server/domain/worldDirectorPreparationContract');
+  const storyId = 'opening_investigation_preparation_conflict_' + Date.now();
+  const rig = buildOpeningRig(storyId, 'Isolated Shack', {
+    status: 'ABANDONED', expectedPopulation: 'NONE', provenance: 'AUTHORED',
+  });
+  const run = rig.repository.getStoryRun(storyId);
+  const characterId = run.protagonist.characterId;
+  const preparationKey = 'fixture:isolated-shack-conflict:v1';
+  run.startingSituation = {
+    summary: 'Kaelen Voss is investigating a fresh murder scene inside the isolated shack.',
+    hook: 'A fresh murder has been reported at the shack.',
+    activity: 'examining the scene',
+    situationType: 'pressure_event',
+    worldDirectorInvestigation: {
+      schemaVersion: 1,
+      profile: 'INVESTIGATION',
+      preparationKey,
+      sourceRef: `${characterId}:startingSituation`,
+      claimKind: 'AUTHORED_TRUTH',
+      victim: { name: 'Unknown victim' },
+      body: { name: 'Victim body', visible: true, discoverable: true },
+      evidence: [{ slot: 'primary-clue', name: 'Unexamined clue', visible: true, discoverable: true }],
+    },
+  };
+  rig.repository.saveStoryRun(run);
+  const victimId = buildWorldDirectorStableRecordId({
+    storyId, preparationKey, recordKind: 'ENTITY', role: 'INVESTIGATION_VICTIM', scopeId: rig.locationId,
+  });
+  rig.repository.saveEntityCard(storyId, { id: victimId, name: 'Authored unrelated person', kind: 'CHARACTER' });
+  const commandCount = rig.repository.getCanonicalCommandEvents(storyId).length;
+
+  await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+
+  const persisted = rig.repository.getStoryRun(storyId);
+  const readiness = persisted.runtimeState?.openingNarrativeContext?.sceneReadiness;
+  assert.equal(readiness?.preparation?.status, 'BLOCKED');
+  assert.equal(readiness?.preparation?.issues?.[0]?.code, 'OWNER_CONFLICT');
+  assert.equal(rig.repository.getEntityCard(storyId, victimId)?.name, 'Authored unrelated person');
+  assert.deepEqual(rig.repository.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects, []);
+  assert.equal(rig.repository.getCanonicalCommandEvents(storyId).length, commandCount);
+  assert.equal(persisted.plannedEvents.some((event: any) => event.category === 'INVESTIGATION_INCIDENT'), false);
+});
+
+test('Phase 2 prepares an authored investigation once and reuses its canonical records after regeneration and reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'opening_investigation_preparation_' + Date.now();
+    const rig = buildOpeningRig(storyId, 'Isolated Shack', {
+      status: 'ABANDONED', expectedPopulation: 'NONE', provenance: 'AUTHORED',
+    }, false);
+    const run = rig.repository.getStoryRun(storyId);
+    const characterId = run.protagonist.characterId;
+    run.startingSituation = {
+      summary: 'Kaelen Voss is investigating a fresh murder scene inside the isolated shack.',
+      hook: 'A fresh murder has been reported at the shack.',
+      activity: 'examining the scene',
+      situationType: 'pressure_event',
+      worldDirectorInvestigation: {
+        schemaVersion: 1,
+        profile: 'INVESTIGATION',
+        preparationKey: 'fixture:isolated-shack-murder:v1',
+        sourceRef: `${characterId}:startingSituation`,
+        claimKind: 'AUTHORED_TRUTH',
+        victim: { name: 'Unknown victim', species: 'Human' },
+        body: { name: 'Victim body', description: 'A body lies at the scene.', visible: true, discoverable: true },
+        evidence: [{ slot: 'primary-clue', name: 'Unexamined clue', description: 'A physical clue remains at the scene.', visible: true, discoverable: true }],
+        unresolvedQuestions: ['Who caused the victim’s death?'],
+      },
+    };
+    rig.repository.saveStoryRun(run);
+
+    await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+    const firstRun = rig.repository.getStoryRun(storyId);
+    const firstReadiness = firstRun.runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(firstReadiness?.preparation?.status, 'PREPARED');
+    assert.equal(firstReadiness?.status, 'READY_WITH_UNCERTAINTY');
+    assert.deepEqual(firstReadiness?.investigationSceneContract?.unresolvedQuestions, ['Who caused the victim’s death?']);
+    const refs = firstReadiness.preparation.recordRefs;
+    assert.ok(refs?.incident && refs?.victim && refs?.body && refs.evidence.length === 1);
+    assert.equal(firstRun.runtimeState?.worldDirectorPreparations?.['fixture:isolated-shack-murder:v1']?.status, 'ACTIVE');
+    assert.equal(firstRun.plannedEvents.find((event: any) => event.id === refs.incident)?.category, 'INVESTIGATION_INCIDENT');
+    assert.equal(firstRun.eventStates[refs.incident]?.status, 'ACTIVE');
+    const victim = rig.repository.getEntityCard(storyId, refs.victim);
+    assert.equal(victim?.lifecycle.status, 'DEAD');
+    assert.equal(victim?.worldState.presence, 'absent');
+    const location = rig.repository.getGeographyGraph(storyId).getNode(rig.locationId);
+    assert.deepEqual(location?.sceneObjects?.map((object) => object.id).sort(), [refs.body, ...refs.evidence].sort());
+
+    const commandCount = rig.repository.getCanonicalCommandEvents(storyId).length;
+    await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, forceRegenerate: true, allowDeterministicFallback: true });
+    const regenerated = rig.repository.getStoryRun(storyId);
+    assert.equal(regenerated.runtimeState?.openingNarrativeContext?.sceneReadiness?.preparation?.status, 'ALREADY_PREPARED');
+    assert.equal(rig.repository.getCanonicalCommandEvents(storyId).length, commandCount, 'force regeneration must not append another preparation command');
+    assert.deepEqual(
+      rig.repository.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.map((object) => object.id).sort(),
+      [refs.body, ...refs.evidence].sort(),
+      'force regeneration must not duplicate scene objects',
+    );
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedRun = reloadedRepository.getStoryRun(storyId);
+    assert.deepEqual(reloadedRun?.runtimeState?.worldDirectorPreparations?.['fixture:isolated-shack-murder:v1']?.recordRefs, refs);
+    await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: reloadedRepository, forceRegenerate: true, allowDeterministicFallback: true });
+    assert.equal(reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness?.status, 'READY_WITH_UNCERTAINTY');
+    assert.equal(reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness?.preparation?.status, 'ALREADY_PREPARED');
+    assert.deepEqual(reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.map((object) => object.id).sort(), [refs.body, ...refs.evidence].sort());
+  });
+});
+
 test('opening scene seeds and projects canonical ambient people before generating a public citadel opening', async () => {
   const storyId = 'opening_population_public_' + Date.now();
   const rig = buildOpeningRig(

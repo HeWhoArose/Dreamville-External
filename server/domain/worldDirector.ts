@@ -7,6 +7,7 @@
  */
 
 import type { WorldRepository } from '../repositories/worldRepository';
+import type { WorldDirectorPreparationResult } from '../services/worldDirectorPreparationService';
 import {
   WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY,
   WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES,
@@ -66,6 +67,7 @@ export interface OpeningSceneReadinessInput {
   worldRepo?: WorldRepository;
   storyId?: string;
   currentLocationId?: string;
+  preparationKey?: string;
 }
 
 export interface WorldDirectorReadinessIssue {
@@ -85,6 +87,7 @@ export interface WorldDirectorReadinessReport {
   issues: WorldDirectorReadinessIssue[];
   investigationRequirements?: WorldDirectorInvestigationRequirementResult[];
   investigationSceneContract?: WorldDirectorInvestigationSceneContractReport;
+  preparation?: WorldDirectorPreparationResult;
   evidenceCounts: {
     visibleSceneObjects: number;
     visibleEntities: number;
@@ -130,15 +133,20 @@ function investigationSceneContractFromOwners(
   repository: WorldRepository,
   storyId: string,
   requestedLocationId: string,
+  requestedPreparationKey?: string,
 ): WorldDirectorInvestigationSceneContractInput {
   const location = repository.getGeographyGraph(storyId).getNode(requestedLocationId);
   const locationId = location?.id || '';
   const run = repository.getStoryRun(storyId);
+  const preparationKey = requestedPreparationKey || run?.startingSituation?.worldDirectorInvestigation?.preparationKey;
+  const candidateManifest = preparationKey ? run?.runtimeState?.worldDirectorPreparations?.[preparationKey] : undefined;
+  const preparationManifest = candidateManifest?.locationId === requestedLocationId ? candidateManifest : undefined;
+  const preparationRefs = preparationManifest?.recordRefs;
   const plannedEvents = Array.isArray(run?.plannedEvents) ? run.plannedEvents : [];
   const eventStates = run?.eventStates || {};
   const investigationEvents = plannedEvents.filter((event: any) =>
     event?.category === WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY,
-  );
+  ).filter((event: any) => !preparationManifest || event.id === preparationRefs?.incident);
   const activeEvents = investigationEvents.filter((event: any) =>
     (eventStates[event.id]?.status || event.status) === 'ACTIVE',
   );
@@ -177,11 +185,13 @@ function investigationSceneContractFromOwners(
 
   const entityCards = repository.getEntityCards(storyId);
   const victimCandidates = entityCards.filter((card) =>
-    card.metadata?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.victim,
+    card.metadata?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.victim
+      && (!preparationManifest || card.id === preparationRefs?.victim),
   );
   const sceneObjects = Array.isArray(location?.sceneObjects) ? location.sceneObjects : [];
   const bodyCandidates = sceneObjects.filter((object) =>
-    object.properties?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.body,
+    object.properties?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.body
+      && (!preparationManifest || object.id === preparationRefs?.body),
   );
   const bodyVictimRefs = new Set(bodyCandidates
     .map((object) => String(object.properties?.representsVictimRef || '').trim())
@@ -235,7 +245,8 @@ function investigationSceneContractFromOwners(
   }
 
   const evidence = sceneObjects
-    .filter((object) => object.properties?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.evidence)
+    .filter((object) => object.properties?.worldDirectorRole === WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES.evidence
+      && (!preparationManifest || (Array.isArray(preparationRefs?.evidence) && preparationRefs.evidence.includes(object.id))))
     .map((object) => ({
       owner: 'GEOGRAPHY_GRAPH' as const,
       recordRef: object.id,
@@ -287,6 +298,7 @@ export class WorldDirector {
         input.worldRepo,
         input.storyId,
         input.currentLocationId,
+        input.preparationKey,
       );
       const investigationSceneContract = assessWorldDirectorInvestigationSceneContract({
         ...contractInput,

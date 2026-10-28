@@ -5,9 +5,9 @@ import type { KnowledgeFact, LocationSceneObject } from './types';
 /**
  * World Director preparation identity contract.
  *
- * This module is intentionally pure and is not wired to production mutation
- * paths yet. Canonical writes remain disabled until transaction recovery and
- * lifecycle reconciliation are proven.
+ * This module keeps identity, ownership, lifecycle, and readiness decisions
+ * pure. WorldDirectorPreparationService may apply these decisions only inside
+ * a staged canonical command for an explicit confirmed scenario seed.
  */
 
 export const WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION = 1 as const;

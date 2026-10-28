@@ -1240,6 +1240,23 @@ test('Phase 5 combat-context readiness uses only the player-visible canonical en
     combat.addParticipant(participant('visible_scout_' + storyId, 'Border Scout', 'enemies'));
     combat.addParticipant(participant('hidden_scout_' + storyId, 'Hidden Scout', 'enemies', ['Hidden']));
     combat.setCombatPhase('ACTIVE', { encounterId: 'encounter_' + storyId, encounterSource: 'STORY' });
+    const run = rig.repository.getStoryRun(storyId);
+    run.startingSituation = {
+      summary: 'A border patrol closes in while Kaelen watches the perimeter.',
+      hook: 'The patrol has moved into the watch line.',
+      activity: 'watching the border',
+      situationType: 'pressure_event',
+    };
+    rig.repository.saveStoryRun(run);
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const openingReadiness = rig.repository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(openingReadiness?.profile, 'COMBAT_CONTEXT',
+      'opening generation must attach the combat profile through the production readiness call site');
+    assert.equal(openingReadiness?.status, 'READY');
     rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
 
     const reloaded = new InMemoryWorldRepository();

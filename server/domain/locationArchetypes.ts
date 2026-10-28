@@ -24,6 +24,7 @@ export type LocationArchetype =
   | 'WORKPLACE'
   | 'RESTRICTED_SITE'
   | 'ABANDONED_SITE'
+  | 'ROOM'
   | 'WILDERNESS'
   | 'GENERIC';
 
@@ -65,6 +66,7 @@ const ARCHETYPES: LocationArchetype[] = [
   'WORKPLACE',
   'RESTRICTED_SITE',
   'ABANDONED_SITE',
+  'ROOM',
   'WILDERNESS',
   'GENERIC',
 ];
@@ -118,6 +120,7 @@ export function inferLocationArchetype(raw: any): LocationArchetype {
     ['CITADEL', /\bcitadel|fortress|keep|palace|castle|bastion\b/],
     ['RESIDENTIAL_STREET', /\bresidential|terrace|housing|row of houses|neighbou?rhood|suburb\b/],
     ['URBAN_DISTRICT', /\bdistrict|street|avenue|boulevard|plaza|square|city centre|city center|arcade|ward\b/],
+    ['ROOM', /\b(?:room|bedroom|bedchamber|quarters|chamber|apartment|study)\b/],
     ['WILDERNESS', /\bforest|wilderness|wood(?:land)?|moor|mountain|ridge|canyon|tundra|swamp|marsh|desert\b/],
   ];
   for (const [archetype, pattern] of ordered) {
@@ -368,6 +371,15 @@ const TEMPLATES: Record<LocationArchetype, ArchetypeTemplate> = {
     environment: { terrain: 'Wilderness', lighting: 'NATURAL', weatherExposure: 'EXPOSED', features: ['game trail', 'dense undergrowth', 'fallen log', 'shallow stream'], water: { present: true, drainage: true, description: 'The stream follows the lowest ground through the area.' } },
     population: { status: 'UNKNOWN', expectedPopulation: 'VARIABLE', accessControlled: false, provenance: 'GENERATED' },
   },
+  ROOM: {
+    sceneObjects: [
+      structure('door', 'plain wooden door', 'A simple door set into the wall.', ['door', 'wooden door']),
+      structure('table', 'small wooden table', 'A plain table stands against one side of the room.', ['table', 'wooden table']),
+      feature('window', 'narrow window', 'A narrow window admits the available light.', ['window', 'light']),
+    ],
+    environment: { terrain: 'Indoor', lighting: 'NATURAL', weatherExposure: 'SHELTERED', features: ['plain wooden door', 'small wooden table', 'narrow window'] },
+    population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+  },
   GENERIC: {
     sceneObjects: [],
     environment: { features: [] },
@@ -506,7 +518,7 @@ export function isPublicArchetype(archetype: LocationArchetype): boolean {
 }
 
 export function isShelteredArchetype(archetype: LocationArchetype): boolean {
-  return ['INN', 'GUILD_HALL', 'TEMPLE', 'WORKPLACE', 'SEWER', 'RESTRICTED_SITE', 'ABANDONED_SITE'].includes(archetype);
+  return ['INN', 'GUILD_HALL', 'TEMPLE', 'WORKPLACE', 'SEWER', 'RESTRICTED_SITE', 'ABANDONED_SITE', 'ROOM'].includes(archetype);
 }
 
 /**

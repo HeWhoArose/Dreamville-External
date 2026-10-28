@@ -9,6 +9,7 @@ import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { resolveGroundedObservation, SceneInteractionAuthority } from '../server/domain/sceneInteractionAuthority';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 import { WorldDirector } from '../server/domain/worldDirector';
+import { expandLocationStructure } from '../server/domain/locationArchetypes';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 
 async function withDurablePersistence<T>(callback: () => Promise<T>): Promise<T> {
@@ -996,6 +997,92 @@ test('Phase 5 public/social readiness grounds activity, preserves unknown occupa
     });
     assert.equal(visibleOccupant.status, 'READY', 'a visible occupant can ground public activity without an ambient prose note');
     assert.equal(visibleOccupant.evidenceCounts.visibleEntities, 1);
+  });
+});
+
+test('Phase 5 ordinary-room profile generates canonical furnishing anchors without inventing occupancy', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'phase5_ordinary_room_' + Date.now();
+    const rig = buildOpeningRig(
+      storyId,
+      'Wayfarer Guest Room',
+      { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+      false,
+    );
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const location = graph.getNode(rig.locationId)!;
+    const expandedRoom = expandLocationStructure(
+      { ...location, archetype: 'ROOM' },
+      { locationId: rig.locationId, generateDefaults: true },
+    );
+    assert.equal(expandedRoom.archetype, 'ROOM');
+    assert.equal(expandedRoom.population?.status, 'UNKNOWN', 'room defaults must not infer occupancy');
+    assert.ok(expandedRoom.sceneObjects?.some((object) => object.visible && object.name === 'small wooden table'));
+    graph.addNode({ ...location, ...expandedRoom });
+    rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
+
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      allowDeterministicFallback: true,
+    });
+    const firstRun = rig.repository.getStoryRun(storyId);
+    const readiness = firstRun.runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(readiness?.profile, 'ORDINARY_ROOM');
+    assert.equal(readiness?.status, 'READY_WITH_UNCERTAINTY');
+    assert.ok(readiness?.issues.some((issue: any) => issue.code === 'ORDINARY_ROOM_OCCUPANCY_UNKNOWN'));
+    const firstObjectIds = graph.getNode(rig.locationId)?.sceneObjects?.map((object) => object.id).sort();
+
+    await OpeningSceneService.generateOpeningScene({
+      storyId,
+      worldRepo: rig.repository,
+      forceRegenerate: true,
+      allowDeterministicFallback: true,
+    });
+    assert.deepEqual(graph.getNode(rig.locationId)?.sceneObjects?.map((object) => object.id).sort(), firstObjectIds,
+      'repeated opening generation must not duplicate or replace canonical room furnishings');
+    const repeated = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the guest room.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      sceneObjects: graph.getNode(rig.locationId)?.sceneObjects,
+    });
+    assert.equal(repeated.profile, 'ORDINARY_ROOM');
+    assert.equal(repeated.status, 'READY_WITH_UNCERTAINTY');
+
+    const reloadedRepository = new InMemoryWorldRepository();
+    const reloadedLocation = reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)!;
+    const reloadedReadiness = reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness;
+    assert.equal(reloadedLocation.archetype, 'ROOM');
+    assert.equal(reloadedLocation.population?.status, 'UNKNOWN');
+    assert.deepEqual(reloadedLocation.sceneObjects?.map((object) => object.id).sort(), firstObjectIds);
+    assert.equal(reloadedReadiness?.profile, 'ORDINARY_ROOM');
+    assert.equal(reloadedReadiness?.status, 'READY_WITH_UNCERTAINTY');
+
+    graph.addNode({
+      ...reloadedLocation,
+      environment: { features: [] },
+      sceneObjects: [{
+        id: 'hidden_room_object_' + storyId,
+        name: 'concealed wall cabinet',
+        kind: 'STRUCTURE',
+        description: 'A concealed cabinet sits behind the panel.',
+        visible: false,
+      }],
+    });
+    const incomplete = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'Arriving at the guest room.',
+      worldRepo: rig.repository,
+      storyId,
+      currentLocationId: rig.locationId,
+      sceneObjects: [],
+    });
+    assert.equal(incomplete.status, 'INCOMPLETE');
+    assert.deepEqual(incomplete.issues.map((issue) => issue.code), [
+      'ORDINARY_ROOM_SCENE_ANCHOR_NOT_VISIBLE',
+      'ORDINARY_ROOM_OCCUPANCY_UNKNOWN',
+    ]);
   });
 });
 

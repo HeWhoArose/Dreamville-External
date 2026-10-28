@@ -19,7 +19,7 @@ import {
   type WorldDirectorInvestigationSceneContractReport,
 } from './worldDirectorPreparationContract';
 
-export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'PUBLIC_SOCIAL' | 'GENERAL';
+export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'PUBLIC_SOCIAL' | 'ORDINARY_ROOM' | 'GENERAL';
 
 export type WorldDirectorReadinessStatus =
   | 'READY'
@@ -83,6 +83,8 @@ export interface WorldDirectorReadinessIssue {
     | 'PUBLIC_SOCIAL_OCCUPANCY_UNKNOWN'
     | 'PUBLIC_SOCIAL_OCCUPANCY_NOT_INHABITED'
     | 'PUBLIC_SOCIAL_ACTIVITY_NOT_ESTABLISHED'
+    | 'ORDINARY_ROOM_SCENE_ANCHOR_NOT_VISIBLE'
+    | 'ORDINARY_ROOM_OCCUPANCY_UNKNOWN'
     | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
@@ -381,6 +383,39 @@ export class WorldDirector {
         return {
           profile: 'PUBLIC_SOCIAL',
           status,
+          issues,
+          evidenceCounts,
+        };
+      }
+      if (canonicalArchetype === 'ROOM') {
+        const issues: WorldDirectorReadinessIssue[] = [];
+        const visibleFeatures = [
+          ...(Array.isArray(canonicalLocation?.environment?.features) ? canonicalLocation.environment.features : []),
+          ...normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).map(searchableObjectText),
+        ].filter((feature) => String(feature || '').trim());
+        if (!visibleFeatures.length) {
+          issues.push({
+            code: 'ORDINARY_ROOM_SCENE_ANCHOR_NOT_VISIBLE',
+            requirement: 'At least one visible canonical room feature or scene object',
+            message: 'The room has no visible canonical physical anchor, so narration must not supply furnishings or other concrete room details.',
+          });
+        }
+        const population = canonicalLocation?.population;
+        const occupancyUnknown = !population?.status || population.status === 'UNKNOWN';
+        if (occupancyUnknown) {
+          issues.push({
+            code: 'ORDINARY_ROOM_OCCUPANCY_UNKNOWN',
+            requirement: 'Keep unknown room occupancy unresolved',
+            message: 'Room occupancy is unknown; use only listed visible occupants and do not infer that the room is occupied or empty.',
+          });
+        }
+        return {
+          profile: 'ORDINARY_ROOM',
+          status: !visibleFeatures.length
+            ? 'INCOMPLETE'
+            : occupancyUnknown
+              ? 'READY_WITH_UNCERTAINTY'
+              : 'READY',
           issues,
           evidenceCounts,
         };

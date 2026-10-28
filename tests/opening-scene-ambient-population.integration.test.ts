@@ -461,11 +461,11 @@ test('Phase 3 full action path retains canonical observation evidence through na
 
   const orchestrator: any = worldRepository.getAiOrchestrator();
   const originalGenerateNarrativeOnly = orchestrator.generateNarrativeOnly;
-  let narratorOutcome = '';
-  let narratorActionResolution: any;
+  const narratorOutcomes: string[] = [];
+  const narratorActionResolutions: any[] = [];
   orchestrator.generateNarrativeOnly = async (params: any) => {
-    narratorOutcome = String(params?.committedOutcome || '');
-    narratorActionResolution = params?.actionResolution;
+    narratorOutcomes.push(String(params?.committedOutcome || ''));
+    narratorActionResolutions.push(params?.actionResolution);
     return {
       success: true,
       source: 'AI_PRIMARY',
@@ -485,12 +485,20 @@ test('Phase 3 full action path retains canonical observation evidence through na
       actionText: 'I examine the victim body.',
     } as any, 'phase3_observation_handoff_command', { bypassCapabilityAdvisor: true } as any);
 
-    assert.match(narratorOutcome, /Victim body is present/);
-    assert.match(narratorOutcome, /A body lies beside the collapsed worktable/);
-    assert.match(narratorOutcome, /Canonical examination: Victim body is present/);
-    assert.match(String(narratorActionResolution?.actualEffect), /Grounded observation:.*Victim body is present/);
-    assert.ok(narratorActionResolution?.evidenceIds?.includes(addObject.object?.id),
+    await serverMockAuthority.processCustomAction({
+      type: 'CUSTOM_ACTION',
+      storyId,
+      actionText: 'I observe the environment.',
+    } as any, 'phase3_environment_observation_handoff_command', { bypassCapabilityAdvisor: true } as any);
+
+    assert.match(narratorOutcomes[0] || '', /Victim body is present/);
+    assert.match(narratorOutcomes[0] || '', /A body lies beside the collapsed worktable/);
+    assert.match(narratorOutcomes[0] || '', /Canonical examination: Victim body is present/);
+    assert.match(String(narratorActionResolutions[0]?.actualEffect), /Grounded observation:.*Victim body is present/);
+    assert.ok(narratorActionResolutions[0]?.evidenceIds?.includes(addObject.object?.id),
       'the narrator handoff should retain canonical scene-object evidence IDs');
+    assert.match(narratorOutcomes[1] || '', /Canonical occupancy at .+:/,
+      'the full action route should hand canonical environment observation evidence to narration');
   } finally {
     orchestrator.generateNarrativeOnly = originalGenerateNarrativeOnly;
   }
@@ -529,6 +537,18 @@ test('Phase 3 concealed investigation evidence stays hidden until canonical sear
       'hidden evidence may satisfy canonical readiness but must stay out of the opening projection');
 
     const actorId = rig.repository.getPlayerLifecycle(storyId)!.actorId;
+    const concealedExamination = SceneInteractionAuthority.resolve({
+      repository: rig.repository,
+      storyId,
+      actorId,
+      actionText: 'I examine the hidden thread clue.',
+      locationId: rig.locationId,
+    });
+    assert.equal(concealedExamination.kind, 'EXAMINE');
+    assert.equal(concealedExamination.committed, false);
+    assert.equal(rig.repository.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.find((object) => object.name === 'Hidden thread')?.visible, false,
+      'targeted examination must not reveal a concealed object; search is the discovery action');
+
     const discovery = SceneInteractionAuthority.resolve({
       repository: rig.repository,
       storyId,

@@ -343,36 +343,6 @@ export class WorldDirector {
       };
     }
 
-    if (!isInvestigationPremise(String(input.startingSituation || ''))
-      && isExplorationPremise(String(input.startingSituation || ''))) {
-      const canonicalLocation = input.worldRepo && input.storyId && input.currentLocationId
-        ? input.worldRepo.getGeographyGraph(input.storyId).getNode(input.currentLocationId)
-        : undefined;
-      const visibleAnchors = [
-        ...(Array.isArray(canonicalLocation?.environment?.features) ? canonicalLocation.environment.features : []),
-        ...normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).map(searchableObjectText),
-      ].filter((anchor) => String(anchor || '').trim());
-      const issues: WorldDirectorReadinessIssue[] = [];
-      if (!visibleAnchors.length) {
-        issues.push({
-          code: 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE',
-          requirement: 'At least one visible canonical environment feature or scene object',
-          message: 'The exploration scene has no visible canonical anchor; do not invent terrain, landmarks, paths, or objects.',
-        });
-      }
-      issues.push({
-        code: 'EXPLORATION_DISCOVERIES_UNRESOLVED',
-        requirement: 'Treat undiscovered details as unknown until a canonical search or observation reveals them',
-        message: 'The exploratory destination is not evidence that a hidden feature or discovery exists; reveal only details established by canonical scene evidence or a committed search.',
-      });
-      return {
-        profile: 'EXPLORATION',
-        status: visibleAnchors.length ? 'READY_WITH_UNCERTAINTY' : 'INCOMPLETE',
-        issues,
-        evidenceCounts,
-      };
-    }
-
     if (!isInvestigationPremise(String(input.startingSituation || ''))) {
       const canonicalLocation = input.worldRepo && input.storyId && input.currentLocationId
         ? input.worldRepo.getGeographyGraph(input.storyId).getNode(input.currentLocationId)
@@ -495,6 +465,31 @@ export class WorldDirector {
             : occupancyUnknown
               ? 'READY_WITH_UNCERTAINTY'
               : 'READY',
+          issues,
+          evidenceCounts,
+        };
+      }
+      if (isExplorationPremise(String(input.startingSituation || ''))) {
+        const visibleAnchors = [
+          ...(Array.isArray(canonicalLocation?.environment?.features) ? canonicalLocation.environment.features : []),
+          ...normalizedVisibleObjects(canonicalLocation?.sceneObjects || []).map(searchableObjectText),
+        ].filter((anchor) => String(anchor || '').trim());
+        const issues: WorldDirectorReadinessIssue[] = [];
+        if (!visibleAnchors.length) {
+          issues.push({
+            code: 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE',
+            requirement: 'At least one visible canonical environment feature or scene object',
+            message: 'The exploration scene has no visible canonical anchor; do not invent terrain, landmarks, paths, or objects.',
+          });
+        }
+        issues.push({
+          code: 'EXPLORATION_DISCOVERIES_UNRESOLVED',
+          requirement: 'Treat undiscovered details as unknown until a canonical search or observation reveals them',
+          message: 'The exploratory destination is not evidence that a hidden feature or discovery exists; reveal only details established by canonical scene evidence or a committed search.',
+        });
+        return {
+          profile: 'EXPLORATION',
+          status: visibleAnchors.length ? 'READY_WITH_UNCERTAINTY' : 'INCOMPLETE',
           issues,
           evidenceCounts,
         };

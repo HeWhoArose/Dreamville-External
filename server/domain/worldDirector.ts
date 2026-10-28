@@ -337,7 +337,7 @@ export class WorldDirector {
       };
     }
 
-    if (!isInvestigationPremise(String(input.startingSituation || '')) {
+    if (!isInvestigationPremise(String(input.startingSituation || ''))) {
       const canonicalLocation = input.worldRepo && input.storyId && input.currentLocationId
         ? input.worldRepo.getGeographyGraph(input.storyId).getNode(input.currentLocationId)
         : undefined;

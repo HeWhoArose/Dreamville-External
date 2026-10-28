@@ -1253,17 +1253,41 @@ test('Phase 5 combat-context readiness uses only the player-visible canonical en
     assert.equal(report.profile, 'COMBAT_CONTEXT');
     assert.equal(report.status, 'READY');
     assert.deepEqual(report.issues, []);
+    assert.equal(report.combatContext?.phase, 'ACTIVE');
+    assert.equal(report.combatContext?.visibleLivingOpponents, 1,
+      'concealed combatants must not count as player-visible threats');
+    assert.equal(report.combatContext?.nearestOpponentDistanceCells, 2);
+    assert.equal(report.combatContext?.nearestOpponentLineOfSight, 'CLEAR');
     assert.deepEqual(assessment(), report, 'reassessment after repository reload must be deterministic');
-    const projection = reloaded.getCombatEngine(storyId).projectCombatForActor(player.actorId);
+
+    reloaded.getCombatEngine(storyId).addObstacle({ x: 2, y: 1 });
+    reloaded.saveStoryRun(reloaded.getStoryRun(storyId));
+    const blockedReload = new InMemoryWorldRepository();
+    const obstructed = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'A border patrol closes in.',
+      worldRepo: blockedReload,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
+    assert.equal(obstructed.status, 'READY_WITH_UNCERTAINTY');
+    assert.equal(obstructed.combatContext?.nearestOpponentLineOfSight, 'BLOCKED');
+    assert.ok(obstructed.issues.some((issue) => issue.code === 'COMBAT_LINE_OF_SIGHT_BLOCKED'));
+
+    const projection = blockedReload.getCombatEngine(storyId).projectCombatForActor(player.actorId);
     assert.ok(projection.participants.some((entry) => entry.name === 'Border Scout'));
     assert.ok(!projection.participants.some((entry) => entry.name === 'Hidden Scout'),
       'hidden combat participants must stay outside the player projection');
-    assert.equal(reloaded.getCombatEngine(storyId).getCombatPhase(), 'ACTIVE');
+    assert.equal(blockedReload.getCombatEngine(storyId).getCombatPhase(), 'ACTIVE');
 
-    const noVisibleOpponent = reloaded.getCombatEngine(storyId);
+    const noVisibleOpponent = blockedReload.getCombatEngine(storyId);
     noVisibleOpponent.getParticipants().filter((entry) => entry.team === 'enemies' && entry.name === 'Border Scout')
       .forEach((entry) => noVisibleOpponent.getMutableParticipantsForSpellResolution().find((actual) => actual.id === entry.id)!.conditions = ['Hidden']);
-    const incomplete = assessment();
+    const incomplete = WorldDirector.assessOpeningSceneReadiness({
+      startingSituation: 'A border patrol closes in.',
+      worldRepo: blockedReload,
+      storyId,
+      currentLocationId: rig.locationId,
+    });
     assert.equal(incomplete.status, 'INCOMPLETE');
     assert.ok(incomplete.issues.some((issue) => issue.code === 'COMBAT_OPPONENT_NOT_VISIBLE'));
     assert.doesNotMatch(JSON.stringify(incomplete), /Hidden Scout|Border Scout/,

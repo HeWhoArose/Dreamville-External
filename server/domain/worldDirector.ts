@@ -19,7 +19,7 @@ import {
   type WorldDirectorInvestigationSceneContractReport,
 } from './worldDirectorPreparationContract';
 
-export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'PUBLIC_SOCIAL' | 'ORDINARY_ROOM' | 'TRAVEL_ARRIVAL' | 'EXPLORATION' | 'GENERAL';
+export type WorldDirectorSceneProfile = 'INVESTIGATION' | 'RESTRICTED_SITE' | 'ABANDONED_SITE' | 'PUBLIC_SOCIAL' | 'ORDINARY_ROOM' | 'TRAVEL_ARRIVAL' | 'EXPLORATION' | 'COMBAT_CONTEXT' | 'GENERAL';
 
 export type WorldDirectorReadinessStatus =
   | 'READY'
@@ -90,6 +90,9 @@ export interface WorldDirectorReadinessIssue {
     | 'TRAVEL_ARRIVAL_PENDING'
     | 'EXPLORATION_SCENE_ANCHOR_NOT_VISIBLE'
     | 'EXPLORATION_DISCOVERIES_UNRESOLVED'
+    | 'COMBAT_PLAYER_CONTEXT_UNAVAILABLE'
+    | 'COMBAT_PLAYER_NOT_IN_ENCOUNTER'
+    | 'COMBAT_OPPONENT_NOT_VISIBLE'
     | WorldDirectorInvestigationIssueCode;
   requirement: string;
   message: string;
@@ -304,6 +307,48 @@ export class WorldDirector {
       visibleEntities: entities.length,
       visibleEvents: events.length,
     };
+
+    const activeCombat = input.worldRepo && input.storyId
+      ? input.worldRepo.getCombatEngine(input.storyId)
+      : undefined;
+    if (activeCombat?.getCombatPhase() === 'ACTIVE') {
+      const player = input.worldRepo!.getPlayerLifecycle(input.storyId!);
+      const actorId = player?.actorId;
+      const issues: WorldDirectorReadinessIssue[] = [];
+      if (!actorId) {
+        issues.push({
+          code: 'COMBAT_PLAYER_CONTEXT_UNAVAILABLE',
+          requirement: 'Resolve the player actor before projecting active combat context',
+          message: 'Active combat has no canonical player actor context; use no actor-specific battlefield details.',
+        });
+      } else {
+        const projection = activeCombat.projectCombatForActor(actorId);
+        const playerParticipant = projection.participants.find((participant) => participant.id === actorId);
+        if (!playerParticipant) {
+          issues.push({
+            code: 'COMBAT_PLAYER_NOT_IN_ENCOUNTER',
+            requirement: 'The canonical player actor participates in the active encounter',
+            message: 'The player actor is not present in the projected active encounter; do not narrate combat participation or proximity.',
+          });
+        }
+        const visibleOpponent = projection.participants.some((participant) =>
+          participant.team === 'enemies' && !participant.isDead,
+        );
+        if (playerParticipant && !visibleOpponent) {
+          issues.push({
+            code: 'COMBAT_OPPONENT_NOT_VISIBLE',
+            requirement: 'At least one living opponent is visible in the player-scoped combat projection',
+            message: 'No living opponent is established in the player-visible encounter projection; do not identify or describe an unseen opponent.',
+          });
+        }
+      }
+      return {
+        profile: 'COMBAT_CONTEXT',
+        status: issues.length ? 'INCOMPLETE' : 'READY',
+        issues,
+        evidenceCounts,
+      };
+    }
 
     const travelingPlayer = input.worldRepo && input.storyId
       ? input.worldRepo.getPlayerLifecycle(input.storyId)

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
-import { resolveGroundedObservation } from '../server/domain/sceneInteractionAuthority';
+import { resolveGroundedObservation, SceneInteractionAuthority } from '../server/domain/sceneInteractionAuthority';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 
@@ -439,6 +439,70 @@ test('Phase 3 opening and normal-turn projections share the prepared scene and t
     'opening regeneration must preserve canonical scene changes made during a prior visit');
   const revisitedTurn = CurrentSituationBuilder.build({ storyId, playerAction: 'I observe the victim.', worldRepo: rig.repository });
   assert.ok(revisitedTurn.sceneEvidence.objects.some((object) => object.id === bodyId));
+});
+
+test('Phase 3 concealed investigation evidence stays hidden until canonical search, then survives regeneration and reload', async () => {
+  await withDurablePersistence(async () => {
+    const storyId = 'opening_investigation_discovery_' + Date.now();
+    const rig = buildOpeningRig(storyId, 'Isolated Shack', {
+      status: 'ABANDONED', expectedPopulation: 'NONE', provenance: 'AUTHORED',
+    }, false);
+    const run = rig.repository.getStoryRun(storyId);
+    const characterId = run.protagonist.characterId;
+    const preparationKey = 'fixture:isolated-shack-hidden-clue:v1';
+    run.startingSituation = {
+      summary: 'Kaelen Voss is investigating a fresh murder scene inside the isolated shack.',
+      hook: 'A fresh murder has been reported at the shack.',
+      activity: 'examining the scene',
+      situationType: 'pressure_event',
+      worldDirectorInvestigation: {
+        schemaVersion: 1,
+        profile: 'INVESTIGATION',
+        preparationKey,
+        sourceRef: `${characterId}:startingSituation`,
+        claimKind: 'AUTHORED_TRUTH',
+        victim: { name: 'Unknown victim' },
+        body: { name: 'Victim body', description: 'A body lies at the scene.', visible: true, discoverable: true },
+        evidence: [{ slot: 'primary-clue', name: 'Hidden thread', description: 'A loose thread is caught on the latch.', visible: false, discoverable: true }],
+      },
+    };
+    rig.repository.saveStoryRun(run);
+
+    await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+    const initialOpening = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: rig.repository }).rawOpeningFacts.location;
+    assert.equal(initialOpening.sceneObjects.some((object) => object.name === 'Hidden thread'), false,
+      'hidden evidence may satisfy canonical readiness but must stay out of the opening projection');
+
+    const actorId = rig.repository.getPlayerLifecycle(storyId)!.actorId;
+    const discovery = SceneInteractionAuthority.resolve({
+      repository: rig.repository,
+      storyId,
+      actorId,
+      actionText: 'I search for the thread clue.',
+      locationId: rig.locationId,
+    });
+    assert.equal(discovery.kind, 'SEARCH');
+    assert.equal(discovery.committed, true);
+    assert.ok(discovery.discoveredObjectId);
+    assert.equal(discovery.pickedUpItemId, undefined, 'search reveals evidence but does not take it');
+
+    const discoveredSituation = CurrentSituationBuilder.build({ storyId, playerAction: 'I examine the thread clue.', worldRepo: rig.repository });
+    assert.ok(discoveredSituation.sceneEvidence.objects.some((object) => object.id === discovery.discoveredObjectId));
+    const clueObservation = resolveGroundedObservation(discoveredSituation, 'I examine the thread clue.');
+    assert.match(clueObservation.text || '', /Hidden thread is present\./);
+    assert.match(clueObservation.text || '', /A loose thread is caught on the latch\./);
+
+    await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, forceRegenerate: true, allowDeterministicFallback: true });
+    const regeneratedOpening = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: rig.repository }).rawOpeningFacts.location;
+    assert.ok(regeneratedOpening.sceneObjects.some((object) => object.id === discovery.discoveredObjectId),
+      'opening regeneration must reflect the revealed canonical object without rematerializing it');
+
+    const reloaded = new InMemoryWorldRepository();
+    const reloadedObject = reloaded.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.find((object) => object.id === discovery.discoveredObjectId);
+    assert.equal(reloadedObject?.visible, true, 'discovery must survive repository reconstruction');
+    const reloadedSituation = CurrentSituationBuilder.build({ storyId, playerAction: 'I examine the thread clue.', worldRepo: reloaded });
+    assert.match(resolveGroundedObservation(reloadedSituation, 'I examine the thread clue.').text || '', /A loose thread is caught on the latch\./);
+  });
 });
 
 test('opening scene seeds and projects canonical ambient people before generating a public citadel opening', async () => {

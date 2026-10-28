@@ -1025,13 +1025,34 @@ export class OpeningSceneService {
 			}).join(' ')
 			: location.ambientActivity
 				? String(location.ambientActivity).trim()
-				: `Around ${location.name}, the everyday pace of ${location.region || 'the surroundings'} continues without disturbance.`;
+				: '';
+
+		const occupancy: CurrentSituation['sceneEvidence']['occupancy'] = location.population || {
+			status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN',
+		};
+		const occupancySentence = occupancy.status === 'ABANDONED'
+			? `No current occupants are established at this abandoned site${occupancy.explanation ? `: ${occupancy.explanation}` : '.'}`
+			: occupancy.status === 'RESTRICTED'
+				? `Access is restricted${occupancy.explanation ? `: ${occupancy.explanation}` : '.'} ${visiblePeople.length ? 'Only the individually visible people are established here.' : 'No authorized occupant is individually visible.'}`
+				: occupancy.status === 'INHABITED'
+					? occupancy.expectedPopulation === 'NONE'
+						? 'No ordinary population is established at this location.'
+						: `The location is inhabited${occupancy.expectedPopulation ? `, with a ${occupancy.expectedPopulation.toLowerCase()} broader population` : ''}${visiblePeople.length ? '.' : ', though no individual occupant is visible in the current scene.'}`
+					: visiblePeople.length
+						? 'The wider occupancy is unknown; the visible people are established individually, not as a complete population.'
+						: 'No individual occupant is visible in the current scene, and whether anyone else is nearby remains unknown.';
 
 		const visibleObjectSentence = visibleSceneObjects.length
-			? `Nearby, ${visibleSceneObjects.map((object) => object.name).join(', ')} can be seen.`
+			? `Visible scene evidence includes ${visibleSceneObjects.map((object) =>
+				`${object.name}${object.description ? `: ${String(object.description).trim().replace(/[.!?]+$/, '')}` : ''}`
+			).join('; ')}.`
+			: '';
+		const environmentFeatures = (location.environment?.features || []).map((feature) => String(feature || '').trim()).filter(Boolean).slice(0, 6);
+		const environmentFeatureSentence = environmentFeatures.length
+			? `Established features include ${environmentFeatures.join('; ')}.`
 			: '';
 
-		const p2 = [doingNowSentence, visiblePeopleSentence, visibleObjectSentence].filter(Boolean).join(' ');
+		const p2 = [doingNowSentence, visiblePeopleSentence, occupancySentence, visibleObjectSentence, environmentFeatureSentence].filter(Boolean).join(' ');
 
 		// 3. Plain Answer 4: What, if anything, is unsettled (optional lead, no repeated hook)
 		const authoredGoal = typeof agenda?.goal === 'string' && agenda.goal.trim() ? agenda.goal.trim() : '';

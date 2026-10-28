@@ -751,6 +751,22 @@ test('opening semantic review rejects hidden canonical facts from both primary a
     { status: 'UNKNOWN', expectedPopulation: 'VARIABLE', provenance: 'UNKNOWN' },
   );
   const secretPhrase = 'a sealed alien engine beneath the citadel';
+  const locationId = rig.repository.getPlayerLifecycle(storyId)!.locationId!;
+  const graph = rig.repository.getGeographyGraph(storyId);
+  graph.addSceneObject(locationId, {
+    id: 'opening_fallback_visible_anchor_' + storyId,
+    name: 'Brass seal',
+    kind: 'OTHER',
+    visible: true,
+    description: 'A brass seal bears three filed notches.',
+  });
+  graph.addSceneObject(locationId, {
+    id: 'opening_fallback_hidden_anchor_' + storyId,
+    name: 'Hidden blue thread',
+    kind: 'OTHER',
+    visible: false,
+    description: 'A blue thread is caught beneath the council plinth.',
+  });
   rig.repository.saveWorldFact(storyId, {
     id: 'fact_hidden_engine_' + storyId,
     subjectEntityId: 'Elysium Council',
@@ -759,6 +775,17 @@ test('opening semantic review rejects hidden canonical facts from both primary a
     secretLevel: 'secret',
     provenance: 'AUTHORED_HIDDEN_CANON',
   });
+
+  const supportedPreparedFactReview = rig.orchestrator.validateOpeningNarrativeCandidate({
+    storyId,
+    repository: rig.repository,
+    narration: [
+      'At Cycle 42, Hero Vael stands within Elysium Solar Citadel as activity carries through its public arcade.',
+      'A brass seal bears three filed notches, clearly visible on its surface. Hero Vael takes note of the mark while the next choice remains open.',
+    ].join('\n\n'),
+  });
+  assert.equal(supportedPreparedFactReview.valid, true,
+    supportedPreparedFactReview.errorReason || 'the review should accept a directly supported visible canonical scene object');
 
   const originalExecute = rig.orchestrator.executeTaskGeneration;
   const hiddenFactNarrative = [
@@ -799,6 +826,10 @@ test('opening semantic review rejects hidden canonical facts from both primary a
     const generation = run.runtimeState?.openingNarrativeContext?.generation;
 
     assert.doesNotMatch(opening.narrativeText.toLowerCase(), /sealed alien engine beneath the citadel/);
+    assert.match(opening.narrativeText, /Brass seal: A brass seal bears three filed notches\./,
+      'the deterministic fallback must retain visible canonical object evidence after primary review rejects unsupported facts');
+    assert.doesNotMatch(opening.narrativeText, /Hidden blue thread|blue thread/i,
+      'the deterministic fallback must preserve the same hidden-information boundary as primary narration');
     assert.doesNotMatch(JSON.stringify(opening.structuredEvents).toLowerCase(), /sealed alien engine beneath the citadel/);
     assert.equal(generation?.source, 'DETERMINISTIC_FALLBACK', 'metadata must identify the deterministic text actually delivered');
     assert.equal(generation?.qualityAudit?.firstDecision, 'REWRITE');
@@ -909,6 +940,67 @@ test('opening presentation review rejects time-of-day claims that contradict the
   });
   assert.equal(result.valid, false);
   assert.match(result.errorReason || '', /temporal|canonical world time/i);
+});
+
+test('Phase 4 deterministic opening fallback preserves visible evidence and distinguishes unknown, restricted, and abandoned occupancy', () => {
+  const renderFallback = (storyId: string, status: 'UNKNOWN' | 'RESTRICTED' | 'ABANDONED') => {
+    const rig = buildOpeningRig(storyId, 'Isolated Shack', {
+      status,
+      expectedPopulation: status === 'ABANDONED' ? 'NONE' : undefined,
+      accessControlled: status === 'RESTRICTED',
+      explanation: status === 'ABANDONED'
+        ? 'The shack was evacuated after the collapse.'
+        : status === 'RESTRICTED' ? 'The archive door is sealed.' : undefined,
+      provenance: status === 'UNKNOWN' ? 'UNKNOWN' : 'AUTHORED',
+    });
+    const run = rig.repository.getStoryRun(storyId);
+    run.startingSituation = {
+      summary: 'Kaelen is checking the Isolated Shack for signs of recent activity.',
+      hook: 'A recent disturbance at the shack remains unexplained.',
+      activity: 'checking the scene',
+      situationType: 'pressure_event',
+    };
+    rig.repository.saveStoryRun(run);
+    const graph = rig.repository.getGeographyGraph(storyId);
+    const location = graph.getNode(rig.locationId)!;
+    graph.addNode({
+      ...location,
+      environment: { ...(location.environment || {}), features: ['a collapsed worktable', 'a narrow service hatch'] },
+    } as any);
+    graph.addSceneObject(rig.locationId, {
+      id: `visible_clue_${storyId}`,
+      name: 'Marked fragment',
+      kind: 'OTHER',
+      visible: true,
+      description: 'A three-pronged mark is pressed into the metal surface.',
+    });
+    graph.addSceneObject(rig.locationId, {
+      id: `hidden_clue_${storyId}`,
+      name: 'Concealed thread',
+      kind: 'OTHER',
+      visible: false,
+      description: 'A blue thread is caught beneath the hatch hinge.',
+    });
+    const facts = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: rig.repository }).rawOpeningFacts;
+    return OpeningSceneService.synthesizeDeterministicOpening(facts, storyId, null).narrativeText;
+  };
+
+  const unknown = renderFallback('phase4_fallback_unknown_' + Date.now(), 'UNKNOWN');
+  assert.match(unknown, /whether anyone else is nearby remains unknown/i);
+  assert.doesNotMatch(unknown, /the shack is empty|nobody is here|no one is anywhere/i);
+  assert.match(unknown, /Marked fragment: A three-pronged mark is pressed into the metal surface\./);
+  assert.match(unknown, /a collapsed worktable; a narrow service hatch/i);
+  assert.doesNotMatch(unknown, /Concealed thread|blue thread/i,
+    'deterministic fallback must use only the player-visible projection');
+
+  const restricted = renderFallback('phase4_fallback_restricted_' + Date.now(), 'RESTRICTED');
+  assert.match(restricted, /Access is restricted.*No authorized occupant is individually visible/i);
+  assert.doesNotMatch(restricted, /abandoned|no current occupants are established/i);
+
+  const abandoned = renderFallback('phase4_fallback_abandoned_' + Date.now(), 'ABANDONED');
+  assert.match(abandoned, /abandoned site: The shack was evacuated after the collapse/i);
+  assert.doesNotMatch(abandoned, /everyday pace|continues without disturbance/i,
+    'explicit absence must not be replaced by generic activity prose');
 });
 
 test('opening population and opening scene survive repository reload without duplicate residents on regeneration', async () => {

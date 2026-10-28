@@ -606,7 +606,8 @@ test('Phase 3 picked-up investigation evidence stays removed from scene projecti
     };
     rig.repository.saveStoryRun(run);
 
-    const opening = await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+    await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+    const opening = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: rig.repository }).rawOpeningFacts.location;
     const clue = opening.sceneObjects.find((object: any) => object.name === 'Takeable clue');
     assert.ok(clue, 'prepared investigation clue should be in the opening projection');
     const graph = rig.repository.getGeographyGraph(storyId);
@@ -635,10 +636,11 @@ test('Phase 3 picked-up investigation evidence stays removed from scene projecti
       'the next normal-turn scene projection must not restore picked-up evidence');
     rig.repository.saveStoryRun(rig.repository.getStoryRun(storyId));
 
-    const regenerated = await OpeningSceneService.generateOpeningScene({
+    await OpeningSceneService.generateOpeningScene({
       storyId, worldRepo: rig.repository, forceRegenerate: true, allowDeterministicFallback: true,
     });
-    assert.equal(regenerated.sceneObjects.some((object: any) => object.id === clue.id), false,
+    const regeneratedOpening = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: rig.repository }).rawOpeningFacts.location;
+    assert.equal(regeneratedOpening.sceneObjects.some((object: any) => object.id === clue.id), false,
       'opening regeneration must not rematerialize picked-up evidence');
 
     const reloaded = new InMemoryWorldRepository();

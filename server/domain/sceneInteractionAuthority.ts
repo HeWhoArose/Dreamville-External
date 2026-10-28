@@ -452,6 +452,53 @@ export function resolveGroundedObservation(
     return { relevant: false, evidence: [] };
   }
 
+  // Resolve a directly named, player-visible scene object before falling back
+  // to aggregate occupancy. Opening and live-turn projections share these
+  // canonical object refs, so observing a prepared victim or clue can answer
+  // from its owner record without inventing details or exposing concealed props.
+  const ignoredTargetWords = new Set([
+    'look', 'looks', 'looked', 'around', 'observe', 'observes', 'observed', 'scan', 'scans', 'scanned',
+    'survey', 'surveys', 'surveyed', 'search', 'searches', 'searched', 'inspect', 'inspects', 'inspected',
+    'examine', 'examines', 'examined', 'watch', 'watches', 'watched', 'notice', 'notices', 'noticed',
+    'listen', 'listens', 'listened', 'hear', 'hears', 'heard', 'the', 'for', 'crowded', 'crowd', 'place',
+    'environment', 'surroundings', 'area', 'scene', 'nearby', 'here', 'there', 'what', 'making', 'it',
+  ]);
+  const requestedTargetWords = Array.from(new Set(
+    (normalized.match(/[a-z0-9]+/g) || []).filter((word) => word.length >= 3 && !ignoredTargetWords.has(word)),
+  ));
+  const targetedObject = requestedTargetWords.length
+    ? (situation.sceneEvidence?.objects || [])
+      .filter((object) => object.visibleToPlayer)
+      .map((object) => {
+        const role = String(object.properties?.worldDirectorRole || '').toUpperCase();
+        const roleAliases = role === 'INVESTIGATION_BODY'
+          ? ['victim', 'corpse', 'body']
+          : role === 'INVESTIGATION_EVIDENCE'
+            ? ['clue', 'evidence']
+            : [];
+        const vocabulary = new Set([
+          ...words(object.name),
+          ...(object.tags || []).flatMap(words),
+          ...roleAliases,
+        ]);
+        const matchedWords = requestedTargetWords.filter((word) =>
+          Array.from(vocabulary).some((candidate) => candidate === word || candidate.startsWith(word) || word.startsWith(candidate)),
+        );
+        return { object, matchedWords };
+      })
+      .filter((entry) => entry.matchedWords.length > 0)
+      .sort((left, right) => right.matchedWords.length - left.matchedWords.length || left.object.id.localeCompare(right.object.id))[0]?.object
+    : undefined;
+
+  if (targetedObject) {
+    const description = targetedObject.description ? ` ${targetedObject.description}` : '';
+    return {
+      relevant: true,
+      text: `Canonical scene evidence at ${situation.location.name}: ${targetedObject.name} is present.${description}`,
+      evidence: [targetedObject.id, targetedObject.name],
+    };
+  }
+
   const occupancy = situation.sceneEvidence?.occupancy || { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' };
   const entities = (situation.nearbyEntities || []).filter((entity) =>
     entity.visibleToPlayer && entity.kind !== 'PLAYER' && entity.presence === 'present' && entity.isAlive,

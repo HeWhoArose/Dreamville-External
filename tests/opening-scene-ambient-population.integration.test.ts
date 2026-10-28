@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { CurrentSituationBuilder } from '../server/domain/currentSituation';
+import { resolveGroundedObservation } from '../server/domain/sceneInteractionAuthority';
+import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 
 async function withDurablePersistence<T>(callback: () => Promise<T>): Promise<T> {
@@ -358,6 +361,75 @@ test('Phase 2 prepares an authored investigation once and reuses its canonical r
     assert.equal(reloadedRepository.getStoryRun(storyId).runtimeState?.openingNarrativeContext?.sceneReadiness?.preparation?.status, 'ALREADY_PREPARED');
     assert.deepEqual(reloadedRepository.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.map((object) => object.id).sort(), [refs.body, ...refs.evidence].sort());
   });
+});
+
+test('Phase 3 opening and normal-turn projections share the prepared scene and targeted observation uses canonical object evidence', async () => {
+  const storyId = 'opening_investigation_projection_parity_' + Date.now();
+  const rig = buildOpeningRig(storyId, 'Isolated Shack', {
+    status: 'ABANDONED', expectedPopulation: 'NONE', provenance: 'AUTHORED',
+  });
+  const run = rig.repository.getStoryRun(storyId);
+  const characterId = run.protagonist.characterId;
+  const preparationKey = 'fixture:isolated-shack-projection-parity:v1';
+  run.startingSituation = {
+    summary: 'Kaelen Voss is investigating a fresh murder scene inside the isolated shack.',
+    hook: 'A fresh murder has been reported at the shack.',
+    activity: 'examining the scene',
+    situationType: 'pressure_event',
+    worldDirectorInvestigation: {
+      schemaVersion: 1,
+      profile: 'INVESTIGATION',
+      preparationKey,
+      sourceRef: `${characterId}:startingSituation`,
+      claimKind: 'AUTHORED_TRUTH',
+      victim: { name: 'Unknown victim' },
+      body: { name: 'Victim body', description: 'A body lies at the scene.', visible: true, discoverable: true },
+      evidence: [{ slot: 'primary-clue', name: 'Unexamined clue', description: 'A physical clue remains at the scene.', visible: true, discoverable: true }],
+    },
+  };
+  rig.repository.saveStoryRun(run);
+
+  await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, allowDeterministicFallback: true });
+  const opening = WorkingContextEngine.assembleOpeningContext({ storyId, worldRepo: rig.repository }).rawOpeningFacts.location;
+  const normalTurn = CurrentSituationBuilder.build({ storyId, playerAction: 'I observe the victim.', worldRepo: rig.repository });
+  const expectedObjectIds = opening.sceneObjects.map((object) => object.id).sort();
+
+  assert.deepEqual(expectedObjectIds, normalTurn.sceneEvidence.objects.map((object) => object.id).sort(),
+    'opening and normal-turn contexts must resolve the same visible canonical scene objects');
+  assert.deepEqual(
+    opening.visibleEntities.map((entity) => entity.id).sort(),
+    normalTurn.nearbyEntities.filter((entity) => entity.kind !== 'PLAYER' && entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === opening.id).map((entity) => entity.id).sort(),
+    'opening and normal-turn contexts must agree on visible living occupants',
+  );
+  assert.deepEqual(opening.population, normalTurn.sceneEvidence.occupancy,
+    'opening and normal-turn contexts must use the same canonical occupancy state');
+  assert.deepEqual(opening.environment, normalTurn.sceneEvidence.environment,
+    'opening and normal-turn contexts must use the same canonical environment evidence');
+
+  const victimObservation = resolveGroundedObservation(normalTurn, 'I observe the victim.');
+  assert.match(victimObservation.text || '', /Canonical scene evidence.*Victim body is present\./);
+  assert.match(victimObservation.text || '', /A body lies at the scene\./);
+  assert.ok(victimObservation.evidence.includes(opening.sceneObjects.find((object) => object.name === 'Victim body')?.id || ''));
+
+  const evidenceObservation = resolveGroundedObservation(normalTurn, 'I examine the clue.');
+  assert.match(evidenceObservation.text || '', /Unexamined clue is present\./);
+  assert.match(evidenceObservation.text || '', /A physical clue remains at the scene\./);
+
+  const bodyId = opening.sceneObjects.find((object) => object.name === 'Victim body')?.id;
+  assert.ok(bodyId);
+  const graph = rig.repository.getGeographyGraph(storyId);
+  const body = graph.getNode(rig.locationId)?.sceneObjects?.find((object) => object.id === bodyId);
+  assert.ok(body);
+  assert.equal(graph.patchSceneObject(rig.locationId, bodyId, {
+    properties: { ...(body.properties || {}), playerInspectionNote: 'marked during the first visit' },
+  }).success, true);
+
+  await OpeningSceneService.generateOpeningScene({ storyId, worldRepo: rig.repository, forceRegenerate: true, allowDeterministicFallback: true });
+  const revisitedBody = rig.repository.getGeographyGraph(storyId).getNode(rig.locationId)?.sceneObjects?.find((object) => object.id === bodyId);
+  assert.equal(revisitedBody?.properties?.playerInspectionNote, 'marked during the first visit',
+    'opening regeneration must preserve canonical scene changes made during a prior visit');
+  const revisitedTurn = CurrentSituationBuilder.build({ storyId, playerAction: 'I observe the victim.', worldRepo: rig.repository });
+  assert.ok(revisitedTurn.sceneEvidence.objects.some((object) => object.id === bodyId));
 });
 
 test('opening scene seeds and projects canonical ambient people before generating a public citadel opening', async () => {

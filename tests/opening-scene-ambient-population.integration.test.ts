@@ -751,6 +751,22 @@ test('opening semantic review rejects hidden canonical facts from both primary a
     { status: 'UNKNOWN', expectedPopulation: 'VARIABLE', provenance: 'UNKNOWN' },
   );
   const secretPhrase = 'a sealed alien engine beneath the citadel';
+  const locationId = rig.repository.getPlayerLifecycle(storyId)!.locationId!;
+  const graph = rig.repository.getGeographyGraph(storyId);
+  graph.addSceneObject(locationId, {
+    id: 'opening_fallback_visible_anchor_' + storyId,
+    name: 'Brass seal',
+    kind: 'OTHER',
+    visible: true,
+    description: 'A brass seal bears three filed notches.',
+  });
+  graph.addSceneObject(locationId, {
+    id: 'opening_fallback_hidden_anchor_' + storyId,
+    name: 'Hidden blue thread',
+    kind: 'OTHER',
+    visible: false,
+    description: 'A blue thread is caught beneath the council plinth.',
+  });
   rig.repository.saveWorldFact(storyId, {
     id: 'fact_hidden_engine_' + storyId,
     subjectEntityId: 'Elysium Council',
@@ -799,6 +815,10 @@ test('opening semantic review rejects hidden canonical facts from both primary a
     const generation = run.runtimeState?.openingNarrativeContext?.generation;
 
     assert.doesNotMatch(opening.narrativeText.toLowerCase(), /sealed alien engine beneath the citadel/);
+    assert.match(opening.narrativeText, /Brass seal: A brass seal bears three filed notches\./,
+      'the deterministic fallback must retain visible canonical object evidence after primary review rejects unsupported facts');
+    assert.doesNotMatch(opening.narrativeText, /Hidden blue thread|blue thread/i,
+      'the deterministic fallback must preserve the same hidden-information boundary as primary narration');
     assert.doesNotMatch(JSON.stringify(opening.structuredEvents).toLowerCase(), /sealed alien engine beneath the citadel/);
     assert.equal(generation?.source, 'DETERMINISTIC_FALLBACK', 'metadata must identify the deterministic text actually delivered');
     assert.equal(generation?.qualityAudit?.firstDecision, 'REWRITE');

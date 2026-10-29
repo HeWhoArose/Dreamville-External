@@ -62,7 +62,7 @@ test('live-turn final review never returns the original narration after both can
     fallbackReason: undefined,
     };
   };
-  (serverMockAuthority as any).processAction = async function (...args: any[]) {
+  (serverMockAuthority as any).processAction = function (...args: any[]) {
     canonicalActionCalls += 1;
     return originalProcessAction.apply(this, args as any);
   };

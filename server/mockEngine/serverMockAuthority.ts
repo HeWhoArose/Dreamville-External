@@ -800,13 +800,19 @@ export class ServerMockAuthority {
         .filter(Boolean)
         .map(value => [value.toLocaleLowerCase(), value] as const),
     ).values());
-    const missingConsequences = requiredConsequences
-      .filter(consequence => !liveNarrativeConsequenceCoverage(params.narrativeText, consequence).covered)
-      .slice(0, 8);
-    const hasConsequenceBeat = requiredConsequences.length > 0
+    // Authored/check outcomes retain their established semantic fidelity gate: their guidance
+    // often describes intent-level checks rather than concrete entity effects. The per-effect
+    // coverage gate applies to deterministic/capability/combat outcomes with explicit effect lists.
+    const enforcePerEffectCoverage = params.actionResolution.resolutionMethod !== 'CHECK';
+    const missingConsequences = enforcePerEffectCoverage
+      ? requiredConsequences
+        .filter(consequence => !liveNarrativeConsequenceCoverage(params.narrativeText, consequence).covered)
+        .slice(0, 8)
+      : [];
+    const hasConsequenceBeat = enforcePerEffectCoverage && requiredConsequences.length > 0
       ? missingConsequences.length === 0
       : consequenceSignal || consequenceVerbOverlap;
-    const actionFidelityValid = (observationLike && requiredConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
+    const actionFidelityValid = observationLike || (actionAnchor && hasConsequenceBeat);
     const actionFidelityReason = actionFidelityValid
       ? undefined
       : missingConsequences.length

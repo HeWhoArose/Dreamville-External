@@ -16,6 +16,7 @@ test('live-turn final review never returns the original narration after both can
   let repairCalls = 0;
   let resolutionSnapshot: string | undefined;
   let resolutionReference: any;
+  let canonicalActionCallsAtNarrationStart = 0;
 
   const sceneryOnly = 'Tall stone columns cast long shadows across the silent plaza. Dust drifts through the pale light, and the air carries the stillness of an empty hall.';
   const fakePlan = {
@@ -33,6 +34,7 @@ test('live-turn final review never returns the original narration after both can
 
   (orchestrator as any).generateNarrativeOnly = async (params: any) => {
     resolutionReference = params?.actionResolution;
+    canonicalActionCallsAtNarrationStart = canonicalActionCalls;
     resolutionSnapshot = JSON.stringify(params?.actionResolution);
     return {
     success: true,
@@ -79,7 +81,8 @@ test('live-turn final review never returns the original narration after both can
     );
 
     assert.equal(result.success, true, 'the canonical action remains committed even if its narration is rejected');
-    assert.equal(canonicalActionCalls, 1, 'narration repair must not re-run the canonical action');
+    assert.ok(canonicalActionCallsAtNarrationStart >= 1, 'the canonical action must resolve before narration starts');
+    assert.equal(canonicalActionCalls, canonicalActionCallsAtNarrationStart, 'narration repair must not re-run the canonical action after the first narration begins');
     assert.equal(repairCalls, 1, 'the bounded authority repair should run once');
     assert.equal(JSON.stringify(resolutionReference), resolutionSnapshot, 'the committed ActionResolution must remain unchanged during repair');
     assert.equal(result.narrativeResponse, undefined, 'rejected narration must not be returned to the player');

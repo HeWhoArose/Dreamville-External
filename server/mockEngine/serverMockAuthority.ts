@@ -89,11 +89,16 @@ function liveNarrativeConsequenceCoverage(narrativeText: string, consequenceText
     'action','effect','result','visible','player','target','character','person','thing','nearby',
   ]);
   const groups: Record<string, string[]> = {
-    reaction: ['react','reacts','reacted','reaction','turn','turns','turned','look','looks','looked','glance','glances','glanced','lift','lifts','lifted','raise','raises','raised','notice','notices','noticed','attention','pause','pauses','paused','freeze','freezes','froze','frozen','stop','stops','stopped','shift','shifts','shifted','face','faces','faced','peer','peers','peered','startle','startles','startled','stiffen','stiffens','stiffened','flinch','flinches','flinched','recoil','recoils','recoiled'],
+    reaction: ['react','reacts','reacted','reaction','turn','turns','turned','look','looks','looked','glance','glances','glanced','lift','lifts','lifted','raise','raises','raised','notice','notices','noticed','attention','draw','draws','drew','catch','catches','caught','snap','snaps','snapped','pause','pauses','paused','freeze','freezes','froze','frozen','stop','stops','stopped','shift','shifts','shifted','face','faces','faced','peer','peers','peered','startle','startles','startled','stiffen','stiffens','stiffened','flinch','flinches','flinched','recoil','recoils','recoiled'],
     impact: ['strike','strikes','struck','hit','hits','impact','clang','clangs','clanged','collide','collides','collided','slam','slams','slammed'],
     fire: ['fire','fires','fired','flame','flames','flaming','ignite','ignites','ignited','burn','burns','burned','burning','alight'],
     knockdown: ['knock','knocks','knocked','prone','fall','falls','fell','fallen','stagger','staggers','staggered','collapse','collapses','collapsed'],
   };
+  const actionTerms = new Set([
+    'reaction','impact','fire','knockdown','strike','lodge','embed','pierce','split','splinter','break','open','close','damage','restore','heal',
+    'move','shift','change','stop','turn','retreat','approach','notice','react','draw','catch','raise','lower','look','glance','freeze','stiffen',
+    'step','burn','ignite','knock','stagger','collapse','engulf','set','alight','fall','lift','pause','face','peer','startle','recoil','grind','drop',
+  ]);
   const normalize = (token: string) => {
     for (const [group, members] of Object.entries(groups)) {
       if (members.includes(token)) return group;
@@ -103,22 +108,40 @@ function liveNarrativeConsequenceCoverage(narrativeText: string, consequenceText
     if (token.length > 4 && token.endsWith('s')) return token.slice(0, -1);
     return token;
   };
-  const tokens = (value: string) => Array.from(new Set(
-    String(value || '')
-      .toLowerCase()
-      .split(/[^a-z0-9'-]+/)
-      .map(value => value.replace(/^['-]+|['-]+$/g, ''))
-      .filter(value => value.length >= 4 && !stop.has(value))
-      .map(normalize),
-  ));
-  const requiredAnchors = tokens(consequenceText);
-  const observed = new Set(tokens(narrativeText));
+  const orderedTokens = (value: string) => String(value || '')
+    .toLowerCase()
+    .split(/[^a-z0-9'-]+/)
+    .map(value => value.replace(/^['-]+|['-]+$/g, ''))
+    .filter(value => value.length >= 4 && !stop.has(value))
+    .map(normalize);
+  const requiredOrdered = orderedTokens(consequenceText);
+  const observedOrdered = orderedTokens(narrativeText);
+  const requiredAnchors = Array.from(new Set(requiredOrdered));
+  const observed = new Set(observedOrdered);
   const matchedAnchors = requiredAnchors.filter(token => observed.has(token));
   if (requiredAnchors.length === 0) return { covered: true, matchedAnchors, requiredAnchors };
+
+  // Require each explicit outcome verb (or its normalized semantic family), not just shared nouns.
+  const requiredActionAnchors = Array.from(new Set(requiredOrdered.filter(token => actionTerms.has(token))));
+  if (requiredActionAnchors.some(token => !observed.has(token))) {
+    return { covered: false, matchedAnchors, requiredAnchors };
+  }
+
+  // If the consequence names a specific object/person, require a matching noun phrase so
+  // another effect on a different entity cannot satisfy this one by sharing generic vocabulary.
+  const nounTokens = requiredOrdered.filter(token => !actionTerms.has(token));
+  const nounBigrams = requiredOrdered.slice(0, -1)
+    .map((token, index) => [token, requiredOrdered[index + 1]] as const)
+    .filter(([left, right]) => !actionTerms.has(left) && !actionTerms.has(right) && left.length >= 4 && right.length >= 4)
+    .map(([left, right]) => left + ' ' + right);
+  const observedBigrams = new Set(observedOrdered.slice(0, -1).map((token, index) => token + ' ' + observedOrdered[index + 1]));
+  const hasNounAnchor = nounBigrams.length
+    ? nounBigrams.some(phrase => observedBigrams.has(phrase))
+    : nounTokens.some(token => observed.has(token));
   const minimumMatches = requiredAnchors.length <= 2 ? requiredAnchors.length : 2;
   const coverage = matchedAnchors.length / requiredAnchors.length;
   return {
-    covered: matchedAnchors.length >= minimumMatches && coverage >= 0.2,
+    covered: hasNounAnchor && matchedAnchors.length >= minimumMatches && coverage >= 0.2,
     matchedAnchors,
     requiredAnchors,
   };

@@ -11,6 +11,12 @@ test('live-turn final review never returns the original narration after both can
   const orchestrator = worldRepository.getAiOrchestrator();
   const originalGenerate = orchestrator.generateNarrativeOnly;
   const originalExecute = orchestrator.executeTaskGeneration;
+  const originalProcessAction = serverMockAuthority.processAction;
+  let canonicalActionCalls = 0;
+  let repairCalls = 0;
+  let resolutionSnapshot: string | undefined;
+  let resolutionReference: any;
+  let canonicalActionCallsAtNarrationStart = 0;
 
   const sceneryOnly = 'Tall stone columns cast long shadows across the silent plaza. Dust drifts through the pale light, and the air carries the stillness of an empty hall.';
   const fakePlan = {
@@ -26,7 +32,11 @@ test('live-turn final review never returns the original narration after both can
     expiresAfterNarration: true,
   } as any;
 
-  (orchestrator as any).generateNarrativeOnly = async () => ({
+  (orchestrator as any).generateNarrativeOnly = async (params: any) => {
+    resolutionReference = params?.actionResolution;
+    canonicalActionCallsAtNarrationStart = canonicalActionCalls;
+    resolutionSnapshot = JSON.stringify(params?.actionResolution);
+    return {
     success: true,
     turnPackage: {
       narrative: [sceneryOnly],
@@ -42,14 +52,22 @@ test('live-turn final review never returns the original narration after both can
     source: 'AI_PRIMARY',
     narrativePlan: fakePlan,
     storyBeat: undefined,
-  });
-  (orchestrator as any).executeTaskGeneration = async () => ({
+    };
+  };
+  (orchestrator as any).executeTaskGeneration = async (taskType: string) => {
+    if (taskType === 'narrative.review') repairCalls += 1;
+    return {
     text: JSON.stringify({ narrativeText: sceneryOnly, structuredEvents: [] }),
     providerId: 'fixture-provider',
     modelId: 'fixture-review',
     source: 'AI_PRIMARY',
     fallbackReason: undefined,
-  });
+    };
+  };
+  (serverMockAuthority as any).processAction = function (...args: any[]) {
+    canonicalActionCalls += 1;
+    return originalProcessAction.apply(this, args as any);
+  };
 
   try {
     const result = await serverMockAuthority.processCustomAction(
@@ -63,6 +81,10 @@ test('live-turn final review never returns the original narration after both can
     );
 
     assert.equal(result.success, true, 'the canonical action remains committed even if its narration is rejected');
+    assert.ok(canonicalActionCallsAtNarrationStart >= 1, 'the canonical action must resolve before narration starts');
+    assert.equal(canonicalActionCalls, canonicalActionCallsAtNarrationStart, 'narration repair must not re-run the canonical action after the first narration begins');
+    assert.equal(repairCalls, 1, 'the bounded authority repair should run once');
+    assert.equal(JSON.stringify(resolutionReference), resolutionSnapshot, 'the committed ActionResolution must remain unchanged during repair');
     assert.equal(result.narrativeResponse, undefined, 'rejected narration must not be returned to the player');
     assert.equal(result.narrativeError?.code, 'NARRATION_FINAL_REVIEW_REJECTED');
 
@@ -74,5 +96,7 @@ test('live-turn final review never returns the original narration after both can
   } finally {
     (orchestrator as any).generateNarrativeOnly = originalGenerate;
     (orchestrator as any).executeTaskGeneration = originalExecute;
+    (serverMockAuthority as any).processAction = originalProcessAction;
+    worldRepository.deleteStoryRun(storyId);
   }
 });

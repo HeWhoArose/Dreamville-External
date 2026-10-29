@@ -54,8 +54,8 @@ test('live-turn final review never returns the original narration after both can
     storyBeat: undefined,
     };
   };
-  (orchestrator as any).executeTaskGeneration = async () => {
-    repairCalls += 1;
+  (orchestrator as any).executeTaskGeneration = async (taskType: string) => {
+    if (taskType === 'narrative.review') repairCalls += 1;
     return {
     text: JSON.stringify({ narrativeText: sceneryOnly, structuredEvents: [] }),
     providerId: 'fixture-provider',

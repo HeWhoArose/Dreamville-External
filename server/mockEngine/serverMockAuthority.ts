@@ -88,12 +88,28 @@ function liveNarrativeConsequenceCoverage(narrativeText: string, consequenceText
     'the','and','that','this','with','from','into','then','than','they','their','there','were','was','have','has','had','will','would','could','should','your','you','for','are','but','not','his','her','him','she','its','our','out','over','under','after','before','about','what','when','where','which','while','just','only','very','some','i','a','an','to','of','on','in',
     'action','effect','result','visible','player','target','character','person','thing','nearby',
   ]);
+  const groups: Record<string, string[]> = {
+    reaction: ['react','reacts','reacted','reaction','turn','turns','turned','look','looks','looked','glance','glances','glanced','lift','lifts','lifted','raise','raises','raised','notice','notices','noticed','attention','pause','pauses','paused','freeze','freezes','froze','frozen','stop','stops','stopped','shift','shifts','shifted','face','faces','faced','peer','peers','peered','startle','startles','startled','stiffen','stiffens','stiffened','flinch','flinches','flinched','recoil','recoils','recoiled'],
+    impact: ['strike','strikes','struck','hit','hits','impact','clang','clangs','clanged','collide','collides','collided','slam','slams','slammed'],
+    fire: ['fire','fires','fired','flame','flames','flaming','ignite','ignites','ignited','burn','burns','burned','burning','alight'],
+    knockdown: ['knock','knocks','knocked','prone','fall','falls','fell','fallen','stagger','staggers','staggered','collapse','collapses','collapsed'],
+  };
+  const normalize = (token: string) => {
+    for (const [group, members] of Object.entries(groups)) {
+      if (members.includes(token)) return group;
+    }
+    if (token.length > 5 && token.endsWith('ing')) return token.slice(0, -3);
+    if (token.length > 4 && token.endsWith('ed')) return token.slice(0, -2);
+    if (token.length > 4 && token.endsWith('s')) return token.slice(0, -1);
+    return token;
+  };
   const tokens = (value: string) => Array.from(new Set(
     String(value || '')
       .toLowerCase()
       .split(/[^a-z0-9'-]+/)
       .map(value => value.replace(/^['-]+|['-]+$/g, ''))
-      .filter(value => value.length >= 4 && !stop.has(value)),
+      .filter(value => value.length >= 4 && !stop.has(value))
+      .map(normalize),
   ));
   const requiredAnchors = tokens(consequenceText);
   const observed = new Set(tokens(narrativeText));
@@ -749,7 +765,9 @@ export class ServerMockAuthority {
       ...(params.actionResolution.physicalConsequences || []),
       ...(params.actionResolution.playerVisibleConsequences || []),
     ].join(' ');
-    const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled|ignites|ignited|burns|burned|knocks|knocked|staggers|staggered|collapses|collapsed|heals|healed|restores|restored|wounds|wounded|frozen)\b/i.test(params.narrativeText);
+    const consequenceVerbOverlap = /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(params.narrativeText) &&
+      /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(consequenceText);
+    const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled)\b/i.test(params.narrativeText);
     const requiredConsequences = Array.from(new Map(
       [
         ...(params.actionResolution.physicalConsequences || []),
@@ -764,10 +782,7 @@ export class ServerMockAuthority {
       .slice(0, 8);
     const hasConsequenceBeat = requiredConsequences.length > 0
       ? missingConsequences.length === 0
-      : consequenceSignal || (
-        /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(params.narrativeText) &&
-        /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(consequenceText)
-      );
+      : consequenceSignal || consequenceVerbOverlap;
     const actionFidelityValid = (observationLike && requiredConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
     const actionFidelityReason = actionFidelityValid
       ? undefined

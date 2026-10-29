@@ -89,7 +89,9 @@ function liveNarrativeConsequenceCoverage(narrativeText: string, consequenceText
     'action','effect','result','visible','player','target','character','person','thing','nearby',
   ]);
   const tokens = (value: string) => Array.from(new Set(
-    String(value || '').toLowerCase().split(/[^a-z0-9'-]+/)
+    String(value || '')
+      .toLowerCase()
+      .split(/[^a-z0-9'-]+/)
       .map(value => value.replace(/^['-]+|['-]+$/g, ''))
       .filter(value => value.length >= 4 && !stop.has(value)),
   ));
@@ -99,7 +101,11 @@ function liveNarrativeConsequenceCoverage(narrativeText: string, consequenceText
   if (requiredAnchors.length === 0) return { covered: true, matchedAnchors, requiredAnchors };
   const minimumMatches = requiredAnchors.length <= 2 ? requiredAnchors.length : 2;
   const coverage = matchedAnchors.length / requiredAnchors.length;
-  return { covered: matchedAnchors.length >= minimumMatches && coverage >= 0.2, matchedAnchors, requiredAnchors };
+  return {
+    covered: matchedAnchors.length >= minimumMatches && coverage >= 0.2,
+    matchedAnchors,
+    requiredAnchors,
+  };
 }
 
 export class ServerMockAuthority {
@@ -748,17 +754,21 @@ export class ServerMockAuthority {
       [
         ...(params.actionResolution.physicalConsequences || []),
         ...(params.actionResolution.playerVisibleConsequences || []),
-      ].map(value => String(value || '').trim()).filter(Boolean)
-       .map(value => [value.toLocaleLowerCase(), value] as const),
+      ]
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .map(value => [value.toLocaleLowerCase(), value] as const),
     ).values());
     const missingConsequences = requiredConsequences
       .filter(consequence => !liveNarrativeConsequenceCoverage(params.narrativeText, consequence).covered)
       .slice(0, 8);
     const hasConsequenceBeat = requiredConsequences.length > 0
       ? missingConsequences.length === 0
-      : consequenceSignal || /\\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\\b/i.test(params.narrativeText)
-        && /\\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\\b/i.test(consequenceText);
-    const actionFidelityValid = observationLike || (actionAnchor && hasConsequenceBeat);
+      : consequenceSignal || (
+        /\\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\\b/i.test(params.narrativeText) &&
+        /\\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\\b/i.test(consequenceText)
+      );
+    const actionFidelityValid = (observationLike && requiredConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
     const actionFidelityReason = actionFidelityValid
       ? undefined
       : missingConsequences.length
@@ -766,7 +776,9 @@ export class ServerMockAuthority {
         : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
     return {
       accepted: richness.decision === 'PASS' && pacing.valid && actionFidelityValid,
-      richness, pacingValid: pacing.valid, pacingReason: pacing.reason,
+      richness,
+      pacingValid: pacing.valid,
+      pacingReason: pacing.reason,
       actionFidelity: { valid: actionFidelityValid, reason: actionFidelityReason, missingConsequences },
     };
   }

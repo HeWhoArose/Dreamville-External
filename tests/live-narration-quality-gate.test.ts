@@ -99,8 +99,10 @@ test('live narration gate accepts an action with a concrete consequence and reac
 test('live narration gate rejects a physical result when a separate visible reaction is omitted', () => {
 	const result = serverMockAuthority.evaluateLiveNarrativeQuality({
 		narrativeText: 'The dagger strikes the guarded door and lodges deep in the wood. Splinters scatter around the blade.',
-		playerAction: 'I throw my dagger at the guarded door.', actionResolution: resolution() as any,
-		situation: situation() as any, intent: { action: 'attack', interactionMode: 'WORLD_ACTION', speechIntent: false } as any,
+		playerAction: 'I throw my dagger at the guarded door.',
+		actionResolution: resolution() as any,
+		situation: situation() as any,
+		intent: { action: 'attack', interactionMode: 'WORLD_ACTION', speechIntent: false } as any,
 	});
 	assert.equal(result.actionFidelity.valid, false);
 	assert.ok(result.actionFidelity.missingConsequences.some(value => /guard/i.test(value) || /attention/i.test(value)));
@@ -110,8 +112,10 @@ test('live narration gate rejects a physical result when a separate visible reac
 test('live narration gate rejects a reaction when the physical object consequence is omitted', () => {
 	const result = serverMockAuthority.evaluateLiveNarrativeQuality({
 		narrativeText: 'The nearby guard’s attention snaps toward the sound; the Caste Enforcer reaches for his weapon.',
-		playerAction: 'I throw my dagger at the guarded door.', actionResolution: resolution() as any,
-		situation: situation() as any, intent: { action: 'attack', interactionMode: 'WORLD_ACTION', speechIntent: false } as any,
+		playerAction: 'I throw my dagger at the guarded door.',
+		actionResolution: resolution() as any,
+		situation: situation() as any,
+		intent: { action: 'attack', interactionMode: 'WORLD_ACTION', speechIntent: false } as any,
 	});
 	assert.equal(result.actionFidelity.valid, false);
 	assert.ok(result.actionFidelity.missingConsequences.some(value => /dagger/i.test(value) || /lodges/i.test(value)));
@@ -120,34 +124,42 @@ test('live narration gate rejects a reaction when the physical object consequenc
 
 test('multi-effect spell narration must cover every canonical visible consequence without mutating the resolution', () => {
 	const spellResolution = {
-		...resolution(), playerAction: 'I cast Fireball at two goblins beside dry brush.',
+		...resolution(),
+		playerAction: 'I cast Fireball at two goblins beside dry brush.',
 		attemptedEffect: 'cast Fireball at two goblins beside dry brush',
 		actualEffect: 'Fireball detonates beside two goblins and dry brush.',
-		physicalConsequences: ['The fireball engulfs the front goblin in flame.', 'The blast sets the dry brush alight.'],
+		physicalConsequences: [
+			'The fireball engulfs the front goblin in flame.',
+			'The blast sets the dry brush alight.',
+		],
 		playerVisibleConsequences: ['The shockwave knocks the second goblin prone.'],
 	};
 	const originalResolution = JSON.parse(JSON.stringify(spellResolution));
 	const spellSituation = { ...situation(), nearbyEntities: [
-		{id:'goblin_1',name:'Front Goblin',visibleToPlayer:true},
-		{id:'goblin_2',name:'Second Goblin',visibleToPlayer:true},
-		{id:'brush_1',name:'Dry Brush',visibleToPlayer:true},
-	]};
+		{ id: 'goblin_1', name: 'Front Goblin', visibleToPlayer: true },
+		{ id: 'goblin_2', name: 'Second Goblin', visibleToPlayer: true },
+		{ id: 'brush_1', name: 'Dry Brush', visibleToPlayer: true },
+	] };
 	const intent = { action: 'cast_spell', interactionMode: 'WORLD_ACTION', speechIntent: false } as any;
-	const evaluate = (narrativeText: string) => serverMockAuthority.evaluateLiveNarrativeQuality({
-		narrativeText, playerAction: spellResolution.playerAction, actionResolution: spellResolution as any,
-		situation: spellSituation as any, intent,
+	const completeNarration = 'The fireball engulfs the front goblin in flame. The blast sets the dry brush alight, and smoke curls upward. The shockwave knocks the second goblin prone.';
+	const complete = serverMockAuthority.evaluateLiveNarrativeQuality({
+		narrativeText: completeNarration, playerAction: spellResolution.playerAction,
+		actionResolution: spellResolution as any, situation: spellSituation as any, intent,
 	});
-	const complete = evaluate('The fireball engulfs the front goblin in flame. The blast sets the dry brush alight, and smoke curls upward. The shockwave knocks the second goblin prone.');
 	assert.equal(complete.actionFidelity.valid, true);
 	assert.deepEqual(complete.actionFidelity.missingConsequences, []);
-	const missingFirst = evaluate('The blast sets the dry brush alight, and smoke curls upward. The shockwave knocks the second goblin prone.');
-	assert.equal(missingFirst.actionFidelity.valid, false);
-	assert.ok(missingFirst.actionFidelity.missingConsequences.some(value => /engulfs/i.test(value)));
-	const missingSecond = evaluate('The fireball engulfs the front goblin in flame. The shockwave knocks the second goblin prone.');
-	assert.equal(missingSecond.actionFidelity.valid, false);
-	assert.ok(missingSecond.actionFidelity.missingConsequences.some(value => /brush/i.test(value)));
-	const missingThird = evaluate('The fireball engulfs the front goblin in flame. The blast sets the dry brush alight, and smoke curls upward.');
-	assert.equal(missingThird.actionFidelity.valid, false);
-	assert.ok(missingThird.actionFidelity.missingConsequences.some(value => /shockwave/i.test(value)));
+
+	for (const [narrativeText, omitted] of [
+		['The blast sets the dry brush alight, and smoke curls upward. The shockwave knocks the second goblin prone.', /engulfs/i],
+		['The fireball engulfs the front goblin in flame. The shockwave knocks the second goblin prone.', /brush/i],
+		['The fireball engulfs the front goblin in flame. The blast sets the dry brush alight, and smoke curls upward.', /shockwave/i],
+	] as const) {
+		const result = serverMockAuthority.evaluateLiveNarrativeQuality({
+			narrativeText, playerAction: spellResolution.playerAction,
+			actionResolution: spellResolution as any, situation: spellSituation as any, intent,
+		});
+		assert.equal(result.actionFidelity.valid, false);
+		assert.ok(result.actionFidelity.missingConsequences.some(value => omitted.test(value)));
+	}
 	assert.deepEqual(spellResolution, originalResolution, 'Narrative quality evaluation must not mutate committed mechanics.');
 });

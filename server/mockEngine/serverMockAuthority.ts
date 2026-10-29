@@ -79,6 +79,37 @@ function liveNarrativeLexicalOverlap(left: string, right: string): number {
   if (!a.size || !b.length) return 0;
   return b.filter(token => a.has(token)).length / Math.min(a.size, b.length, 12);
 }
+function liveNarrativeConsequenceCoverage(narrativeText: string, consequenceText: string): {
+  covered: boolean;
+  matchedAnchors: string[];
+  requiredAnchors: string[];
+} {
+  const stop = new Set([
+    'the','and','that','this','with','from','into','then','than','they','their','there','were','was','have','has','had','will','would','could','should','your','you','for','are','but','not','his','her','him','she','its','our','out','over','under','after','before','about','what','when','where','which','while','just','only','very','some','i','a','an','to','of','on','in',
+    'action','effect','result','visible','player','target','character','person','thing','nearby',
+  ]);
+  const tokens = (value: string) => Array.from(new Set(
+    String(value || '')
+      .toLowerCase()
+      .split(/[^a-z0-9'-]+/)
+      .map(value => value.replace(/^['-]+|['-]+$/g, ''))
+      .filter(value => value.length >= 4 && !stop.has(value)),
+  ));
+  const requiredAnchors = tokens(consequenceText);
+  const observed = new Set(tokens(narrativeText));
+  const matchedAnchors = requiredAnchors.filter(token => observed.has(token));
+  if (requiredAnchors.length === 0) {
+    return { covered: true, matchedAnchors, requiredAnchors };
+  }
+  const minimumMatches = requiredAnchors.length <= 2 ? requiredAnchors.length : 2;
+  const coverage = matchedAnchors.length / requiredAnchors.length;
+  return {
+    covered: matchedAnchors.length >= minimumMatches && coverage >= 0.2,
+    matchedAnchors,
+    requiredAnchors,
+  };
+}
+
 export class ServerMockAuthority {
   private recordChronicleEvidence(
     storyId: string,
@@ -654,7 +685,7 @@ export class ServerMockAuthority {
     richness: NarrativeRichnessEvaluation;
     pacingValid: boolean;
     pacingReason?: string;
-    actionFidelity: { valid: boolean; reason?: string };
+    actionFidelity: { valid: boolean; reason?: string; missingConsequences: string[] };
   } {
     const sceneComposition: any = {
       version: 1,
@@ -715,13 +746,41 @@ export class ServerMockAuthority {
         const entity = params.situation.nearbyEntities.find(item => item.id === id);
         return Boolean(entity?.name && params.narrativeText.toLowerCase().includes(entity.name.toLowerCase()));
       });
-    const consequenceText = [params.actionResolution.actualEffect, ...(params.actionResolution.physicalConsequences || []), ...(params.actionResolution.playerVisibleConsequences || [])].join(' ');
-    const consequenceVerbOverlap = /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(params.narrativeText) && /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(consequenceText);
-    const consequenceOverlap = liveNarrativeLexicalOverlap(params.narrativeText, consequenceText) >= 0.08;
-    const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled)\b/i.test(params.narrativeText);
-    const actionFidelityValid = observationLike || (actionAnchor && (consequenceSignal || consequenceVerbOverlap));
-    const actionFidelityReason = actionFidelityValid ? undefined : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
-    return { accepted: richness.decision === 'PASS' && pacing.valid && actionFidelityValid, richness, pacingValid: pacing.valid, pacingReason: pacing.reason, actionFidelity: { valid: actionFidelityValid, reason: actionFidelityReason } };
+    const consequenceText = [
+      params.actionResolution.actualEffect,
+      ...(params.actionResolution.physicalConsequences || []),
+      ...(params.actionResolution.playerVisibleConsequences || []),
+    ].join(' ');
+    const consequenceSignal = /\\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled|ignites|ignited|burns|burned|knocks|knocked|staggers|staggered|collapses|collapsed|heals|healed|restores|restored|wounds|wounded|frozen)\\b/i.test(params.narrativeText);
+    const requiredConsequences = Array.from(new Map(
+      [
+        ...(params.actionResolution.physicalConsequences || []),
+        ...(params.actionResolution.playerVisibleConsequences || []),
+      ]
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .map(value => [value.toLocaleLowerCase(), value] as const),
+    ).values());
+    const missingConsequences = requiredConsequences
+      .filter(consequence => !liveNarrativeConsequenceCoverage(params.narrativeText, consequence).covered)
+      .slice(0, 8);
+    const hasConsequenceBeat = requiredConsequences.length > 0
+      ? missingConsequences.length === 0
+      : consequenceSignal || /\\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\\b/i.test(params.narrativeText)
+        && /\\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\\b/i.test(consequenceText);
+    const actionFidelityValid = observationLike || (actionAnchor && hasConsequenceBeat);
+    const actionFidelityReason = actionFidelityValid
+      ? undefined
+      : missingConsequences.length
+        ? 'Narration omits required canonical consequence(s): ' + missingConsequences.join(' | ')
+        : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
+    return {
+      accepted: richness.decision === 'PASS' && pacing.valid && actionFidelityValid,
+      richness,
+      pacingValid: pacing.valid,
+      pacingReason: pacing.reason,
+      actionFidelity: { valid: actionFidelityValid, reason: actionFidelityReason, missingConsequences },
+    };
   }
   public async processCustomAction(
     request: ActionRequest,
@@ -1587,6 +1646,7 @@ export class ServerMockAuthority {
             ...firstReview.richness.issues.slice(0, 8).map(issue => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
             firstReview.pacingReason ? 'Pacing issue: ' + firstReview.pacingReason : '',
             firstReview.actionFidelity.reason ? 'Action-fidelity issue: ' + firstReview.actionFidelity.reason : '',
+            ...(firstReview.actionFidelity.missingConsequences || []).slice(0, 8).map(consequence => 'Required canonical consequence to include: ' + consequence),
             '',
             'ORIGINAL NARRATION:',
             narrativeResponse,

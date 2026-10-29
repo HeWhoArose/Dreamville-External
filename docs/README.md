@@ -89,7 +89,7 @@ Read [Narrative Grounding Phase 0 Baseline Audit](NARRATIVE_GROUNDING_PHASE0_BAS
 | `OPERATIONS_MENU_AUDIT_V1.md` | Import/export/archive, Dream Book workstation and debug/context tools | Active scoped operations contract |
 | `SURGICAL_ARCHITECTURE_REGISTRY_V1.md` | Cross-system owner/authority boundaries | Current architecture map; use this document plus this index to locate subsystem owners |
 | `LIVING_WORLD_POPULATION_AND_ENCOUNTER_AUDIT.md` | Occupancy metadata, population grounding and encounter/activity wiring | **PARTIAL**: population context exists; end-to-end encounter generation is not yet verified |
-| `WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md` | Scene readiness, scenario-specific canonical preparation, and opening/turn/fallback integration | **ACTIVE — IMPLEMENTATION IN PROGRESS**: begin with the audited investigation-scene gap; reuse existing canonical owners and keep player live testing separate |
+| `WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md` | Scene readiness, scenario-specific canonical preparation, and opening/turn/fallback integration | **PHASES 0–6 COMPLETE — PHASE 7 PLAYER ACCEPTANCE PENDING**; use `WORLD_DIRECTOR_PHASE7_PLAYER_ACCEPTANCE_CHECKLIST.md` for the real Story UI/provider run |
 
 “Active” means the contract or remaining work is still relevant. It does **not** mean every bullet is absent from code. Always audit the current implementation before adding anything.
 

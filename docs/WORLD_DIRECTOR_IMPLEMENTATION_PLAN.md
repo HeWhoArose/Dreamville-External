@@ -950,6 +950,6 @@ Regressions cover:
 - a complete multi-effect narration accepted; and
 - the structured ActionResolution remains byte-for-byte equivalent at the object level after review.
 
-Only deterministic test fixtures are used for these cases; no runtime story/demo records are created. Existing `tests/fixtures/persistence/v1-legacy-save.json` is an intentional versioned persistence fixture and is not a production seed.
+Only deterministic test fixtures are used for these cases; no runtime story/demo records are created. Existing `tests/fixtures/persistence/v1-legacy-save.json` is an intentional versioned persistence fixture and is not a production seed. The repository audit also found two unreferenced top-level manual harnesses (`live_client.ts` and `test_script.ts`) that imported altered archives into `default_story` and injected test inventory/combat participants including `npc_goblin_target`. Both harnesses were removed from this feature branch; neither was referenced by `package.json` scripts or README instructions. This prevents those dummy records from being injected by legacy manual scripts.
 
 Feature branch: `codex/world-director-phase6-outcome-completeness`. Latest implementation head: `e4f12a08904048b3fe462ae28a5f2e049c768b56`. Exact-head CI and full regression status must be recorded after the branch workflows finish. Phase 7 remains player-owned and is not marked complete.

@@ -52,7 +52,7 @@ test('live-turn final review never returns the original narration after both can
     storyBeat: undefined,
     };
   };
-  (orchestrator as any).executeTaskGeneration = async (task: any, prompt: string) => {
+  (orchestrator as any).executeTaskGeneration = async () => {
     repairCalls += 1;
     return {
     text: JSON.stringify({ narrativeText: sceneryOnly, structuredEvents: [] }),
@@ -94,5 +94,6 @@ test('live-turn final review never returns the original narration after both can
     (orchestrator as any).generateNarrativeOnly = originalGenerate;
     (orchestrator as any).executeTaskGeneration = originalExecute;
     (serverMockAuthority as any).processAction = originalProcessAction;
+    worldRepository.deleteStoryRun(storyId);
   }
 });

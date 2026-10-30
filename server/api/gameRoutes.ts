@@ -495,10 +495,11 @@ gameRouter.post('/action/ooc/tool', async (req: Request, res: Response) => {
  * canonical pre-turn checkpoint. This is a world-state rollback, not text hiding.
  */
 gameRouter.post('/action/history/rollback', async (req: Request, res: Response) => {
-  return worldRepository.runWithPersistenceBatching(async () => {
+  const storyId = resolveStoryId(req, true);
+  return canonicalCommandEngine.runExclusive(storyId, async () =>
+    worldRepository.runWithPersistenceBatching(async () => {
     const startedAt = new Date().toISOString();
     try {
-      const storyId = resolveStoryId(req, true);
       if (!storyId || storyId === 'default_story') {
         return res.status(409).json({
           success: false,
@@ -506,7 +507,6 @@ gameRouter.post('/action/history/rollback', async (req: Request, res: Response) 
           errorReason: 'Turn rollback requires a persisted Story Run.',
         });
       }
-      return await canonicalCommandEngine.runExclusive(storyId, async () => {
       const actionId = String(req.body?.actionId || '').trim();
       const state = serverMockAuthority.getDynamicStoryState(storyId);
       const currentRun = worldRepository.getStoryRun(storyId);
@@ -629,7 +629,6 @@ gameRouter.post('/action/history/rollback', async (req: Request, res: Response) 
         serverMockAuthority.importTransactionalState(storyId, originalMockState);
         throw rollbackError;
       }
-      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -637,7 +636,8 @@ gameRouter.post('/action/history/rollback', async (req: Request, res: Response) 
         errorReason: error?.message || 'The story timeline could not be rolled back. No partial deletion was retained.',
       });
     }
-  });
+    })
+  );
 });
 
 /**

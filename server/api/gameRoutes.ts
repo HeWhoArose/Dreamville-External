@@ -648,6 +648,7 @@ gameRouter.post('/action/history/rollback', async (req: Request, res: Response) 
 gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
   const storyId = resolveStoryId(req, true);
   return canonicalCommandEngine.runExclusive(storyId, async () => {
+  let originalUniverseSnapshot: any;
   try {
     const actionId = String(req.body?.actionId || '').trim();
     const newActionText = String(req.body?.newActionText || '').trim();
@@ -689,7 +690,7 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
     const originalCanonical = captureCanonicalStateSnapshot(storyId, worldRepository);
     const originalMockState = serverMockAuthority.exportTransactionalState(storyId);
     const originalUniverse = worldRepository.getUniverseForStory(storyId);
-    const originalUniverseSnapshot = originalUniverse
+    originalUniverseSnapshot = originalUniverse
       ? JSON.parse(JSON.stringify(originalUniverse))
       : undefined;
     const removedActionCount = targetIndex + 1;
@@ -821,9 +822,7 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
       viewState: serverMockAuthority.getSanitizedViewState(storyId),
     });
   } catch (error: any) {
-    // Universe state is outside the canonical snapshot, so restore it explicitly
-    // if any failure occurs after an edit rewinds to the target checkpoint.
-    // The captured snapshot is initialized before the edit transaction below.
+    if (originalUniverseSnapshot) worldRepository.saveUniverse(originalUniverseSnapshot);
     res.status(500).json({ success: false, errorReason: error?.message || 'Past action edit failed.' });
   }
   });
@@ -833,9 +832,10 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
  * Regenerates presentation for an already-committed action without mutating canonical mechanics.
  */
 gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response) => {
+  const storyId = resolveStoryId(req, true);
+  return canonicalCommandEngine.runExclusive(storyId, async () => {
   try {
     const regenerationStartedAt = new Date();
-    const storyId = resolveStoryId(req, true);
     const actionId = String(req.body?.actionId || '').trim();
     const forceModelId = typeof req.body?.forceModelId === 'string' ? req.body.forceModelId.trim() : undefined;
     const editInstruction = typeof req.body?.editInstruction === 'string' ? req.body.editInstruction.trim() : '';
@@ -1071,6 +1071,7 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
     console.error('[Narration Regeneration] Failed:', error);
     return res.status(500).json({ success: false, code: 'NARRATION_REGENERATION_FAILED', errorReason: error?.message || 'Failed to regenerate narration.' });
   }
+  });
 });
 
 gameRouter.post('/action/advice', async (req: Request, res: Response) => {

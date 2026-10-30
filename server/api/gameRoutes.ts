@@ -1092,8 +1092,10 @@ gameRouter.post('/action/advice', async (req: Request, res: Response) => {
  * capability, then executes the original story action through the normal action path.
  */
 gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => {
+  const storyId = resolveStoryId(req, true);
+  return canonicalCommandEngine.runExclusive(storyId, async () =>
+    worldRepository.runWithPersistenceBatching(async () => {
   try {
-    const storyId = resolveStoryId(req, true);
     const actionText = typeof req.body?.actionText === 'string' ? req.body.actionText.trim() : '';
     if (!actionText) {
       return res.status(400).json({
@@ -1147,6 +1149,26 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
 
     const recognizedCapabilityId = pendingProposal.requestedCapabilityId;
     const approvedAlternative = pendingProposal.alternative;
+
+    // Keep accepted advice actions on the same rewind timeline as ordinary turns.
+    const universe = UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+    const universeBefore: UniverseRollbackCheckpoint | undefined = universe ? {
+      universeId: universe.universeId,
+      universeElapsedSeconds: Number(universe.universeElapsedSeconds || 0),
+      currentWorldId: String(universe.currentWorldId || ''),
+      currentStoryId: String(universe.currentStoryId || storyId),
+      updatedAt: String(universe.updatedAt || ''),
+      worldBindings: JSON.parse(JSON.stringify(universe.worldBindings || [])),
+    } : undefined;
+    const preActionState = serverMockAuthority.exportTransactionalState(storyId);
+    const preActionRun = worldRepository.getStoryRun(storyId);
+    if (preActionRun) {
+      preActionRun.runtimeState = {
+        ...(preActionRun.runtimeState || {}),
+        actionHistory: JSON.parse(JSON.stringify(preActionState.actionHistory || [])),
+      };
+      worldRepository.saveStoryRun(preActionRun);
+    }
 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
@@ -1271,6 +1293,36 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
       });
     }
 
+    // Attach the accepted turn to its canonical command for rollback eligibility.
+    const actionData: any = commandResult.data;
+    const liveState = serverMockAuthority.getDynamicStoryState(storyId);
+    const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
+    if (actionLog) {
+      actionLog.canonicalCommandId = commandResult.commandId;
+      actionLog.canonicalEventId = commandResult.event?.eventId;
+    }
+    const committedRun = worldRepository.getStoryRun(storyId);
+    const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
+    if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
+      const committedEvent = committedRun.canonicalEvents[eventIndex];
+      committedRun.canonicalEvents[eventIndex] = {
+        ...committedEvent,
+        replay: {
+          ...committedEvent.replay,
+          ...(universeBefore ? { universeBefore } : {}),
+        },
+      };
+      committedRun.runtimeState = {
+        ...(committedRun.runtimeState || {}),
+        actionHistory: JSON.parse(JSON.stringify(liveState.actionHistory || [])),
+      };
+      worldRepository.saveStoryRun(committedRun);
+      commandResult.event = committedRun.canonicalEvents[eventIndex];
+    }
+    if (actionLog) {
+      (commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId);
+    }
+
     storyActionAdvisor.consumePendingProposal(pendingProposal.proposalId);
     return res.json(commandResult.data);
   } catch (error: any) {
@@ -1280,6 +1332,8 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
       errorReason: error?.message || 'Failed to accept action advice.',
     });
   }
+    })
+  );
 });
 
 /**

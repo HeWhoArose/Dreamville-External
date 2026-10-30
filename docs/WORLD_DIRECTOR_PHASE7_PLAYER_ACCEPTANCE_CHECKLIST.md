@@ -92,7 +92,19 @@ Do not deliberately corrupt credentials or edit provider secrets to force failur
 
 If no safe, supported way to select or observe fallback exists, mark this subsection **N/A — no supported control exposed**. Do not claim fallback was tested.
 
-## G. Results and evidence
+## G. Optional multi-effect action — only when a valid canonical encounter exists
+
+Do not create combat state, add a target, inject an item/spell, or import an edited archive to make this scenario possible. Use only a combat encounter and owned spell/capability already available through the supported story flow.
+
+- [ ] If a valid multi-effect action is available, perform one action whose canonical result visibly includes more than one consequence (for example damage plus an applied condition, healing plus a condition change, or forced movement plus collision), using only an option the character legitimately owns.
+- [ ] Record the exact action, the displayed result, and the target's before/after visible state where the normal UI exposes it.
+- [ ] Verify the narration depicts each player-visible consequence without inventing extra outcomes or omitting a distinct visible effect.
+- [ ] Verify resource costs and state changes are not applied twice when narration is repaired or retried.
+- [ ] If no suitable canonical multi-effect action is already available, mark this scenario **N/A — no legitimate encounter/action available**. Do not manufacture a test setup.
+
+Save the exact displayed response and any safe, player-accessible evidence.
+
+## H. Results and evidence
 
 Complete this summary after the run. Use **PASS**, **FAIL**, **BLOCKED**, or **N/A**; do not mark a scenario PASS from memory if no evidence was captured.
 

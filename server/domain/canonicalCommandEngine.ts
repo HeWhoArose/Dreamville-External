@@ -489,6 +489,12 @@ export class CanonicalCommandEngine {
 		}
 	}
 
+	/** Serialize non-command history operations against player commands for one Story Run. */
+	public async runExclusive<T>(storyId: string, work: () => Promise<T>): Promise<T> {
+		if (!storyId) throw new Error('A Story Run ID is required for exclusive story work.');
+		return this.enqueueStoryCommand(storyId, work);
+	}
+
 	private async enqueueStoryCommand<T>(
 		storyId: string,
 		work: () => Promise<T>

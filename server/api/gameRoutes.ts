@@ -506,6 +506,7 @@ gameRouter.post('/action/history/rollback', async (req: Request, res: Response) 
           errorReason: 'Turn rollback requires a persisted Story Run.',
         });
       }
+      return await canonicalCommandEngine.runExclusive(storyId, async () => {
       const actionId = String(req.body?.actionId || '').trim();
       const state = serverMockAuthority.getDynamicStoryState(storyId);
       const currentRun = worldRepository.getStoryRun(storyId);
@@ -628,6 +629,7 @@ gameRouter.post('/action/history/rollback', async (req: Request, res: Response) 
         serverMockAuthority.importTransactionalState(storyId, originalMockState);
         throw rollbackError;
       }
+      });
     } catch (error: any) {
       return res.status(500).json({
         success: false,
@@ -9142,6 +9144,7 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
     const storyId = String(req.params.storyId);
     const { forceRegenerate, timeoutMs, simulateFailure, forceModelId } = req.body || {};
 
+    return await canonicalCommandEngine.runExclusive(storyId, async () => {
     const run = worldRepository.getStoryRun(storyId);
     if (!run) {
       return res.status(404).json({ error: `StoryRun with ID "${storyId}" not found.` });
@@ -9190,6 +9193,7 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
       storyId,
       openingScene,
       viewState,
+    });
     });
   } catch (error: any) {
     console.error(`Error generating opening scene for ${req.params.storyId}:`, error);

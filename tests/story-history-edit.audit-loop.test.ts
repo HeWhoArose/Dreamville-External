@@ -30,6 +30,8 @@ test('past-action editing is wired across UI, API, canonical checkpointing, and 
   assert.ok(engine.includes('buildReplayCheckpoint(before)'));
 
   assert.ok(routes.includes("gameRouter.post('/action/history/rollback'"));
+  assert.ok(routes.includes('canonicalCommandEngine.runExclusive(storyId'));
+  assert.ok(engine.includes('public async runExclusive<T>'));
   assert.ok(routes.includes("gameRouter.post('/action/history/edit'"));
   assert.ok(routes.includes('command.source === \'PLAYER\''));
   assert.ok(routes.includes('universeBefore'));

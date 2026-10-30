@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ActionLog } from '../src/types';
+import { CanonicalCommandEngine } from '../server/domain/canonicalCommandEngine';
 import {
   buildStoryHistoryRollbackPlan,
   retainJournalEntriesBeforeRollback,
@@ -147,4 +148,12 @@ test('rollback journal filtering removes records tied to deleted turns and prese
       { label: 'Unlinked player-authored pin' },
     ],
   );
+});
+
+test('per-story exclusive queue permits nested canonical work without deadlocking', async () => {
+  const engine = new CanonicalCommandEngine();
+  const result = await engine.runExclusive('nested_queue_story', () =>
+    engine.runExclusive('nested_queue_story', async () => 'completed'),
+  );
+  assert.equal(result, 'completed');
 });

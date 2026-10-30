@@ -1291,7 +1291,8 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
   // A single player action mutates world state many times (canonical engine stages,
   // rollback paths, continuity capture). Coalesce those writes into one durable
   // store save per request; a failing scope still flushes via the finally block.
-  return worldRepository.runWithPersistenceBatching(async () => {
+  return canonicalCommandEngine.runExclusive(resolveStoryId(req, true), async () =>
+    worldRepository.runWithPersistenceBatching(async () => {
   try {
     const actionRequest = req.body as ActionRequest;
 
@@ -1640,7 +1641,8 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       errorReason: 'The server encountered an unexpected error while resolving this action. Open developer diagnostics for the detailed server error.',
     });
   }
-  });
+    })
+  );
 });
 
 /**

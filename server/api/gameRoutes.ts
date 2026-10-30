@@ -688,6 +688,10 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
 
     const originalCanonical = captureCanonicalStateSnapshot(storyId, worldRepository);
     const originalMockState = serverMockAuthority.exportTransactionalState(storyId);
+    const originalUniverse = worldRepository.getUniverseForStory(storyId);
+    const originalUniverseSnapshot = originalUniverse
+      ? JSON.parse(JSON.stringify(originalUniverse))
+      : undefined;
     const removedActionCount = targetIndex + 1;
     const editedCommandId = deterministicId('cmd_history_edit', storyId, actionId, newActionText, events.length + 1);
     const player = worldRepository.getPlayerLifecycle(storyId);
@@ -775,6 +779,7 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
       // Snapshots exclude the event log by design; the failed edit must not discard
       // the canonical event history that the live Story Run still owns.
       worldRepository.restoreCanonicalStateSnapshot(originalCanonical, { persist: true, preserveCanonicalEvents: true });
+      if (originalUniverseSnapshot) worldRepository.saveUniverse(originalUniverseSnapshot);
       serverMockAuthority.importTransactionalState(storyId, originalMockState);
       return res.status(commandResult.statusCode || 400).json({ ...commandResult, error: commandResult.errorReason });
     }
@@ -816,6 +821,9 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
       viewState: serverMockAuthority.getSanitizedViewState(storyId),
     });
   } catch (error: any) {
+    // Universe state is outside the canonical snapshot, so restore it explicitly
+    // if any failure occurs after an edit rewinds to the target checkpoint.
+    // The captured snapshot is initialized before the edit transaction below.
     res.status(500).json({ success: false, errorReason: error?.message || 'Past action edit failed.' });
   }
   });

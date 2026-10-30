@@ -43,6 +43,7 @@ import { projectPlayerCapabilities } from './playerCapabilityProjection';
 import { oocToolRegistry, type OocToolCall } from '../domain/oocToolRegistry';
 import { UniverseRuntimeService } from '../domain/universeRuntimeService';
 import { StorySessionRecorder } from '../domain/storySessionRecorder';
+import { buildStoryHistoryRollbackPlan, retainJournalEntriesBeforeRollback, type UniverseRollbackCheckpoint } from '../domain/storyHistoryRollback';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -486,6 +487,157 @@ gameRouter.post('/action/ooc/tool', async (req: Request, res: Response) => {
 	} catch (error: any) {
 		return res.status(500).json({ success: false, errorReason: error?.message || 'OOC tool execution failed.' });
 	}
+});
+
+/**
+ * POST /api/game/action/history/rollback
+ * Removes the selected player turn and every later turn by restoring its exact
+ * canonical pre-turn checkpoint. This is a world-state rollback, not text hiding.
+ */
+gameRouter.post('/action/history/rollback', async (req: Request, res: Response) => {
+  return worldRepository.runWithPersistenceBatching(async () => {
+    const startedAt = new Date().toISOString();
+    try {
+      const storyId = resolveStoryId(req, true);
+      if (!storyId || storyId === 'default_story') {
+        return res.status(409).json({
+          success: false,
+          code: 'ACTION_ROLLBACK_UNSUPPORTED',
+          errorReason: 'Turn rollback requires a persisted Story Run.',
+        });
+      }
+      const actionId = String(req.body?.actionId || '').trim();
+      const state = serverMockAuthority.getDynamicStoryState(storyId);
+      const currentRun = worldRepository.getStoryRun(storyId);
+      if (!currentRun) {
+        return res.status(404).json({ success: false, code: 'STORY_RUN_NOT_FOUND', errorReason: 'The Story Run was not found.' });
+      }
+
+      const originalUniverse = worldRepository.getUniverseForStory(storyId);
+      const events = worldRepository.getCanonicalCommandEvents(storyId);
+      const planResult = buildStoryHistoryRollbackPlan({
+        actionHistory: state.actionHistory,
+        canonicalEvents: events,
+        actionId,
+        hasUniverse: Boolean(originalUniverse),
+      });
+      if (!planResult.success) {
+        return res.status(409).json({
+          success: false,
+          code: planResult.code,
+          errorReason: planResult.errorReason,
+        });
+      }
+
+      const plan = planResult.plan;
+      const originalCanonical = captureCanonicalStateSnapshot(storyId, worldRepository);
+      const originalMockState = serverMockAuthority.exportTransactionalState(storyId);
+      const originalRun = JSON.parse(JSON.stringify(currentRun));
+      const removedReferences = new Set([
+        ...plan.removedActionIds,
+        ...plan.removedCommandIds,
+        ...plan.removedEventIds,
+      ]);
+
+      try {
+        worldRepository.restoreCanonicalStateSnapshot(plan.preStateSnapshot, {
+          persist: false,
+          preserveCanonicalEvents: true,
+        });
+        const restoredRun = worldRepository.getStoryRun(storyId);
+        if (!restoredRun) throw new Error('The saved pre-turn checkpoint did not restore its Story Run.');
+
+        restoredRun.canonicalEvents = events.slice(0, plan.targetEventIndex);
+        restoredRun.runtimeState = { ...(restoredRun.runtimeState || {}) };
+        for (const journalKey of ['narrativeContextHistory', 'canonicalNarrativeEvents']) {
+          const entries = originalRun.runtimeState?.[journalKey];
+          if (Array.isArray(entries)) {
+            restoredRun.runtimeState[journalKey] = retainJournalEntriesBeforeRollback(entries, removedReferences);
+          }
+        }
+        worldRepository.saveStoryRun(restoredRun);
+
+        if (plan.universeBefore) {
+          const restoredUniverse = worldRepository.getUniverse(plan.universeBefore.universeId);
+          if (!restoredUniverse) throw new Error('The universe needed by this rollback no longer exists.');
+          restoredUniverse.universeElapsedSeconds = plan.universeBefore.universeElapsedSeconds;
+          restoredUniverse.currentWorldId = plan.universeBefore.currentWorldId;
+          restoredUniverse.currentStoryId = plan.universeBefore.currentStoryId;
+          restoredUniverse.updatedAt = plan.universeBefore.updatedAt;
+          restoredUniverse.worldBindings = JSON.parse(JSON.stringify(plan.universeBefore.worldBindings));
+          restoredUniverse.memories = (restoredUniverse.memories || []).filter((memory: any) =>
+            !plan.removedCommandIds.includes(String(memory.sourceEventId || '')),
+          );
+          worldRepository.saveUniverse(restoredUniverse);
+          UniverseRuntimeService.syncPortablePlayerState(worldRepository, restoredUniverse.universeId, storyId);
+        }
+
+        const restoredState = serverMockAuthority.reloadStoryStateFromRepository(storyId);
+        const restoredIds = restoredState.actionHistory.map((entry: any) => entry.id);
+        if (restoredIds.length !== plan.survivingActionIds.length ||
+            restoredIds.some((id: string, index: number) => id !== plan.survivingActionIds[index])) {
+          throw new Error('The restored action history does not match the expected surviving timeline.');
+        }
+
+        const stateAfter = captureCanonicalStateSnapshot(storyId, worldRepository);
+        try {
+          worldRepository.recordStorySessionInteraction({
+            storyId,
+            kind: 'AUXILIARY',
+            source: 'HISTORY_ROLLBACK',
+            startedAt,
+            completedAt: new Date().toISOString(),
+            success: true,
+            rolledBack: true,
+            request: {
+              actionId,
+              removedActionIds: plan.removedActionIds,
+              removedCommandIds: plan.removedCommandIds,
+            },
+            result: {
+              rolledBackFromActionId: actionId,
+              removedActionCount: plan.removedActionIds.length,
+              survivingActionCount: plan.survivingActionIds.length,
+            },
+            stateBefore: originalCanonical,
+            stateAfter,
+          });
+        } catch (recordingError) {
+          console.warn('[StoryHistory] Rollback audit interaction could not be recorded.', {
+            storyId,
+            actionId,
+            error: recordingError instanceof Error ? recordingError.message : String(recordingError),
+          });
+        }
+
+        return res.json({
+          success: true,
+          storyId,
+          rolledBackFromActionId: actionId,
+          removedActionCount: plan.removedActionIds.length,
+          removedActionIds: plan.removedActionIds,
+          viewState: serverMockAuthority.getSanitizedViewState(storyId),
+        });
+      } catch (rollbackError) {
+        // Restore the exact pre-request state if any part of rollback fails.
+        worldRepository.restoreCanonicalStateSnapshot(originalCanonical, { persist: false });
+        const restoredOriginalRun = worldRepository.getStoryRun(storyId);
+        if (restoredOriginalRun) {
+          restoredOriginalRun.canonicalEvents = JSON.parse(JSON.stringify(originalRun.canonicalEvents || []));
+          worldRepository.saveStoryRun(restoredOriginalRun);
+        }
+        if (originalUniverse) worldRepository.saveUniverse(originalUniverse);
+        serverMockAuthority.importTransactionalState(storyId, originalMockState);
+        throw rollbackError;
+      }
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        code: 'ACTION_ROLLBACK_FAILED',
+        errorReason: error?.message || 'The story timeline could not be rolled back. No partial deletion was retained.',
+      });
+    }
+  });
 });
 
 /**
@@ -1164,6 +1316,14 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     // Lazily bind every active Story Run to a persistent Universe identity.
     // This is idempotent and does not replace the Story Run's canonical world state.
     const universe = UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+    const universeBefore: UniverseRollbackCheckpoint | undefined = universe ? {
+      universeId: universe.universeId,
+      universeElapsedSeconds: Number(universe.universeElapsedSeconds || 0),
+      currentWorldId: String(universe.currentWorldId || ''),
+      currentStoryId: String(universe.currentStoryId || storyId),
+      updatedAt: String(universe.updatedAt || ''),
+      worldBindings: JSON.parse(JSON.stringify(universe.worldBindings || [])),
+    } : undefined;
 
     // Explicit cross-world freeform actions ("fly to another planet", "leave this world for X")
     // are promoted to the same canonical travel path as the structured world-travel request.
@@ -1394,39 +1554,40 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       });
     }
 
-    // Link freeform player actions to their canonical command and retain the
-    // exact pre-action presentation checkpoint required for safe history editing.
-    if (actionRequest.type === 'CUSTOM_ACTION') {
-      try {
-        const actionData: any = commandResult.data;
-        const liveState = serverMockAuthority.getDynamicStoryState(storyId);
-        const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
-        if (actionLog) {
-          actionLog.canonicalCommandId = commandResult.commandId;
-          actionLog.canonicalEventId = commandResult.event?.eventId;
-        }
-        const committedRun = worldRepository.getStoryRun(storyId);
-        const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
-        if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
-          const committedEvent = committedRun.canonicalEvents[eventIndex];
-          committedRun.canonicalEvents[eventIndex] = {
-            ...committedEvent,
-            replay: {
-              ...committedEvent.replay,
-              mockStateBefore,
-            },
-          };
-          worldRepository.saveStoryRun(committedRun);
-          commandResult.event = committedRun.canonicalEvents[eventIndex];
-        }
-      } catch (checkpointError) {
-        console.warn('[StoryHistory] Failed to attach edit checkpoint metadata:', checkpointError);
+    // Link every recorded player turn to its canonical command. This makes safe
+    // rollback available for movement, dialogue, inspection, equipment and freeform turns.
+    try {
+      const actionData: any = commandResult.data;
+      const liveState = serverMockAuthority.getDynamicStoryState(storyId);
+      const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
+      if (actionLog) {
+        actionLog.canonicalCommandId = commandResult.commandId;
+        actionLog.canonicalEventId = commandResult.event?.eventId;
       }
-    }
-    // Refresh the player-facing projection after edit metadata is attached so the
-    // current action immediately exposes its Edit control without requiring a refresh.
-    if (actionRequest.type === 'CUSTOM_ACTION') {
-      (commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId);
+      const committedRun = worldRepository.getStoryRun(storyId);
+      const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
+      if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
+        const committedEvent = committedRun.canonicalEvents[eventIndex];
+        committedRun.canonicalEvents[eventIndex] = {
+          ...committedEvent,
+          replay: {
+            ...committedEvent.replay,
+            ...(actionRequest.type === 'CUSTOM_ACTION' ? { mockStateBefore } : {}),
+            ...(universeBefore ? { universeBefore } : {}),
+          },
+        };
+        committedRun.runtimeState = {
+          ...(committedRun.runtimeState || {}),
+          actionHistory: JSON.parse(JSON.stringify(liveState.actionHistory || [])),
+        };
+        worldRepository.saveStoryRun(committedRun);
+        commandResult.event = committedRun.canonicalEvents[eventIndex];
+      }
+      if (actionLog) {
+        (commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId);
+      }
+    } catch (checkpointError) {
+      console.warn('[StoryHistory] Failed to attach rollback checkpoint metadata:', checkpointError);
     }
 
     // Automatically record durable cross-world memories from the authoritative outcome.
@@ -8975,6 +9136,17 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
     const run = worldRepository.getStoryRun(storyId);
     if (!run) {
       return res.status(404).json({ error: `StoryRun with ID "${storyId}" not found.` });
+    }
+    if (Boolean(forceRegenerate)) {
+      const hasCommittedPlayerTurn = serverMockAuthority.getDynamicStoryState(storyId)
+        .actionHistory.some((entry: any) => entry.actionType !== 'NOTE_RECORD');
+      if (hasCommittedPlayerTurn) {
+        return res.status(409).json({
+          success: false,
+          code: 'OPENING_RETRY_LOCKED',
+          errorReason: 'The opening scene can only be retried before the first committed player turn. Use the individual narration retry controls for later turns.',
+        });
+      }
     }
 
     const sessionBefore = captureCanonicalStateSnapshot(storyId, worldRepository);

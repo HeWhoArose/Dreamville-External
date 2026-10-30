@@ -295,6 +295,26 @@ class ApiClient {
     return data;
   }
 
+  public async rollbackHistoryFrom(params: {
+    storyId?: string;
+    actionId: string;
+  }): Promise<any> {
+    const query = params.storyId ? `?storyId=${encodeURIComponent(params.storyId)}` : '';
+    const res = await fetch(`${this.baseUrl}/action/history/rollback${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error: any = new Error(data?.errorReason || data?.error || `Story rollback failed with HTTP ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
+
   public async editPastAction(params: {
     storyId?: string;
     actionId: string;

@@ -337,6 +337,8 @@ export interface ActionResolution {
     source: 'CANONICAL_ENGINE';
     canonicalCommandId?: string;
     canonicalEventId?: string;
+  /** True only when the server has verified an exact canonical pre-turn rollback checkpoint. */
+  canRollback?: boolean;
   };
 }
 

@@ -61,6 +61,15 @@ export interface CanonicalCommandEvent {
 		commandPayload?: Record<string, unknown>;
 		/** ServerMockAuthority presentation state immediately before this command. Internal only. */
 		mockStateBefore?: unknown;
+		/** Compact universe metadata needed to roll back memories derived from this action. */
+		universeBefore?: {
+			universeId: string;
+			universeElapsedSeconds: number;
+			currentWorldId: string;
+			currentStoryId: string;
+			updatedAt: string;
+			worldBindings: unknown[];
+		};
 		rngState: {
 			combat: {
 				before: { seed: number; rollCounter: number };

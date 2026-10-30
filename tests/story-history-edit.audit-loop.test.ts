@@ -41,7 +41,8 @@ test('past-action editing is wired across UI, API, canonical checkpointing, and 
   assert.ok(engine.includes('AsyncLocalStorage'));
   assert.ok(engine.includes('exclusiveStoryContext.getStore() === command.storyId'));
   assert.ok(routes.includes("gameRouter.post('/action/history/edit'"));
-  assert.ok(routes.includes('command.source === \'PLAYER\''));
+  assert.ok(engine.includes("command.source === 'PLAYER' && Boolean((command.payload as any)?.storyHistoryTurn)"));
+  assert.ok(routes.includes('storyHistoryTurn: true'));
   assert.ok(routes.includes('universeBefore'));
   assert.ok(routes.includes('OPENING_RETRY_LOCKED'));
   assert.ok(view.includes('Delete from here'));

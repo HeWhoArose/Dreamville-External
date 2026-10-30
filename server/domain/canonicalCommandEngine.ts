@@ -744,7 +744,7 @@ export class CanonicalCommandEngine {
 					canonicalSequence,
 					resolvedDataHash: stableHash(resolved.data),
 					preStateSnapshot:
-						command.source === 'PLAYER'
+						command.source === 'PLAYER' && Boolean((command.payload as any)?.storyHistoryTurn)
 							? buildReplayCheckpoint(before)
 							: undefined,
 					commandPayload: clone(command.payload),

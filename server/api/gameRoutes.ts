@@ -1221,6 +1221,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
         actorId,
         type: 'INTERACT',
         payload: {
+          storyHistoryTurn: true,
           action: actionText,
           proposalId,
           recognizedCapabilityId,
@@ -1575,8 +1576,9 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
               ? 'ADVANCE_TIME'
               : 'INTERACT';
 
-    const commandPayload: Record<string, unknown> =
-      canonicalActionType === 'MOVE'
+    const commandPayload: Record<string, unknown> = {
+      storyHistoryTurn: true,
+      ...(canonicalActionType === 'MOVE'
         ? {
             targetLocationId: (actionRequest as any).targetLocationId,
             mode: (actionRequest as any).mode,
@@ -1596,7 +1598,8 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
                 }
               : {
                   actionRequest,
-                };
+                }),
+    };
 
     const mockStateBefore = serverMockAuthority.exportTransactionalState(storyId);
     // A story may have been lazily initialized before its first player action.

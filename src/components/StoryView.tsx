@@ -1014,13 +1014,16 @@ export const StoryView: React.FC<StoryViewProps> = ({
             <p className="text-sm text-red-200">The opening scene could not be generated.</p>
             <p className="mt-1 text-xs text-red-300/70">{openingError}</p>
           </div>
-          {onRetryOpening && (
+          {onRetryOpening && !actionHistory.some((entry) => entry.actionType !== 'NOTE_RECORD') && (
             <button
+              type="button"
               onClick={onRetryOpening}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-300 transition hover:bg-stone-800"
+              disabled={isLoadingOpening || actionEditBusy}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-40"
+              title="Retry the opening scene before the first player turn"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Retry
+              {isLoadingOpening ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              {isLoadingOpening ? 'Retrying…' : 'Retry'}
             </button>
           )}
         </div>

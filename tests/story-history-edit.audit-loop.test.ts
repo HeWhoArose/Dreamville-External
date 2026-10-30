@@ -30,6 +30,9 @@ test('past-action editing is wired across UI, API, canonical checkpointing, and 
   assert.ok(engine.includes('buildReplayCheckpoint(before)'));
 
   assert.ok(routes.includes("gameRouter.post('/action/history/rollback'"));
+  assert.ok(routes.includes('gameRouter.post(\'/action/history/edit\''));
+  assert.ok(routes.includes('The universe needed by this edit checkpoint no longer exists.'));
+  assert.ok(routes.includes('gameRouter.post(\'/action/accept-advice\''));
   assert.ok(routes.includes('gameRouter.post(\'/action/accept-advice\''));
   assert.ok(routes.includes('preActionState.actionHistory'));
   assert.ok(routes.includes('Attach the accepted turn to its canonical command'));

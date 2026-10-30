@@ -646,8 +646,9 @@ gameRouter.post('/action/history/rollback', async (req: Request, res: Response) 
  * and discards every later action so the timeline can continue from the edited turn.
  */
 gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
+  const storyId = resolveStoryId(req, true);
+  return canonicalCommandEngine.runExclusive(storyId, async () => {
   try {
-    const storyId = resolveStoryId(req, true);
     const actionId = String(req.body?.actionId || '').trim();
     const newActionText = String(req.body?.newActionText || '').trim();
     if (!actionId) return res.status(400).json({ success: false, errorReason: 'actionId is required.' });
@@ -670,6 +671,13 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
       : undefined;
     const preStateSnapshot = targetEvent?.replay?.preStateSnapshot;
     const mockStateBefore = targetEvent?.replay?.mockStateBefore;
+    const targetEventIndex = targetEvent
+      ? events.findIndex((event: any) => event.eventId === targetEvent.eventId)
+      : -1;
+    const universeBefore = targetEvent?.replay?.universeBefore as UniverseRollbackCheckpoint | undefined;
+    const removedCommandIds = targetEventIndex >= 0
+      ? events.slice(targetEventIndex).map((event: any) => String(event.commandId || '')).filter(Boolean)
+      : [];
     if (!canonicalCommandId || !targetEvent || !preStateSnapshot) {
       return res.status(409).json({
         success: false,
@@ -703,9 +711,22 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
         worldRepository.restoreCanonicalStateSnapshot(preStateSnapshot, { persist: false });
         const rewindRun = worldRepository.getStoryRun(storyId);
         if (rewindRun) {
-          const targetEventIndex = events.findIndex((event: any) => event.eventId === targetEvent.eventId);
           rewindRun.canonicalEvents = targetEventIndex >= 0 ? events.slice(0, targetEventIndex) : [];
           worldRepository.saveStoryRun(rewindRun);
+        }
+        if (universeBefore) {
+          const restoredUniverse = worldRepository.getUniverse(universeBefore.universeId);
+          if (!restoredUniverse) throw new Error('The universe needed by this edit checkpoint no longer exists.');
+          restoredUniverse.universeElapsedSeconds = universeBefore.universeElapsedSeconds;
+          restoredUniverse.currentWorldId = universeBefore.currentWorldId;
+          restoredUniverse.currentStoryId = universeBefore.currentStoryId;
+          restoredUniverse.updatedAt = universeBefore.updatedAt;
+          restoredUniverse.worldBindings = JSON.parse(JSON.stringify(universeBefore.worldBindings));
+          restoredUniverse.memories = (restoredUniverse.memories || []).filter((memory: any) =>
+            !removedCommandIds.includes(String(memory.sourceEventId || '')),
+          );
+          worldRepository.saveUniverse(restoredUniverse);
+          UniverseRuntimeService.syncPortablePlayerState(worldRepository, restoredUniverse.universeId, storyId);
         }
         if (mockStateBefore) {
           serverMockAuthority.importTransactionalState(storyId, mockStateBefore);
@@ -779,6 +800,7 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
           ...committedEvent.replay,
           preStateSnapshot,
           mockStateBefore: mockStateBefore || originalMockState,
+          ...(universeBefore ? { universeBefore } : {}),
         },
       };
       worldRepository.saveStoryRun(committedRun);
@@ -796,6 +818,7 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
   } catch (error: any) {
     res.status(500).json({ success: false, errorReason: error?.message || 'Past action edit failed.' });
   }
+  });
 });
 /**
  * POST /api/game/action/narrate/regenerate

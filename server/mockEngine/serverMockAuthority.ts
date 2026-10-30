@@ -368,6 +368,14 @@ export class ServerMockAuthority {
     };
   }
 
+  public reloadStoryStateFromRepository(storyId: string): EngineState {
+    if (!storyId || storyId === 'default_story') {
+      throw new Error('A persisted Story Run ID is required to reload story state.');
+    }
+    this.dynamicStoryStates.delete(storyId);
+    return this.getDynamicStoryState(storyId);
+  }
+
   public removeStoryState(storyId: string): void {
     if (!storyId || storyId === 'default_story') {
       if (storyId === 'default_story') {
@@ -598,7 +606,25 @@ export class ServerMockAuthority {
       inventory: projectedInventory,
       equipment: projectedEquipment,
       knowledgeBase: state.knowledgeBase.map((k) => ({ ...k })),
-      actionHistory: state.actionHistory.map((a) => ({ ...a })),
+      actionHistory: state.actionHistory.map((action) => {
+        const actionIndex = state.actionHistory.findIndex((entry) => entry.id === action.id);
+        const event = action.canonicalCommandId
+          ? (run?.canonicalEvents || []).find((entry: any) => entry.commandId === action.canonicalCommandId)
+          : undefined;
+        const checkpointHistory = event?.replay?.preStateSnapshot?.adaptation?.ch16Run?.runtimeState?.actionHistory;
+        const expectedHistory = actionIndex >= 0
+          ? state.actionHistory.slice(actionIndex + 1).map((entry) => entry.id)
+          : [];
+        const checkpointMatches = Array.isArray(checkpointHistory) &&
+          checkpointHistory.length === expectedHistory.length &&
+          checkpointHistory.every((entry: any, index: number) => String(entry?.id || '') === expectedHistory[index]);
+        const universeRequiresCheckpoint = Boolean(worldRepository.getUniverseForStory(targetStoryId));
+        const canRollback = action.actionType !== 'NOTE_RECORD' &&
+          Boolean(action.canonicalCommandId && event?.replay?.preStateSnapshot) &&
+          checkpointMatches &&
+          (!universeRequiresCheckpoint || Boolean(event?.replay?.universeBefore));
+        return { ...action, canRollback };
+      }),
       engineContractVersion: state.engineContractVersion,
       activeJourney: activeJourney ? JSON.parse(JSON.stringify(activeJourney)) : null,
       isTraveling,

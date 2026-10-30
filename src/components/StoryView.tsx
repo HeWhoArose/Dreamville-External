@@ -33,6 +33,7 @@ import {
   RotateCcw,
   Send,
   Sparkles,
+  Trash2,
   Volume2,
   X,
 } from 'lucide-react';
@@ -70,6 +71,7 @@ interface StoryViewProps {
   combatTransition?: CombatTransitionState | null;
   onEnterCombat?: () => void;
   onNarrationUpdated?: (viewState: import('../types').ExternalViewState) => void;
+  onHistoryRolledBack?: (viewState: import('../types').ExternalViewState) => void;
 }
 
 export function shouldShowNarrationForAction(hasCheck: boolean, revealed: boolean, hasNarration: boolean): boolean {
@@ -261,6 +263,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   combatTransition = null,
   onEnterCombat,
   onNarrationUpdated,
+  onHistoryRolledBack,
 }) => {
   const { playSpeech, isPlayingSpeech, triggerHaptic, playSfx, settings, updateSettings } = useAudioHaptic();
 
@@ -839,6 +842,41 @@ export const StoryView: React.FC<StoryViewProps> = ({
     }
   };
 
+  const rollbackFromAction = async (entry: ActionLog) => {
+    if (!storyId || !entry.canRollback || actionEditBusy || narrationBusyActionId) return;
+    const confirmed = window.confirm(
+      'Delete this turn and every later turn?\\n\\nDreamville will restore the world to the moment before this action. Later actions, their narrations, and their consequences will be removed. This cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    setActionEditBusy(true);
+    setNarrationModelError(null);
+    try {
+      const result = await apiClient.rollbackHistoryFrom({
+        storyId,
+        actionId: entry.id,
+      });
+      onHistoryRolledBack?.(result.viewState);
+      setActionEditActionId(null);
+      setActionEditText('');
+      setNarrationEditActionId(null);
+      setNarrationEditInstruction('');
+      setVisibleTurnCount(12);
+      setRevealedCheckIds({});
+      if (checkRevealStorageKey) {
+        try {
+          window.sessionStorage.removeItem(checkRevealStorageKey);
+        } catch {
+          // Browser storage is optional; the canonical server timeline remains authoritative.
+        }
+      }
+    } catch (error: any) {
+      setNarrationModelError(error?.data?.errorReason || error?.message || 'Story rollback failed.');
+    } finally {
+      setActionEditBusy(false);
+    }
+  };
+
   const regenerateNarration = async (entry: ActionLog, editInstruction = '') => {
     if (!storyId || narrationBusyActionId) return;
     setNarrationBusyActionId(entry.id);
@@ -976,13 +1014,16 @@ export const StoryView: React.FC<StoryViewProps> = ({
             <p className="text-sm text-red-200">The opening scene could not be generated.</p>
             <p className="mt-1 text-xs text-red-300/70">{openingError}</p>
           </div>
-          {onRetryOpening && (
+          {onRetryOpening && !actionHistory.some((entry) => entry.actionType !== 'NOTE_RECORD') && (
             <button
+              type="button"
               onClick={onRetryOpening}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-300 transition hover:bg-stone-800"
+              disabled={isLoadingOpening || actionEditBusy}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-40"
+              title="Retry the opening scene before the first player turn"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Retry
+              {isLoadingOpening ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              {isLoadingOpening ? 'Retrying…' : 'Retry'}
             </button>
           )}
         </div>
@@ -1018,14 +1059,28 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   </span>
                   <span className="text-[10px] text-fuchsia-300/70">· {openingScene.startingLocationName}</span>
                 </div>
-                <button
-                  onClick={() => handleReadAloud(openingScene.narrativeText)}
-                  disabled={isPlayingSpeech}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1 text-xs text-stone-400 transition hover:text-stone-200 disabled:opacity-50"
-                >
-                  <Headphones className="h-3.5 w-3.5" />
-                  {isPlayingSpeech ? 'Playing' : 'Listen'}
-                </button>
+                <div className="flex items-center gap-2">
+                  {onRetryOpening && !actionHistory.some((entry) => entry.actionType !== 'NOTE_RECORD') && (
+                    <button
+                      type="button"
+                      onClick={onRetryOpening}
+                      disabled={isLoadingOpening || actionEditBusy}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/20 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-40"
+                      title="Generate a fresh opening scene before the first player turn"
+                    >
+                      {isLoadingOpening ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                      {isLoadingOpening ? 'Retrying…' : 'Retry opening'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleReadAloud(openingScene.narrativeText)}
+                    disabled={isPlayingSpeech}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1 text-xs text-stone-400 transition hover:text-stone-200 disabled:opacity-50"
+                  >
+                    <Headphones className="h-3.5 w-3.5" />
+                    {isPlayingSpeech ? 'Playing' : 'Listen'}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-3 font-serif text-[15px] leading-8 text-stone-100 md:text-base md:leading-8">
@@ -1437,6 +1492,19 @@ export const StoryView: React.FC<StoryViewProps> = ({
                               >
                                 <RotateCcw className="h-3 w-3" />
                                 <span className="hidden xs:inline">{narrationBusyActionId === entry.id ? 'Regenerating…' : 'Retry'}</span>
+                              </button>
+                            )}
+                            {entry.canRollback && onHistoryRolledBack && (
+                              <button
+                                type="button"
+                                onClick={() => void rollbackFromAction(entry)}
+                                disabled={actionEditBusy || Boolean(narrationBusyActionId) || isProcessingAction}
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-red-300/75 transition hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40"
+                                title="Delete this turn and every later turn, restoring the world to before this action"
+                                aria-label={`Delete from turn ${fallbackTurnNumbers.get(entry.id) || 1}`}
+                              >
+                                {actionEditBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                                <span className="hidden xs:inline">Delete from here</span>
                               </button>
                             )}
                             <button

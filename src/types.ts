@@ -479,6 +479,8 @@ export interface ActionLog {
   /** Canonical command identity used to support safe editing/rollback of past player actions. */
   canonicalCommandId?: string;
   canonicalEventId?: string;
+  /** True only when the server verified an exact canonical pre-turn rollback checkpoint. */
+  canRollback?: boolean;
   checkResult?: StoryCheckResult;
   /** Canonical mechanics envelope projected to narration and reusable for presentation regeneration. */
   actionResolution?: ActionResolution;

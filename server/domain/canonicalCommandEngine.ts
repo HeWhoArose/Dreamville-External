@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { captureCanonicalStateSnapshot, compareCanonicalSnapshots, CanonicalStateSnapshot } from './canonicalSnapshot';
 import { InMemoryWorldRepository } from '../repositories/worldRepository';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
@@ -61,6 +62,15 @@ export interface CanonicalCommandEvent {
 		commandPayload?: Record<string, unknown>;
 		/** ServerMockAuthority presentation state immediately before this command. Internal only. */
 		mockStateBefore?: unknown;
+		/** Compact universe metadata needed to roll back memories derived from this action. */
+		universeBefore?: {
+			universeId: string;
+			universeElapsedSeconds: number;
+			currentWorldId: string;
+			currentStoryId: string;
+			updatedAt: string;
+			worldBindings: unknown[];
+		};
 		rngState: {
 			combat: {
 				before: { seed: number; rollCounter: number };
@@ -211,6 +221,7 @@ export class CanonicalCommandEngine {
 	private static readonly instance = new CanonicalCommandEngine();
 	private readonly inFlight = new Map<string, Promise<CanonicalCommandResult>>();
 	private readonly storyQueues = new Map<string, Promise<void>>();
+	private readonly exclusiveStoryContext = new AsyncLocalStorage<string>();
 	private readonly completedResults = new Map<string, { fingerprint: string; data?: unknown }>();
 
 	public static getInstance(): CanonicalCommandEngine {
@@ -377,9 +388,7 @@ export class CanonicalCommandEngine {
 			return clone(await existingFlight) as CanonicalCommandResult<TResult>;
 		}
 
-		const promise = this.enqueueStoryCommand(
-			command.storyId,
-			async () => {
+		const executeWithinQueue = async () => {
 				// Repository-local recovery is an explicit bootstrap/recovery operation.
 				// It is intentionally not performed before every command: doing so would
 				// let an old operational checkpoint silently rewind a long-lived repository.
@@ -470,14 +479,27 @@ export class CanonicalCommandEngine {
 					});
 					throw error;
 				}
-			}
-		);
+		};
+		const promise = this.exclusiveStoryContext.getStore() === command.storyId
+			? executeWithinQueue()
+			: this.enqueueStoryCommand(command.storyId, executeWithinQueue);
 		this.inFlight.set(key, promise as Promise<CanonicalCommandResult>);
 		try {
 			return await promise;
 		} finally {
 			this.inFlight.delete(key);
 		}
+	}
+
+	/**
+	 * Run a complete story operation under the same queue as canonical commands.
+	 * The AsyncLocalStorage context makes nested command execution re-entrant, which
+	 * is required by opening preparation (it may issue its own staged command).
+	 */
+	public async runExclusive<T>(storyId: string, work: () => Promise<T>): Promise<T> {
+		if (!storyId) throw new Error('A Story Run ID is required for exclusive story work.');
+		if (this.exclusiveStoryContext.getStore() === storyId) return work();
+		return this.enqueueStoryCommand(storyId, () => this.exclusiveStoryContext.run(storyId, work));
 	}
 
 	private async enqueueStoryCommand<T>(
@@ -722,7 +744,7 @@ export class CanonicalCommandEngine {
 					canonicalSequence,
 					resolvedDataHash: stableHash(resolved.data),
 					preStateSnapshot:
-						(command.type === 'INTERACT' && (command.payload as any)?.actionRequest?.type === 'CUSTOM_ACTION')
+						command.source === 'PLAYER' && Boolean((command.payload as any)?.storyHistoryTurn)
 							? buildReplayCheckpoint(before)
 							: undefined,
 					commandPayload: clone(command.payload),

@@ -549,6 +549,16 @@ export const App: React.FC = () => {
     if (!nextViewState) return;
     setViewState(nextViewState);
   };
+
+  const handleHistoryRolledBack = async (nextViewState: any) => {
+    if (nextViewState) setViewState(nextViewState);
+    setPendingActionAdvice(null);
+    setFailedStoryAction(null);
+    await Promise.all([
+      fetchAuxiliaryData(),
+      fetchStoryLibrary(false),
+    ]);
+  };
   const refreshStoryActionTips = async (force = true) => {
     setIsRefreshingStoryActionTips(true);
     try {
@@ -796,6 +806,7 @@ export const App: React.FC = () => {
           combatTransition={combatTransition}
           onEnterCombat={handleOpenCombatView}
           onNarrationUpdated={handleNarrationUpdated}
+          onHistoryRolledBack={handleHistoryRolledBack}
         />
       )}
 

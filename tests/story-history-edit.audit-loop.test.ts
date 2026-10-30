@@ -29,7 +29,13 @@ test('past-action editing is wired across UI, API, canonical checkpointing, and 
   assert.ok(engine.includes('preStateSnapshot:'));
   assert.ok(engine.includes('buildReplayCheckpoint(before)'));
 
+  assert.ok(routes.includes("gameRouter.post('/action/history/rollback'"));
   assert.ok(routes.includes("gameRouter.post('/action/history/edit'"));
+  assert.ok(routes.includes('command.source === \'PLAYER\''));
+  assert.ok(routes.includes('universeBefore'));
+  assert.ok(routes.includes('OPENING_RETRY_LOCKED'));
+  assert.ok(view.includes('Delete from here'));
+  assert.ok(view.includes('Retry opening'));
   assert.ok(routes.includes('targetEvent?.replay?.preStateSnapshot'));
   assert.ok(routes.includes('restoreCanonicalStateSnapshot(preStateSnapshot'));
   assert.ok(routes.includes('serverMockAuthority.importTransactionalState(storyId, mockStateBefore)'));

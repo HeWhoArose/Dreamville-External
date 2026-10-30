@@ -731,7 +731,7 @@ export class CanonicalCommandEngine {
 					canonicalSequence,
 					resolvedDataHash: stableHash(resolved.data),
 					preStateSnapshot:
-						(command.type === 'INTERACT' && (command.payload as any)?.actionRequest?.type === 'CUSTOM_ACTION')
+						command.source === 'PLAYER'
 							? buildReplayCheckpoint(before)
 							: undefined,
 					commandPayload: clone(command.payload),

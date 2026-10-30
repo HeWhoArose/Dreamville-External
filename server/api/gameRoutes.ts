@@ -620,12 +620,10 @@ gameRouter.post('/action/history/rollback', async (req: Request, res: Response) 
         });
       } catch (rollbackError) {
         // Restore the exact pre-request state if any part of rollback fails.
-        worldRepository.restoreCanonicalStateSnapshot(originalCanonical, { persist: false });
-        const restoredOriginalRun = worldRepository.getStoryRun(storyId);
-        if (restoredOriginalRun) {
-          restoredOriginalRun.canonicalEvents = JSON.parse(JSON.stringify(originalRun.canonicalEvents || []));
-          worldRepository.saveStoryRun(restoredOriginalRun);
-        }
+        worldRepository.restoreCanonicalStateSnapshot(originalCanonical, { persist: false, preserveCanonicalEvents: true });
+        // Canonical checkpoints deliberately omit rolling journals. Restore the exact
+        // captured StoryRun as well so a failed rollback cannot truncate them.
+        worldRepository.saveStoryRun(originalRun);
         if (originalUniverse) worldRepository.saveUniverse(originalUniverse);
         serverMockAuthority.importTransactionalState(storyId, originalMockState);
         throw rollbackError;
@@ -1512,6 +1510,17 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
                 };
 
     const mockStateBefore = serverMockAuthority.exportTransactionalState(storyId);
+    // A story may have been lazily initialized before its first player action.
+    // Persist that exact visible-history prefix before the canonical engine captures
+    // its pre-turn snapshot, so the first turn can be rolled back safely too.
+    const preActionRun = worldRepository.getStoryRun(storyId);
+    if (preActionRun) {
+      preActionRun.runtimeState = {
+        ...(preActionRun.runtimeState || {}),
+        actionHistory: JSON.parse(JSON.stringify(mockStateBefore.actionHistory || [])),
+      };
+      worldRepository.saveStoryRun(preActionRun);
+    }
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,

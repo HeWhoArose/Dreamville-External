@@ -743,6 +743,8 @@ export class ServerMockAuthority {
     situation: import('../domain/currentSituation').CurrentSituation;
     intent: PlayerIntent;
     previousNarrations?: string[];
+    plan?: EphemeralNarrativePlan;
+    pacingContract?: import('../domain/narrativePacingEngine').NarrativePacingContract;
   }): {
     accepted: boolean;
     richness: NarrativeRichnessEvaluation;
@@ -750,7 +752,7 @@ export class ServerMockAuthority {
     pacingReason?: string;
     actionFidelity: { valid: boolean; reason?: string; missingConsequences: string[] };
   } {
-    const sceneComposition: any = {
+    const sceneComposition: any = params.plan?.sceneComposition || {
       version: 1,
       turnId: params.situation.turnId,
       sceneObjective: params.actionResolution.actualEffect || 'Show the immediate result of the player action.',
@@ -777,7 +779,7 @@ export class ServerMockAuthority {
       compositionConfidence: 0.95,
       expiresAfterNarration: true,
     };
-    const plan: EphemeralNarrativePlan = {
+    const plan: EphemeralNarrativePlan = params.plan || {
       turnId: params.situation.turnId,
       objective: params.actionResolution.actualEffect || 'Resolve the player action in presentation.',
       immediateSteps: ['Acknowledge the player action.', 'Show its immediate physical or social consequence.', 'Leave the next choice to the player.'],
@@ -801,7 +803,11 @@ export class ServerMockAuthority {
       narrative: [String(params.narrativeText || '').trim()], dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [],
     };
     const richness = NarrativeRichnessEvaluator.evaluate({ intent: params.intent, situation: params.situation, plan, turnPackage, previousNarrations: params.previousNarrations || [] });
-    const pacingContract = NarrativePacingEngine.resolve({ situation: params.situation, intent: params.intent });
+    const pacingContract = params.pacingContract || NarrativePacingEngine.resolve({
+      situation: params.situation,
+      intent: params.intent,
+      actionResolution: params.actionResolution,
+    });
     const pacing = NarrativePacingEngine.validateNarration(params.narrativeText, pacingContract);
     const observationLike = params.intent.action === 'observe' || params.intent.interactionMode === 'PASSIVE_OBSERVATION';
     const actionAnchor = liveNarrativeLexicalOverlap(params.narrativeText, params.playerAction) >= 0.08 ||
@@ -823,7 +829,7 @@ export class ServerMockAuthority {
         ...(params.actionResolution.playerVisibleConsequences || []),
       ]
         .map(value => String(value || '').trim())
-        .filter(Boolean)
+        .filter(value => Boolean(value) && !/^the character is now canonically positioned\b/i.test(value))
         .map(value => [value.toLocaleLowerCase(), value] as const),
     ).values());
     // Authored/check outcomes retain their established semantic fidelity gate: their guidance
@@ -1202,37 +1208,83 @@ export class ServerMockAuthority {
           : (resolutionGate.mode === 'CAPABILITY'
             ? 'The action is resolved by the established capability/rules layer.'
             : 'The action proceeds as an ordinary deterministic world/narrative action.'),
-      canonicalStateChanges: (canonicalEventForResolution?.mutationPaths || []).map((path: string) => ({
-        kind: 'CANONICAL_MUTATION',
-        targetId: actorId,
-        value: path,
-        metadata: { source: 'canonical_command_event' },
-      })),
-      ...(() => {
-        const postPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
-        const postSpatial = postPlayer?.localSpatialState ? JSON.parse(JSON.stringify(postPlayer.localSpatialState)) : undefined;
-        const postLocationId = postPlayer?.locationId;
-        const spatialChanged = JSON.stringify(preResolutionSpatial) !== JSON.stringify(postSpatial);
-        const locationChanged = preResolutionLocationId !== postLocationId;
-        if (!resolutionIntent.movementIntent || (!spatialChanged && !locationChanged)) return [];
-        return [{
-          kind: locationChanged ? 'LOCATION' : 'SPATIAL',
+      canonicalStateChanges: [
+        ...(canonicalEventForResolution?.mutationPaths || []).map((path: string) => ({
+          kind: 'CANONICAL_MUTATION',
           targetId: actorId,
-          value: {
-            fromLocationId: preResolutionLocationId,
-            toLocationId: postLocationId,
-            before: preResolutionSpatial,
-            after: postSpatial,
-          },
-          metadata: { source: 'canonical_player_lifecycle' },
-        }];
-      })(),
-      physicalConsequences: storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : [],
+          value: path,
+          metadata: { source: 'canonical_command_event' },
+        })),
+        ...(() => {
+          const postPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
+          const postSpatial = postPlayer?.localSpatialState ? JSON.parse(JSON.stringify(postPlayer.localSpatialState)) : undefined;
+          const postLocationId = postPlayer?.locationId;
+          const spatialChanged = JSON.stringify(preResolutionSpatial) !== JSON.stringify(postSpatial);
+          const locationChanged = preResolutionLocationId !== postLocationId;
+          if (!resolutionIntent.movementIntent || (!spatialChanged && !locationChanged)) return [];
+          return [{
+            kind: locationChanged ? 'LOCATION' : 'SPATIAL',
+            targetId: actorId,
+            value: {
+              fromLocationId: preResolutionLocationId,
+              toLocationId: postLocationId,
+              before: preResolutionSpatial,
+              after: postSpatial,
+            },
+            metadata: { source: 'canonical_player_lifecycle' },
+          }];
+        })(),
+        ...(storyCheck?.consequence?.applied && storyCheck.consequence.damage && storyCheck.consequence.damage.finalAmount > 0
+          ? [{
+              kind: 'DAMAGE',
+              targetId: actorId,
+              value: {
+                amount: storyCheck.consequence.damage.finalAmount,
+                damageType: storyCheck.consequence.damage.damageType,
+                healthCurrent: storyCheck.consequence.damage.healthCurrent,
+              },
+              metadata: { source: 'story_check_consequence' },
+            }]
+          : []),
+        ...((storyCheck?.consequence?.applied ? storyCheck.consequence.appliedConditions || [] : []).map((condition) => ({
+          kind: 'CONDITION_APPLIED',
+          targetId: actorId,
+          value: { condition },
+          metadata: { source: 'story_check_consequence' },
+        }))),
+        ...((storyCheck?.consequence?.applied ? storyCheck.consequence.removedConditions || [] : []).map((condition) => ({
+          kind: 'CONDITION_REMOVED',
+          targetId: actorId,
+          value: { condition },
+          metadata: { source: 'story_check_consequence' },
+        }))),
+      ],
+      physicalConsequences: [
+        ...(storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : []),
+        ...(storyCheck?.consequence?.applied && storyCheck.consequence.damage && storyCheck.consequence.damage.finalAmount > 0
+          ? [`Check consequence: ${storyCheck.consequence.damage.finalAmount} ${storyCheck.consequence.damage.damageType || ''} damage.`.replace(/\s+/g, ' ')]
+          : []),
+        ...(storyCheck?.consequence?.applied && storyCheck.consequence.appliedConditions?.length
+          ? [`Applied condition${storyCheck.consequence.appliedConditions.length > 1 ? 's' : ''}: ${storyCheck.consequence.appliedConditions.join(', ')}.`]
+          : []),
+        ...(storyCheck?.consequence?.applied && storyCheck.consequence.removedConditions?.length
+          ? [`Removed condition${storyCheck.consequence.removedConditions.length > 1 ? 's' : ''}: ${storyCheck.consequence.removedConditions.join(', ')}.`]
+          : []),
+      ].filter(Boolean),
       playerVisibleConsequences: [
         ...(storyCheck?.narrativeGuidance
           ? [storyCheck.success ? storyCheck.narrativeGuidance.successGuidance : storyCheck.narrativeGuidance.failureGuidance]
           : []),
         ...(storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : []),
+        ...(storyCheck?.consequence?.applied && storyCheck.consequence.damage && storyCheck.consequence.damage.finalAmount > 0
+          ? [`Suffered ${storyCheck.consequence.damage.finalAmount} ${storyCheck.consequence.damage.damageType || ''} damage.`.replace(/\s+/g, ' ')]
+          : []),
+        ...(storyCheck?.consequence?.applied && storyCheck.consequence.appliedConditions?.length
+          ? [`Applied condition${storyCheck.consequence.appliedConditions.length > 1 ? 's' : ''}: ${storyCheck.consequence.appliedConditions.join(', ')}.`]
+          : []),
+        ...(storyCheck?.consequence?.applied && storyCheck.consequence.removedConditions?.length
+          ? [`Removed condition${storyCheck.consequence.removedConditions.length > 1 ? 's' : ''}: ${storyCheck.consequence.removedConditions.join(', ')}.`]
+          : []),
       ].filter(Boolean),
       evidenceIds: [
         canonicalEventForResolution?.eventId,
@@ -1353,10 +1405,11 @@ export class ServerMockAuthority {
             updatedTurnId: baseResult.actionId,
           },
         }));
-        actionResolution.physicalConsequences.push(
+        const spatialConsequence =
           'The character is now canonically positioned ' + proximityBand.toLowerCase().replace('_', ' ') +
-          ' within the current location' + (focusTarget ? ' relative to ' + focusTarget.name : '') + '.'
-        );
+          ' within the current location' + (focusTarget ? ' relative to ' + focusTarget.name : '') + '.';
+        actionResolution.physicalConsequences.push(spatialConsequence);
+        actionResolution.playerVisibleConsequences.push(spatialConsequence);
         actionResolution.actualEffect += ' The bounded local spatial state reflects the resolved movement.';
         actionResolution.canonicalStateChanges.push({
           kind: 'SPATIAL',
@@ -1428,10 +1481,24 @@ export class ServerMockAuthority {
         actionResolution.actualEffect += healthChanged
           ? ` Condition processing changed health to ${conditionStateAfterAction.healthCurrent}.`
           : ' Condition processing changed the actor state.';
+        if (healthChanged) {
+          const healthDelta = conditionStateAfterAction.healthCurrent - conditionStateBeforeAction.healthCurrent;
+          const conditionHealthConsequence = healthDelta < 0
+            ? `Active condition inflicted ${Math.abs(healthDelta)} damage (${conditionStateAfterAction.healthCurrent} health remaining).`
+            : `Active condition restored ${healthDelta} health (${conditionStateAfterAction.healthCurrent} health remaining).`;
+          actionResolution.physicalConsequences.push(conditionHealthConsequence);
+          actionResolution.playerVisibleConsequences.push(conditionHealthConsequence);
+        }
+        if (deathChanged && conditionStateAfterAction.dead) {
+          const terminalConsequence = 'The character collapsed from a terminal condition.';
+          actionResolution.physicalConsequences.push(terminalConsequence);
+          actionResolution.playerVisibleConsequences.push(terminalConsequence);
+        }
         actionResolution.canonicalStateChanges.push({
           kind: 'CONDITION',
           targetId: actorId,
           value: {
+            healthBefore: conditionStateBeforeAction.healthCurrent,
             healthCurrent: conditionStateAfterAction.healthCurrent,
             dead: Boolean(conditionStateAfterAction.dead),
           },
@@ -1439,6 +1506,8 @@ export class ServerMockAuthority {
         });
       }
     }
+    actionResolution.physicalConsequences = Array.from(new Set(actionResolution.physicalConsequences.map((c) => String(c || '').trim()).filter(Boolean)));
+    actionResolution.playerVisibleConsequences = Array.from(new Set(actionResolution.playerVisibleConsequences.map((c) => String(c || '').trim()).filter(Boolean)));
     const currentPowerState = capabilityEngine.getPowerState(actorId);
     if (conditionStateAfterAction && currentPowerState) {
       capabilityEngine.setPowerState(actorId, {
@@ -1502,29 +1571,30 @@ export class ServerMockAuthority {
     let narrativePlanForFinalReview: import('../domain/narrativeDirector').EphemeralNarrativePlan | undefined;
     let narrativeStoryBeatForFinalReview: import('../domain/storyBeatDirector').StoryBeatContract | undefined;
     let narrativePacingContractForFinalReview: import('../domain/narrativePacingEngine').NarrativePacingContract | undefined;
+    let generatedResult: any;
     const forensicSink: import('../domain/aiOrchestrator').NarrativeOnlyForensicSink = {};
-    const stageNarrativeForensics = (generatedResult?: any, thrown?: any) => {
+    const stageNarrativeForensics = (genResult?: any, thrown?: any) => {
       try {
         worldRepository.stageStorySessionTurn(targetStoryId, {
           task: 'narrative.generate',
           playerAction: String(freeformText),
           ...(forensicSink.playerIntent ? { playerIntent: forensicSink.playerIntent } : {}),
           ...(forensicSink.forensicContext || {}),
-          ...(generatedResult?.contextAudit ? { contextAudit: generatedResult.contextAudit } : {}),
-          ...(generatedResult?.turnPackage ? { turnPackage: generatedResult.turnPackage } : {}),
-          ...(generatedResult?.narrativeRichnessEvaluation ? { narrativeRichnessEvaluation: generatedResult.narrativeRichnessEvaluation } : {}),
+          ...(genResult?.contextAudit ? { contextAudit: genResult.contextAudit } : {}),
+          ...(genResult?.turnPackage ? { turnPackage: genResult.turnPackage } : {}),
+          ...(genResult?.narrativeRichnessEvaluation ? { narrativeRichnessEvaluation: genResult.narrativeRichnessEvaluation } : {}),
           telemetry: {
             path: 'narrative-only',
-            success: Boolean(generatedResult?.success),
-            providerId: generatedResult?.providerId,
-            modelId: generatedResult?.modelId,
-            source: generatedResult?.source,
-            fallbackReason: generatedResult?.fallbackReason,
-            error: generatedResult?.error ?? (thrown ? String(thrown?.message || thrown) : undefined),
-            storyBeat: generatedResult?.storyBeat,
-            narrativeQualityAudit: generatedResult?.narrativeQualityAudit,
+            success: Boolean(genResult?.success),
+            providerId: genResult?.providerId,
+            modelId: genResult?.modelId,
+            source: genResult?.source,
+            fallbackReason: genResult?.fallbackReason,
+            error: genResult?.error ?? (thrown ? String(thrown?.message || thrown) : undefined),
+            storyBeat: genResult?.storyBeat,
+            narrativeQualityAudit: genResult?.narrativeQualityAudit,
           },
-          attemptsTrail: generatedResult?.attemptsTrail ?? thrown?.attemptsTrail,
+          attemptsTrail: genResult?.attemptsTrail ?? thrown?.attemptsTrail,
         });
       } catch {
         // Forensic recording is observability only and must never affect gameplay.
@@ -1565,6 +1635,7 @@ export class ServerMockAuthority {
           ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective
           : undefined,
       } as any);
+      generatedResult = generated;
 
       narrativePlanForFinalReview = generated.narrativePlan;
       narrativeStoryBeatForFinalReview = generated.storyBeat;
@@ -1608,19 +1679,22 @@ export class ServerMockAuthority {
           };
         }
       } else {
-        // Never substitute deterministic/local prose when the AI narrator fails.
-        // The canonical action may already be committed; preserve it and expose a
-        // retryable narration error without presenting fabricated story text.
+        // Never substitute fabricated AI prose when the AI narrator fails.
+        // The canonical action is already committed; preserve it and expose a
+        // retryable narration error alongside the deterministic gameplay outcome.
         narrativeResponse = '';
         narrativeTurnPackage = undefined;
         narrativeGeneration = undefined;
         narrativeVisualCues = undefined;
+        const rejectedByUnifiedValidator = Boolean((generated as any).validationRejected);
         narrativeError = {
-          code: 'NARRATION_AI_UNAVAILABLE',
-          message: generated.error || generated.fallbackReason || 'Narration generation failed validation or exhausted its provider route.',
+          code: rejectedByUnifiedValidator ? 'NARRATION_FINAL_REVIEW_REJECTED' : 'NARRATION_AI_UNAVAILABLE',
+          message: rejectedByUnifiedValidator
+            ? 'The action was committed, but its narration did not pass the final review. Use Retry to regenerate the narration.'
+            : (generated.error || generated.fallbackReason || 'Narration generation failed validation or exhausted its provider route.'),
           providerId: generated.providerId,
           modelId: generated.modelId,
-          fallbackReason: generated.fallbackReason,
+          fallbackReason: generated.fallbackReason || generated.error,
           attemptsTrail: generated.attemptsTrail || (generated as any).telemetry?.attemptsTrail || [],
         };
         console.warn('[NarrationUnavailable] AI narration unavailable; no local prose fallback was used.', {
@@ -1658,8 +1732,11 @@ export class ServerMockAuthority {
       });
     }
 
-    // N18/N8 continuation-turn gate. Opening scenes already use this review loop;
-    // live turns must not silently accept environment-only or consequence-free prose.
+    // N18/N8 continuation-turn gate.
+    // When the real unified generateNarrativeOnly() pipeline ran (indicated by generatedResult?.narrativeQualityAudit),
+    // it has already executed the single permitted narrative.review repair pass. We never make a second
+    // narrative.review LLM call here. The fallback executeTaskGeneration('narrative.review') below is only
+    // used when a test stub replaces generateNarrativeOnly without running the unified validator.
     if (narrativeResponse && narrativeTurnPackage && narrativeGeneration?.source !== 'DETERMINISTIC_FALLBACK') {
       const previousNarrations = this.getDynamicStoryState(targetStoryId).actionHistory
         .filter((entry) => Boolean(entry.narrativeResponse))
@@ -1672,12 +1749,14 @@ export class ServerMockAuthority {
         situation: resolutionSituation,
         intent: resolutionIntent,
         previousNarrations,
+        plan: narrativePlanForFinalReview,
+        pacingContract: narrativePacingContractForFinalReview,
       });
       if (!firstReview.accepted) {
         const originalGeneration = narrativeGeneration;
         const rejectFinalCandidate = (reason: string, providerId?: string, modelId?: string) => {
           // The canonical action has already committed. Never roll it back, but also
-          // never display the original narration after this additional gate rejected it.
+          // never display the original narration after this gate rejected it.
           narrativeResponse = '';
           narrativeTurnPackage = undefined;
           narrativeGeneration = undefined;
@@ -1690,125 +1769,159 @@ export class ServerMockAuthority {
             fallbackReason: reason,
           };
         };
-        let rewriteFailureReason = 'The narration repair did not return an acceptable candidate.';
-        try {
-          const rewritePrompt = [
-            'CANONICAL LIVE-TURN CONTEXT — preserve exactly; never invent beyond it:',
-            'PLAYER ACTION: ' + String(freeformText),
-            'CANONICAL ACTION RESOLUTION: ' + JSON.stringify(actionResolution),
-            'COMMITTED OUTCOME: ' + committedOutcome,
-            'CURRENT SITUATION: ' + JSON.stringify({
-              ...resolutionSituation,
-              nearbyEntities: resolutionSituation.nearbyEntities.map((entity) => ({
-                ...entity,
-                name: entity.displayName || entity.name,
-              })),
-              sceneEvidence: {
-                ...resolutionSituation.sceneEvidence,
-                entities: resolutionSituation.sceneEvidence.entities.map((entity) => ({
+        const unifiedPipelineAlreadyRan = Boolean(generatedResult?.narrativeQualityAudit);
+        if (unifiedPipelineAlreadyRan) {
+          const failureReason = [
+            firstReview.actionFidelity.reason,
+            firstReview.pacingReason,
+            firstReview.richness.decision !== 'PASS'
+              ? `Narrative richness remained ${firstReview.richness.decision} (${firstReview.richness.overallScore.toFixed(2)})`
+              : '',
+          ].filter(Boolean).join(' | ') || 'The candidate failed the unified live quality gate.';
+          rejectFinalCandidate(failureReason, originalGeneration?.providerId, originalGeneration?.modelId);
+        } else {
+          let rewriteFailureReason = 'The narration repair did not return an acceptable candidate.';
+          try {
+            const rewritePrompt = [
+              'CANONICAL LIVE-TURN CONTEXT — preserve exactly; never invent beyond it:',
+              'PLAYER ACTION: ' + String(freeformText),
+              'CANONICAL ACTION RESOLUTION: ' + JSON.stringify(actionResolution),
+              'COMMITTED OUTCOME: ' + committedOutcome,
+              'CURRENT SITUATION: ' + JSON.stringify({
+                ...resolutionSituation,
+                nearbyEntities: resolutionSituation.nearbyEntities.map((entity) => ({
                   ...entity,
                   name: entity.displayName || entity.name,
                 })),
-              },
-            }),
-            '',
-            'QUALITY REVIEW: richness=' + firstReview.richness.decision + ' score=' + firstReview.richness.overallScore.toFixed(2),
-            ...firstReview.richness.issues.slice(0, 8).map(issue => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
-            firstReview.pacingReason ? 'Pacing issue: ' + firstReview.pacingReason : '',
-            firstReview.actionFidelity.reason ? 'Action-fidelity issue: ' + firstReview.actionFidelity.reason : '',
-            ...(firstReview.actionFidelity.missingConsequences || []).slice(0, 8).map(consequence => 'Required canonical consequence to include: ' + consequence),
-            '',
-            'ORIGINAL NARRATION:',
-            narrativeResponse,
-            '',
-            'REWRITE REQUIREMENTS:',
-            'Answer the player action first. Show what the action physically or socially does to the situation.',
-            'If another entity is affected, show a concrete visible reaction, response, or changed attention.',
-            'If an object is affected, show the object-level consequence rather than only a sound effect.',
-            'Do not merely restate the room or list scenery.',
-            'Do not invent a consequence not supported by the canonical action resolution or current situation.',
-            'Do not choose the player’s next consequential action.',
-            'Return JSON only with narrativeText and structuredEvents.',
-          ].filter(Boolean).join('\\n');
-          const rewriteSystem = 'You are Dreamville’s live-turn narrative quality editor. Rewrite only the presentation of the already-committed turn. Canonical mechanics, world state, epistemic boundaries, and player agency are immutable. The result must contain a clear action -> consequence/reaction beat.';
-          const reviewResponse = await worldRepository.getAiOrchestrator().executeTaskGeneration('narrative.review', rewritePrompt, rewriteSystem, {
-            timeoutMs: 20000,
-            maxTokens: 900,
-            contextTokens: Math.min(12000, Math.ceil(rewritePrompt.length / 4)),
-            validateResponse: (text) => parseLiveNarrativeReview(text)
-              ? { valid: true }
-              : { valid: false, errorReason: 'Live narrative review must return usable JSON prose.' },
-          });
-          const parsed = reviewResponse.source !== 'DETERMINISTIC_FALLBACK'
-            ? parseLiveNarrativeReview(reviewResponse.text)
-            : null;
-
-          if (!parsed) {
-            rewriteFailureReason = reviewResponse.fallbackReason
-              || 'The narration repair was empty, malformed, or returned deterministic fallback text.';
-            rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
-          } else if (!narrativeTurnPackage) {
-            rewriteFailureReason = 'The original structured narrative package was unavailable for final validation.';
-            rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
-          } else if (!narrativePlanForFinalReview) {
-            rewriteFailureReason = 'The original narrative plan was unavailable; the repaired candidate cannot be fully validated.';
-            rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
-          } else {
-            const rewrittenTurnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage = {
-              ...narrativeTurnPackage,
-              narrative: [parsed.narrativeText],
-              stateChanges: [],
-            };
-            const finalCandidateValidation = worldRepository.getAiOrchestrator().validateNarrativeCandidate({
-              storyId: targetStoryId,
-              playerAction: String(freeformText),
-              intent: resolutionIntent,
-              situation: resolutionSituation,
-              plan: narrativePlanForFinalReview,
-              storyBeat: narrativeStoryBeatForFinalReview,
-              turnPackage: rewrittenTurnPackage,
-              repository: worldRepository,
-              pacingContract: narrativePacingContractForFinalReview,
+                sceneEvidence: {
+                  ...resolutionSituation.sceneEvidence,
+                  entities: resolutionSituation.sceneEvidence.entities.map((entity) => ({
+                    ...entity,
+                    name: entity.displayName || entity.name,
+                  })),
+                },
+              }),
+              '',
+              'QUALITY REVIEW: richness=' + firstReview.richness.decision + ' score=' + firstReview.richness.overallScore.toFixed(2),
+              ...firstReview.richness.issues.slice(0, 8).map(issue => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
+              firstReview.pacingReason ? 'Pacing issue: ' + firstReview.pacingReason : '',
+              firstReview.actionFidelity.reason ? 'Action-fidelity issue: ' + firstReview.actionFidelity.reason : '',
+              ...(firstReview.actionFidelity.missingConsequences || []).slice(0, 8).map(consequence => 'Required canonical consequence to include: ' + consequence),
+              '',
+              'ORIGINAL NARRATION:',
+              narrativeResponse,
+              '',
+              'REWRITE REQUIREMENTS:',
+              'Answer the player action first. Show what the action physically or socially does to the situation.',
+              'If another entity is affected, show a concrete visible reaction, response, or changed attention.',
+              'If an object is affected, show the object-level consequence rather than only a sound effect.',
+              'Do not merely restate the room or list scenery.',
+              'Do not invent a consequence not supported by the canonical action resolution or current situation.',
+              'Do not choose the player’s next consequential action.',
+              'Return JSON only with narrativeText and structuredEvents.',
+            ].filter(Boolean).join('\\n');
+            const rewriteSystem = 'You are Dreamville’s live-turn narrative quality editor. Rewrite only the presentation of the already-committed turn. Canonical mechanics, world state, epistemic boundaries, and player agency are immutable. The result must contain a clear action -> consequence/reaction beat.';
+            const reviewResponse = await worldRepository.getAiOrchestrator().executeTaskGeneration('narrative.review', rewritePrompt, rewriteSystem, {
+              timeoutMs: 20000,
+              maxTokens: 900,
+              contextTokens: Math.min(12000, Math.ceil(rewritePrompt.length / 4)),
+              validateResponse: (text) => parseLiveNarrativeReview(text)
+                ? { valid: true }
+                : { valid: false, errorReason: 'Live narrative review must return usable JSON prose.' },
             });
-            const postReview = this.evaluateLiveNarrativeQuality({
-              narrativeText: parsed.narrativeText,
-              playerAction: String(freeformText),
-              actionResolution,
-              situation: resolutionSituation,
-              intent: resolutionIntent,
-              previousNarrations,
-            });
+            const parsed = reviewResponse.source !== 'DETERMINISTIC_FALLBACK'
+              ? parseLiveNarrativeReview(reviewResponse.text)
+              : null;
 
-            if (postReview.accepted && finalCandidateValidation.valid) {
-              narrativeResponse = parsed.narrativeText;
-              narrativeError = undefined;
-              // The rewrite has no matching generated image cues; prevent stale cues
-              // from the rejected primary prose being associated with the new text.
-              narrativeVisualCues = undefined;
-              narrativeTurnPackage = {
-                ...rewrittenTurnPackage,
-                events: [...(rewrittenTurnPackage.events || []), 'LIVE_NARRATION_REWRITE_ACCEPTED'],
-              };
-            } else {
-              rewriteFailureReason = [
-                !finalCandidateValidation.valid ? finalCandidateValidation.errorReason : '',
-                !postReview.accepted
-                  ? (postReview.actionFidelity.reason || postReview.pacingReason || 'The repaired candidate failed the live action/consequence quality gate.')
-                  : '',
-              ].filter(Boolean).join(' | ') || 'The repaired candidate failed final validation.';
+            if (!parsed) {
+              rewriteFailureReason = reviewResponse.fallbackReason
+                || 'The narration repair was empty, malformed, or returned deterministic fallback text.';
               rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
+            } else if (!narrativeTurnPackage) {
+              rewriteFailureReason = 'The original structured narrative package was unavailable for final validation.';
+              rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
+            } else if (!narrativePlanForFinalReview) {
+              rewriteFailureReason = 'The original narrative plan was unavailable; the repaired candidate cannot be fully validated.';
+              rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
+            } else {
+              const rewrittenTurnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage = {
+                ...narrativeTurnPackage,
+                narrative: [parsed.narrativeText],
+                stateChanges: [],
+              };
+              const finalCandidateValidation = worldRepository.getAiOrchestrator().validateNarrativeCandidate({
+                storyId: targetStoryId,
+                playerAction: String(freeformText),
+                intent: resolutionIntent,
+                situation: resolutionSituation,
+                plan: narrativePlanForFinalReview,
+                storyBeat: narrativeStoryBeatForFinalReview,
+                turnPackage: rewrittenTurnPackage,
+                repository: worldRepository,
+                pacingContract: narrativePacingContractForFinalReview,
+                actionResolution,
+              });
+              const postReview = this.evaluateLiveNarrativeQuality({
+                narrativeText: parsed.narrativeText,
+                playerAction: String(freeformText),
+                actionResolution,
+                situation: resolutionSituation,
+                intent: resolutionIntent,
+                previousNarrations,
+                plan: narrativePlanForFinalReview,
+                pacingContract: narrativePacingContractForFinalReview,
+              });
+
+              if (postReview.accepted && finalCandidateValidation.valid) {
+                narrativeResponse = parsed.narrativeText;
+                narrativeError = undefined;
+                // The rewrite has no matching generated image cues; prevent stale cues
+                // from the rejected primary prose being associated with the new text.
+                narrativeVisualCues = undefined;
+                narrativeTurnPackage = {
+                  ...rewrittenTurnPackage,
+                  events: [...(rewrittenTurnPackage.events || []), 'LIVE_NARRATION_REWRITE_ACCEPTED'],
+                };
+              } else {
+                rewriteFailureReason = [
+                  !finalCandidateValidation.valid ? finalCandidateValidation.errorReason : '',
+                  !postReview.accepted
+                    ? (postReview.actionFidelity.reason || postReview.pacingReason || 'The repaired candidate failed the live action/consequence quality gate.')
+                    : '',
+                ].filter(Boolean).join(' | ') || 'The repaired candidate failed final validation.';
+                rejectFinalCandidate(rewriteFailureReason, reviewResponse.providerId, reviewResponse.modelId);
+              }
             }
+          } catch (reviewError: any) {
+            rewriteFailureReason = String(reviewError?.message || reviewError || 'The narration repair failed.');
+            rejectFinalCandidate(rewriteFailureReason);
+            console.warn('[NarrationQualityGate] Live rewrite failed final validation; rejected player-facing prose instead of retaining the rejected original.', {
+              storyId: targetStoryId,
+              actionId: baseResult?.actionId,
+              error: rewriteFailureReason,
+            });
           }
-        } catch (reviewError: any) {
-          rewriteFailureReason = String(reviewError?.message || reviewError || 'The narration repair failed.');
-          rejectFinalCandidate(rewriteFailureReason);
-          console.warn('[NarrationQualityGate] Live rewrite failed final validation; rejected player-facing prose instead of retaining the rejected original.', {
-            storyId: targetStoryId,
-            actionId: baseResult?.actionId,
-            error: rewriteFailureReason,
-          });
         }
       }
+    }
+
+    const deterministicOutcomeParts = Array.from(new Set(
+      [
+        actionResolution.actualEffect,
+        ...(actionResolution.physicalConsequences || []),
+        ...(actionResolution.playerVisibleConsequences || []),
+        storyCheck?.consequence?.summary,
+      ]
+        .map((part) => String(part || '').trim())
+        .filter((part) => Boolean(part) && !/^the character is now canonically positioned\b/i.test(part)),
+    ));
+    const deterministicFallbackMessage = deterministicOutcomeParts.length > 0
+      ? deterministicOutcomeParts.slice(0, 3).join(' ')
+      : (baseResult.authoritativeFeedback || baseResult.message || 'Action resolved; narration is currently unavailable.');
+
+    if (!narrativeResponse && narrativeError) {
+      (narrativeError as any).deterministicFallbackMessage = deterministicFallbackMessage;
+      (narrativeError as any).fallbackUsed = true;
     }
 
     const state = this.getDynamicStoryState(targetStoryId);
@@ -1820,6 +1933,7 @@ export class ServerMockAuthority {
 
     if (actionLog) {
       actionLog.narrativeResponse = narrativeResponse || undefined;
+      actionLog.presentationFeedback = narrativeResponse || deterministicFallbackMessage;
       actionLog.narrativeError = narrativeError;
       actionLog.narrativeGeneration = narrativeGeneration;
       actionLog.visualCues = narrativeVisualCues;
@@ -1842,11 +1956,15 @@ export class ServerMockAuthority {
     this.persistActionHistory(targetStoryId, state);
 
     // Feed the committed turn back into the continuity loop so future research,
-    // plot, plan, memory retrieval, and narration see what actually happened.
+    // plot, plan, memory retrieval, novelty, continuity state, and narration see what actually happened.
     narrativeContinuityEngine.recordTurn(worldRepository, {
       storyId: targetStoryId,
       turnId: baseResult.actionId,
       playerAction: String(freeformText),
+      playerIntent: forensicSink.playerIntent || resolutionIntent,
+      currentSituation: (forensicSink.forensicContext as any)?.currentSituation || resolutionSituation,
+      narrativePlan: narrativePlanForFinalReview,
+      narrativeReview: generatedResult?.narrativeReview,
       turnPackage: narrativeTurnPackage || {
         narrative: narrativeResponse ? [narrativeResponse] : [],
         dialogue: [],
@@ -1856,9 +1974,10 @@ export class ServerMockAuthority {
             : 'STORY_ACTION_RESOLVED',
         ],
         stateChanges: [],
-        memoryCandidates: storyCheck?.consequence?.summary
-          ? [storyCheck.consequence.summary]
-          : [],
+        memoryCandidates: [
+          ...(storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : []),
+          ...(actionResolution.playerVisibleConsequences || []),
+        ].filter(Boolean).slice(0, 4),
         audioCues: [],
       },
     });
@@ -1892,7 +2011,7 @@ export class ServerMockAuthority {
 
     return {
       ...baseResult,
-      message: narrativeResponse || baseResult.message || 'Action resolved; narration is currently unavailable.',
+      message: narrativeResponse || deterministicFallbackMessage || baseResult.message || 'Action resolved; narration is currently unavailable.',
       narrativeResponse: narrativeResponse || undefined,
       narrativeError,
       narrativeGeneration,

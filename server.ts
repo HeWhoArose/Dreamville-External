@@ -88,15 +88,9 @@ async function startServer() {
     next();
   });
 
-  // AI Studio disables HMR in its embedded sandbox. In that environment,
-  // serving Vite's development HTML can still cause the platform to inject or
-  // execute a Vite client that expects a websocket which the preview does not
-  // expose. Build the frontend once at server startup and serve the generated
-  // static bundle instead. Local development keeps normal Vite middleware.
   const isProduction = process.env.NODE_ENV === 'production';
-  const isEmbeddedPreview = process.env.DISABLE_HMR === 'true';
 
-  if (!isProduction && !isEmbeddedPreview) {
+  if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
@@ -109,28 +103,6 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
-    let buildPromise: Promise<unknown> | null = null;
-    if (!isProduction && !hasDist) {
-      buildPromise = (async () => {
-        const { build } = await import('vite');
-        console.log('[Dreamville Preview] DISABLE_HMR=true detected; building static frontend bundle.');
-        await build({
-          clearScreen: false,
-          logLevel: 'warn',
-        });
-        console.log('[Dreamville Preview] Static frontend bundle ready.');
-      })();
-    }
-
-    app.use(async (req, res, next) => {
-      if (buildPromise) {
-        await buildPromise;
-        buildPromise = null;
-      }
-      next();
-    });
-
     app.use(
       express.static(distPath, {
         setHeaders: (res, filePath) => {

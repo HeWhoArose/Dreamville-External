@@ -123,6 +123,7 @@ export class NarrativeMemoryLifecycle {
 		playerIntent?: PlayerIntent;
 		currentSituation: CurrentSituation;
 		turnPackage: StructuredTurnPackage;
+		narrativePlan?: import('./narrativeDirector').EphemeralNarrativePlan;
 		narrativeReview?: NarrativeReview;
 		stateAdjudication?: StateAdjudicationResult;
 	}): NarrativeMemoryLifecycleResult {
@@ -204,7 +205,8 @@ export class NarrativeMemoryLifecycle {
 		}
 
 		const resolvedThreadIds: string[] = [];
-		const narrative = lower(params.turnPackage.narrative.join(' '));
+		const joinedNarration = params.turnPackage.narrative.join(' ').trim();
+		const narrative = lower(joinedNarration);
 		for (const thread of threadMap.values()) {
 			if (thread.status !== 'OPEN') continue;
 			const titleTokens = thread.title.toLowerCase().split(/\W+/).filter((token) => token.length >= 5).slice(0, 8);
@@ -249,40 +251,42 @@ export class NarrativeMemoryLifecycle {
 		plot.openThreads = runtime.openNarrativeThreads.map((thread: NarrativeOpenThreadRecord) => thread.title).slice(-24);
 		runtime.plot = plot;
 
-		const noveltyState = NarrativeNoveltyEngine.recordAcceptedTurn({
-			repository: params.repository,
-			storyId: params.storyId,
-			narration: params.turnPackage.narrative.join(' '),
-			turnNumber: currentTurn + 1,
-		});
+		if (joinedNarration.length > 0 && memoryEligible) {
+			const noveltyState = NarrativeNoveltyEngine.recordAcceptedTurn({
+				repository: params.repository,
+				storyId: params.storyId,
+				narration: joinedNarration,
+				turnNumber: currentTurn + 1,
+			});
 
-		const continuityState = NarrativeContinuityStateEngine.recordAcceptedTurn({
-			repository: params.repository,
-			storyId: params.storyId,
-			turnId: params.turnId,
-			situation: params.currentSituation,
-			intent: params.playerIntent || {
-				action: 'continue',
-				interactionMode: 'OTHER',
-				speechIntent: false,
-				movementIntent: false,
-				observationIntent: false,
-				explicitTargets: [],
-				impliedTargets: [],
-				confidence: 0,
-				source: 'DETERMINISTIC',
-				originalText: params.playerAction || '',
-			},
-			narration: params.turnPackage.narrative.join(' '),
-			plan: undefined,
-			review: params.narrativeReview,
-		});
+			const continuityState = NarrativeContinuityStateEngine.recordAcceptedTurn({
+				repository: params.repository,
+				storyId: params.storyId,
+				turnId: params.turnId,
+				situation: params.currentSituation,
+				intent: params.playerIntent || {
+					action: 'continue',
+					interactionMode: 'OTHER',
+					speechIntent: false,
+					movementIntent: false,
+					observationIntent: false,
+					explicitTargets: [],
+					impliedTargets: [],
+					confidence: 0,
+					source: 'DETERMINISTIC',
+					originalText: params.playerAction || '',
+				},
+				narration: joinedNarration,
+				plan: params.narrativePlan,
+				review: params.narrativeReview,
+			});
 
-		// The lifecycle owns accepted-turn presentation state. Keep the local runtime
-		// snapshot in sync before the final save so it cannot overwrite the just-persisted
-		// N7/N4 updates with the stale pre-turn runtime object.
-		runtime.narrativeNovelty = noveltyState;
-		runtime.narrativeContinuity = continuityState;
+			// The lifecycle owns accepted-turn presentation state. Keep the local runtime
+			// snapshot in sync before the final save so it cannot overwrite the just-persisted
+			// N7/N4 updates with the stale pre-turn runtime object.
+			runtime.narrativeNovelty = noveltyState;
+			runtime.narrativeContinuity = continuityState;
+		}
 
 		const history = Array.isArray(runtime.narrativeContextHistory) ? [...runtime.narrativeContextHistory] : [];
 		history.push({

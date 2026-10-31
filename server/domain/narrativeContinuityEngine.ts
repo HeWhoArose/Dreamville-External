@@ -240,7 +240,7 @@ export class NarrativeContinuityEngine {
     return packet;
   }
 
-  public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; playerIntent?: PlayerIntent; turnPackage: StructuredTurnPackage; currentSituation?: CurrentSituation; narrativeReview?: NarrativeReview; stateAdjudication?: StateAdjudicationResult }): { plot: NarrativePlotState; plan: NarrativePlanState } {
+  public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; playerIntent?: PlayerIntent; turnPackage: StructuredTurnPackage; currentSituation?: CurrentSituation; narrativePlan?: import('./narrativeDirector').EphemeralNarrativePlan; narrativeReview?: NarrativeReview; stateAdjudication?: StateAdjudicationResult }): { plot: NarrativePlotState; plan: NarrativePlanState } {
     const run = repository.getStoryRun(params.storyId);
     if (!run) return { plot: this.defaultPlot(params.storyId), plan: this.defaultPlan(params.storyId) };
     let situation = params.currentSituation;
@@ -295,7 +295,7 @@ export class NarrativeContinuityEngine {
       repository.saveStoryRun(run);
       return state;
     }
-    const lifecycle = narrativeMemoryLifecycle.processTurn({ repository, storyId: params.storyId, turnId: params.turnId || situation.turnId, playerAction: params.playerAction, playerIntent: params.playerIntent, currentSituation: situation, turnPackage: params.turnPackage, narrativeReview: params.narrativeReview, stateAdjudication: params.stateAdjudication });
+    const lifecycle = narrativeMemoryLifecycle.processTurn({ repository, storyId: params.storyId, turnId: params.turnId || situation.turnId, playerAction: params.playerAction, playerIntent: params.playerIntent, currentSituation: situation, turnPackage: params.turnPackage, narrativePlan: params.narrativePlan, narrativeReview: params.narrativeReview, stateAdjudication: params.stateAdjudication });
     const state = this.getState(repository, params.storyId);
     state.plot.summary = lifecycle.plotSummary;
     state.plot.updatedAt = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());

@@ -7589,13 +7589,26 @@ export class MultiModelOrchestrator {
       Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
       Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
     };
-    // Strip quoted dialogue and relational/past/future/idiomatic time references
-    // (e.g. "closed before dawn", "since morning", "until midnight", "dawn of")
-    // so historical or conversational mentions are not mistaken for present-scene sky claims.
+    // Strip quoted dialogue, compound role/noun phrases (e.g. "night watch", "morning bell"),
+    // figurative comparisons (e.g. "dark as night"), and relational/past/future/idiomatic time
+    // references (e.g. "closed before dawn", "since morning", "during the night", "until midnight")
+    // so historical, role-based, or conversational mentions are not mistaken for present-scene sky claims.
     const strippedOutput = output
       .replace(/["“”'][^"“”']*["“”']/g, ' ')
       .replace(
+        /\b(?:night|morning|dawn|dusk|midnight|noon|afternoon|sunset|daybreak)\s+(?:watch|watchmen|watchman|guard|guards|patrol|patrols|shift|shifts|bell|bells|market|raid|raids|duty|duties|vision|owl|owls|shade|terror|terrors|crew|ledger|ledgers|roster|rosters|report|reports|air\s+had|sky\s+had)\b/gi,
+        ' ',
+      )
+      .replace(
+        /\b(?:like|dark\s+as|black\s+as|quiet\s+as|still\s+as|clear\s+as|cold\s+as|bright\s+as|pale\s+as)\s+(?:the\s+|a\s+)?(?:first\s+light|daybreak|dawn|predawn|sunrise|early\s+morning|morning|midday|noon|afternoon|dusk|sunset|late\s+evening|night|midnight)\b/gi,
+        ' ',
+      )
+      .replace(
         /\b(?:before|since|until|till|by|from|after|at|prior\s+to|back\s+at|earlier\s+this|this\s+past|this|last|next|tomorrow|yesterday|every|each|wait\s+for|waiting\s+for|closed\s+at|opened\s+at|arrived\s+at|left\s+at|met\s+at|begin\s+at|begins\s+at|began\s+at|start\s+at|starts\s+at|started\s+at|end\s+at|ends\s+at|ended\s+at)\s+(?:the\s+)?(?:first\s+light|daybreak|dawn|predawn|sunrise|early\s+morning|morning|midday|noon|afternoon|dusk|sunset|late\s+evening|night|midnight)\b/gi,
+        ' ',
+      )
+      .replace(
+        /\b(?:during|through|throughout|into|over|for|of|in|on|toward|towards|near|nearing|approaching|about)\s+(?:the\s+|that\s+|this\s+|last\s+|next\s+|late\s+|early\s+)?(?:first\s+light|daybreak|dawn|predawn|sunrise|early\s+morning|morning|midday|noon|afternoon|dusk|sunset|late\s+evening|night|midnight)(?!\s+(?:light|sun|sky|air|chill|heat|glow|shadows|mist|fog|breaks|spills|washes|settles|falls|hangs|looms))\b/gi,
         ' ',
       )
       .replace(/\b(?:dawn\s+of|dawns?\s+on|dawned\s+on|from\s+dawn\s+to\s+dusk|day\s+and\s+night|night\s+and\s+day)\b/gi, ' ');
@@ -7627,6 +7640,7 @@ export class MultiModelOrchestrator {
     storyId: string;
     narrativePacingContract: NarrativePacingContract;
     narrativeProviderHandoff?: NarrativeProviderHandoffContract;
+    actionResolution?: ActionResolution;
     strict?: boolean;
     allowRewrite?: boolean;
   }): Promise<{ turnPackage: StructuredTurnPackage; review: NarrativeReview }> {
@@ -7635,6 +7649,7 @@ export class MultiModelOrchestrator {
       situation: params.situation,
       plan: params.plan,
       turnPackage: params.turnPackage,
+      actionResolution: params.actionResolution,
     });
     if (review.decision === 'ACCEPT' || params.strict === false || params.allowRewrite === false) return { turnPackage: params.turnPackage, review };
 
@@ -7644,6 +7659,7 @@ export class MultiModelOrchestrator {
       plan: params.plan,
       turnPackage: params.turnPackage,
       review,
+      actionResolution: params.actionResolution,
     });
     const rewriteStartedAt = Date.now();
     let response: ProviderGenerateResult;
@@ -7700,6 +7716,7 @@ export class MultiModelOrchestrator {
       situation: params.situation,
       plan: params.plan,
       turnPackage: validation.turnPackage,
+      actionResolution: params.actionResolution,
     });
     if (review.decision !== 'ACCEPT') {
       throw new Error(
@@ -7929,6 +7946,118 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+  public evaluateActionConsequenceFidelity(params: {
+    narrativeText: string;
+    playerAction: string;
+    actionResolution?: ActionResolution;
+    situation: CurrentSituation;
+    intent: PlayerIntent;
+  }): { valid: boolean; reason?: string; missingConsequences: string[] } {
+    if (!params.actionResolution) {
+      return { valid: true, missingConsequences: [] };
+    }
+    const observationLike = params.intent.action === 'observe' || params.intent.interactionMode === 'PASSIVE_OBSERVATION';
+    if (observationLike) {
+      return { valid: true, missingConsequences: [] };
+    }
+    const stop = new Set([
+      'the','and','that','this','with','from','into','then','than','they','their','there','were','was','have','has','had','will','would','could','should','your','you','for','are','but','not','his','her','him','she','its','our','out','over','under','after','before','about','what','when','where','which','while','just','only','very','some','i','a','an','to','of','on','in',
+      'action','effect','result','visible','player','target','character','person','thing','nearby',
+    ]);
+    const lexicalTokens = (value: string) => Array.from(new Set(
+      String(value || '').toLowerCase().split(/[^a-z0-9'-]+/).map((v) => v.replace(/^['-]+|['-]+$/g, '')).filter((v) => v.length >= 4 && !stop.has(v)),
+    ));
+    const leftSet = new Set(lexicalTokens(params.narrativeText));
+    const rightTokens = lexicalTokens(params.playerAction);
+    const lexicalOverlap = leftSet.size && rightTokens.length
+      ? rightTokens.filter((token) => leftSet.has(token)).length / Math.min(leftSet.size, rightTokens.length, 12)
+      : 0;
+    const actionAnchor = lexicalOverlap >= 0.08 ||
+      (params.actionResolution.targetEntityIds || []).some((id) => {
+        const entity = params.situation.nearbyEntities.find((item) => item.id === id);
+        return Boolean(entity?.name && params.narrativeText.toLowerCase().includes(entity.name.toLowerCase()));
+      });
+    const consequenceText = [
+      params.actionResolution.actualEffect,
+      ...(params.actionResolution.physicalConsequences || []),
+      ...(params.actionResolution.playerVisibleConsequences || []),
+    ].join(' ');
+    const consequenceVerbOverlap = /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(params.narrativeText) &&
+      /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(consequenceText);
+    const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled)\b/i.test(params.narrativeText);
+    const requiredConsequences = Array.from(new Map(
+      [
+        ...(params.actionResolution.physicalConsequences || []),
+        ...(params.actionResolution.playerVisibleConsequences || []),
+      ]
+        .map((value) => String(value || '').trim())
+        .filter((value) => Boolean(value) && !/^the character is now canonically positioned\b/i.test(value))
+        .map((value) => [value.toLocaleLowerCase(), value] as const),
+    ).values());
+    const groups: Record<string, string[]> = {
+      reaction: ['react','reacts','reacted','reaction','turn','turns','turned','look','looks','looked','glance','glances','glanced','lift','lifts','lifted','raise','raises','raised','notice','notices','noticed','attention','draw','draws','drew','catch','catches','caught','snap','snaps','snapped','pause','pauses','paused','freeze','freezes','froze','frozen','stop','stops','stopped','shift','shifts','shifted','face','faces','faced','peer','peers','peered','startle','startles','startled','stiffen','stiffens','stiffened','flinch','flinches','flinched','recoil','recoils','recoiled'],
+      impact: ['strike','strikes','struck','hit','hits','impact','clang','clangs','clanged','collide','collides','collided','slam','slams','slammed'],
+      fire: ['fire','fires','fired','flame','flames','flaming','ignite','ignites','ignited','burn','burns','burned','burning','alight'],
+      knockdown: ['knock','knocks','knocked','prone','fall','falls','fell','fallen','stagger','staggers','staggered','collapse','collapses','collapsed'],
+    };
+    const actionTerms = new Set([
+      'reaction','impact','fire','knockdown','strike','lodge','embed','pierce','split','splinter','break','open','close','damage','restore','heal',
+      'move','shift','change','stop','turn','retreat','approach','notice','react','draw','catch','raise','lower','look','glance','freeze','stiffen',
+      'step','burn','ignite','knock','stagger','collapse','engulf','set','alight','fall','lift','pause','face','peer','startle','recoil','grind','drop',
+    ]);
+    const normalizeToken = (token: string) => {
+      for (const [group, members] of Object.entries(groups)) {
+        if (members.includes(token)) return group;
+      }
+      if (token.length > 5 && token.endsWith('ing')) return token.slice(0, -3);
+      if (token.length > 4 && token.endsWith('ed')) return token.slice(0, -2);
+      if (token.length > 4 && token.endsWith('s')) return token.slice(0, -1);
+      return token;
+    };
+    const orderedTokens = (value: string) => String(value || '')
+      .toLowerCase()
+      .split(/[^a-z0-9'-]+/)
+      .map((v) => v.replace(/^['-]+|['-]+$/g, ''))
+      .filter((v) => v.length >= 4 && !stop.has(v))
+      .map(normalizeToken);
+    const isConsequenceCovered = (consequence: string): boolean => {
+      const requiredOrdered = orderedTokens(consequence);
+      const observedOrdered = orderedTokens(params.narrativeText);
+      const requiredAnchors = Array.from(new Set(requiredOrdered));
+      const observed = new Set(observedOrdered);
+      const matchedAnchors = requiredAnchors.filter((token) => observed.has(token));
+      if (requiredAnchors.length === 0) return true;
+      const requiredActionAnchors = Array.from(new Set(requiredOrdered.filter((token) => actionTerms.has(token))));
+      if (requiredActionAnchors.some((token) => !observed.has(token))) return false;
+      const nounTokens = requiredOrdered.filter((token) => !actionTerms.has(token));
+      const nounBigrams = requiredOrdered.slice(0, -1)
+        .map((token, index) => [token, requiredOrdered[index + 1]] as const)
+        .filter(([left, right]) => !actionTerms.has(left) && !actionTerms.has(right) && left.length >= 4 && right.length >= 4)
+        .map(([left, right]) => left + ' ' + right);
+      const observedBigrams = new Set(observedOrdered.slice(0, -1).map((token, index) => token + ' ' + observedOrdered[index + 1]));
+      const hasNounAnchor = nounBigrams.length
+        ? nounBigrams.some((phrase) => observedBigrams.has(phrase))
+        : nounTokens.some((token) => observed.has(token));
+      const minimumMatches = requiredAnchors.length <= 2 ? requiredAnchors.length : 2;
+      const coverage = matchedAnchors.length / requiredAnchors.length;
+      return hasNounAnchor && matchedAnchors.length >= minimumMatches && coverage >= 0.2;
+    };
+    const enforcePerEffectCoverage = params.actionResolution.resolutionMethod !== 'CHECK';
+    const missingConsequences = enforcePerEffectCoverage
+      ? requiredConsequences.filter((consequence) => !isConsequenceCovered(consequence)).slice(0, 8)
+      : [];
+    const hasConsequenceBeat = enforcePerEffectCoverage && requiredConsequences.length > 0
+      ? missingConsequences.length === 0
+      : consequenceSignal || consequenceVerbOverlap;
+    const valid = actionAnchor && hasConsequenceBeat;
+    const reason = valid
+      ? undefined
+      : missingConsequences.length
+        ? 'Narration omits required canonical consequence(s): ' + missingConsequences.join(' | ')
+        : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
+    return { valid, reason, missingConsequences };
+  }
+
   public validateNarrativeCandidate(params: {
     storyId: string;
     playerAction: string;
@@ -7936,21 +8065,28 @@ export class MultiModelOrchestrator {
     situation: CurrentSituation;
     plan: EphemeralNarrativePlan;
     storyBeat?: StoryBeatContract;
+    actionResolution?: ActionResolution;
     turnPackage: StructuredTurnPackage;
     repository?: WorldRepository;
     /** Exact pacing contract used for the primary candidate, reused by repair and final review. */
     pacingContract?: NarrativePacingContract;
+    voice?: NarratorVoiceState;
+    noveltyState?: NarrativeNoveltyState;
+    previousNarrations?: string[];
+    enforceActionFidelity?: boolean;
   }): { valid: boolean; errorReason?: string } {
     const narration = (params.turnPackage.narrative || []).join(' ').trim();
     if (!narration) {
       return { valid: false, errorReason: 'Final narrative candidate is empty.' };
     }
 
+    const previousNarrations = params.previousNarrations || (params.situation.recentTurns || [])
+      .map((turn) => String(turn.narration || ''))
+      .filter(Boolean);
+
     const freshness = this.validateNarrativeFreshnessContinuity(
       narration,
-      (params.situation.recentTurns || [])
-        .map((turn) => String(turn.narration || ''))
-        .filter(Boolean),
+      previousNarrations,
     );
     if (!freshness.valid) {
       return { valid: false, errorReason: freshness.errorReason || 'Final narrative candidate failed freshness validation.' };
@@ -7960,6 +8096,7 @@ export class MultiModelOrchestrator {
     const pacingContract = params.pacingContract || NarrativePacingEngine.resolve({
       situation: params.situation,
       intent: params.intent,
+      actionResolution: params.actionResolution,
     });
     const presentation = this.validateNarrativePresentation({
       narration,
@@ -7981,6 +8118,7 @@ export class MultiModelOrchestrator {
       situation: params.situation,
       plan: params.plan,
       turnPackage: params.turnPackage,
+      actionResolution: params.actionResolution,
     });
     if (semanticReview.decision !== 'ACCEPT') {
       const details = [
@@ -7996,6 +8134,38 @@ export class MultiModelOrchestrator {
     const storyBeat = this.validateNarrativeStoryBeat(narration, params.storyBeat);
     if (!storyBeat.valid) {
       return { valid: false, errorReason: storyBeat.errorReason || 'Final narrative candidate failed StoryBeat validation.' };
+    }
+
+    if (params.enforceActionFidelity && params.actionResolution) {
+      const actionFidelity = this.evaluateActionConsequenceFidelity({
+        narrativeText: narration,
+        playerAction: params.playerAction,
+        actionResolution: params.actionResolution,
+        situation: params.situation,
+        intent: params.intent,
+      });
+      if (!actionFidelity.valid) {
+        return { valid: false, errorReason: actionFidelity.reason || 'Final narrative candidate failed action-consequence fidelity validation.' };
+      }
+    }
+
+    if (params.voice) {
+      const literaryReview = LiteraryNarrativeReview.review({
+        intent: params.intent,
+        situation: params.situation,
+        plan: params.plan,
+        turnPackage: params.turnPackage,
+        voice: params.voice,
+        noveltyState: params.noveltyState,
+        previousNarrations,
+      });
+      const highSeverityLiteraryIssue = literaryReview.issues.find((issue) => issue.severity === 'HIGH');
+      if (highSeverityLiteraryIssue) {
+        return {
+          valid: false,
+          errorReason: 'Final narrative candidate failed literary voice review: ' + highSeverityLiteraryIssue.message,
+        };
+      }
     }
 
     return { valid: true };
@@ -8027,6 +8197,7 @@ export class MultiModelOrchestrator {
     narratorVoiceControls?: NarratorVoiceControls;
     /** Optional recorder-only sink; see NarrativeOnlyForensicSink. */
     forensicSink?: NarrativeOnlyForensicSink;
+    repository?: WorldRepository;
   }): Promise<{
     success: boolean;
     turnPackage?: StructuredTurnPackage;
@@ -8049,6 +8220,10 @@ export class MultiModelOrchestrator {
     narrativePacingContract?: NarrativePacingContract;
     researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
     narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
+    narrativeReview?: NarrativeReview;
+    literaryReview?: LiteraryReview;
+    actionFidelity?: { valid: boolean; reason?: string; missingConsequences: string[] };
+    validationRejected?: boolean;
     narrativeQualityAudit?: {
       firstDecision: NarrativeRichnessDecision | undefined;
       firstScore: number | undefined;
@@ -8083,7 +8258,7 @@ export class MultiModelOrchestrator {
     const turnAiCallBudget = new AiTurnCallBudget();
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
-    const worldRepo = this.getWorldRepository();
+    const worldRepo = params.repository || this.getWorldRepository();
     if (!worldRepo.getStoryRun(storyId)) {
       worldRepo.seedStory(storyId);
     }
@@ -8651,6 +8826,7 @@ export class MultiModelOrchestrator {
       environmentExcess,
       environmentSentenceCounts.environment,
     );
+    const previousNarrationsForReview = canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean);
     const initialStoryBeatContinuity = params.actionResolution
       ? this.validateNarrativeStoryBeat(finalNarrationText, storyBeat)
       : { valid: true as const };
@@ -8659,14 +8835,40 @@ export class MultiModelOrchestrator {
       situation: currentSituation,
       plan: richnessEvaluationPlan,
       turnPackage: validation.turnPackage,
+      actionResolution: params.actionResolution,
     });
+    const initialLiteraryReview = LiteraryNarrativeReview.review({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: richnessEvaluationPlan,
+      turnPackage: validation.turnPackage,
+      voice: narratorVoiceState,
+      noveltyState: narrativeNoveltyState,
+      previousNarrations: previousNarrationsForReview,
+    });
+    const initialActionFidelity = params.actionResolution
+      ? this.evaluateActionConsequenceFidelity({
+          narrativeText: finalNarrationText,
+          playerAction,
+          actionResolution: params.actionResolution,
+          situation: currentSituation,
+          intent: playerIntent,
+        })
+      : { valid: true, missingConsequences: [] as string[] };
+    const hasMissingVisibleConsequence = initialSemanticReview.violations.some(
+      (violation) => violation.code === 'MISSING_VISIBLE_CONSEQUENCE',
+    );
+    const effectiveMaxRetries =
+      params.maxRetries ?? ((hasMissingVisibleConsequence || (params.actionResolution !== undefined && !initialActionFidelity.valid)) ? 1 : 0);
     const qualityGateTriggersRewrite =
       environmentExcess ||
       finalNarrativeRichnessEvaluation.decision === 'IMPROVE' ||
       initialSemanticReview.decision !== 'ACCEPT' ||
+      initialLiteraryReview.decision === 'REWRITE' ||
       (params.actionResolution !== undefined && !finalActionModeContinuity.valid) ||
-      (params.actionResolution !== undefined && !initialStoryBeatContinuity.valid);
-    if (qualityGateTriggersRewrite && (params.maxRetries ?? 0) >= 1) {
+      (params.actionResolution !== undefined && !initialStoryBeatContinuity.valid) ||
+      (params.actionResolution !== undefined && !initialActionFidelity.valid);
+    if (qualityGateTriggersRewrite && effectiveMaxRetries >= 1) {
       const rewriteBudget = turnAiCallBudget.beginTask('narrative.review');
       if (rewriteBudget.allowed) {
         turnAiCallBudget.recordProviderAttempt('narrative.review');
@@ -8694,8 +8896,25 @@ export class MultiModelOrchestrator {
           'CURRENT STORY BEAT CONTRACT (derived from canonical resolution; communicate it without inventing beyond it):',
           StoryBeatDirector.toPromptContext(storyBeat),
           '',
+          ...(params.actionResolution
+            ? [
+                'CANONICAL ACTION RESOLUTION CONSEQUENCES (must be depicted in natural fiction without raw engine labels or dice numbers):',
+                JSON.stringify({
+                  actualEffect: params.actionResolution.actualEffect,
+                  physicalConsequences: params.actionResolution.physicalConsequences,
+                  playerVisibleConsequences: params.actionResolution.playerVisibleConsequences,
+                }),
+                '',
+              ]
+            : []),
           'PRESENTATION QUALITY REVIEW:',
           NarrativeRichnessEvaluator.buildRewriteGuidance(finalNarrativeRichnessEvaluation),
+          initialLiteraryReview.issues.length > 0
+            ? [
+                'LITERARY & VOICE REVIEW ISSUES TO FIX:',
+                ...initialLiteraryReview.issues.map((issue) => `- [${issue.code}] ${issue.message}${issue.evidence ? ' Evidence: ' + issue.evidence : ''}`),
+              ].join('\n')
+            : '',
           initialSemanticReview.decision !== 'ACCEPT'
             ? [
                 'SEMANTIC REVIEW ISSUES TO FIX:',
@@ -8705,6 +8924,13 @@ export class MultiModelOrchestrator {
                   ? [`- Remove unsupported concrete claims not in canonical scene: ${initialSemanticReview.unsupportedClaims.join(', ')}`]
                   : []),
               ].join('\n')
+            : '',
+          !initialActionFidelity.valid
+            ? [
+                'ACTION-CONSEQUENCE FIDELITY ISSUES TO FIX:',
+                initialActionFidelity.reason ? `- ${initialActionFidelity.reason}` : '',
+                ...initialActionFidelity.missingConsequences.map((consequence) => `- Required canonical consequence to depict: ${consequence}`),
+              ].filter(Boolean).join('\n')
             : '',
           environmentExcess
             ? 'The original narration spends too many sentences on environment-only description. Cut environment-only exposition to at most ' + NARRATIVE_ENV_EXCESS_SENTENCE_BUDGET + ' sentences. What is happening, who is acting, what the player can observe changing, and any immediate stakes take priority over atmosphere. The protagonist must appear as an actor in the scene, reacting, observing, or preparing a next observable step — not as a camera.'
@@ -8744,9 +8970,14 @@ export class MultiModelOrchestrator {
                 situation: currentSituation,
                 plan: richnessEvaluationPlan,
                 storyBeat,
+                actionResolution: params.actionResolution,
                 turnPackage: rewriteValidation.turnPackage,
                 repository: worldRepo,
                 pacingContract: narrativePacingContract,
+                voice: narratorVoiceState,
+                noveltyState: narrativeNoveltyState,
+                previousNarrations: previousNarrationsForReview,
+                enforceActionFidelity: Boolean(params.actionResolution),
               });
               if (!rewriteFinalValidation.valid) {
                 return {
@@ -8768,8 +8999,14 @@ export class MultiModelOrchestrator {
                 situation: currentSituation,
                 plan: richnessEvaluationPlan,
                 storyBeat,
+                actionResolution: params.actionResolution,
                 turnPackage: rewriteValidation.turnPackage,
                 repository: worldRepo,
+                pacingContract: narrativePacingContract,
+                voice: narratorVoiceState,
+                noveltyState: narrativeNoveltyState,
+                previousNarrations: previousNarrationsForReview,
+                enforceActionFidelity: Boolean(params.actionResolution),
               })
             : {
                 valid: false,
@@ -8784,7 +9021,7 @@ export class MultiModelOrchestrator {
               situation: currentSituation,
               plan: richnessEvaluationPlan,
               turnPackage: rewriteValidation.turnPackage,
-              previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
+              previousNarrations: previousNarrationsForReview,
             });
             const rewriteEnvironmentEmissions = countNarrativeEnvironmentSentences(rewriteNarration, currentSituation.player.name).environment;
             const rewriteEnvironmentExcess = detectNarrativeEnvironmentExcess(
@@ -8797,8 +9034,9 @@ export class MultiModelOrchestrator {
               : { valid: true as const };
             const originalNeedsMandatoryFix =
               initialSemanticReview.decision !== 'ACCEPT' ||
+              initialLiteraryReview.decision === 'REWRITE' ||
               environmentExcess ||
-              (params.actionResolution !== undefined && (!finalActionModeContinuity.valid || !initialStoryBeatContinuity.valid));
+              (params.actionResolution !== undefined && (!finalActionModeContinuity.valid || !initialStoryBeatContinuity.valid || !initialActionFidelity.valid));
             if (
               rewriteNarration.trim().length > 0 &&
               !rewriteEnvironmentExcess &&
@@ -8847,7 +9085,7 @@ export class MultiModelOrchestrator {
       } else {
         narrativeQualityAudit.rewriteSkippedReason = rewriteBudget.reason || 'Narrative review call budget exhausted.';
       }
-    } else if (qualityGateTriggersRewrite && (params.maxRetries ?? 0) < 1) {
+    } else if (qualityGateTriggersRewrite && effectiveMaxRetries < 1) {
       narrativeQualityAudit.rewriteSkippedReason = 'Generation retry budget is zero; rewrite not attempted.';
     } else if (qualityGateTriggersRewrite) {
       narrativeQualityAudit.rewriteSkippedReason = 'The narrative review task has already exhausted its per-turn call budget; rewrite was skipped.';
@@ -8873,6 +9111,7 @@ export class MultiModelOrchestrator {
       narrativeQualityAudit.rewriteErrorReason = narrativeQualityAudit.rewriteErrorReason || environmentFailure;
       return {
         success: false,
+        validationRejected: true,
         providerId: generated.providerId,
         modelId: generated.modelId,
         source: generated.source,
@@ -8899,6 +9138,7 @@ export class MultiModelOrchestrator {
     if (!finalTemporalContinuity.valid) {
       return {
         success: false,
+        validationRejected: true,
         providerId: generated.providerId,
         modelId: generated.modelId,
         source: generated.source,
@@ -8923,6 +9163,7 @@ export class MultiModelOrchestrator {
     if (!narrativePlan) {
       return {
         success: false,
+        validationRejected: true,
         providerId: generated.providerId,
         modelId: generated.modelId,
         source: generated.source,
@@ -8938,6 +9179,7 @@ export class MultiModelOrchestrator {
       situation: currentSituation,
       plan: richnessEvaluationPlan,
       turnPackage: validation.turnPackage,
+      actionResolution: params.actionResolution,
     });
     if (
       preFinalSemanticReview.decision === 'REWRITE' &&
@@ -8984,9 +9226,14 @@ export class MultiModelOrchestrator {
           situation: currentSituation,
           plan: richnessEvaluationPlan,
           storyBeat,
+          actionResolution: params.actionResolution,
           turnPackage: candidateTurnPackage,
           repository: worldRepo,
           pacingContract: narrativePacingContract,
+          voice: narratorVoiceState,
+          noveltyState: narrativeNoveltyState,
+          previousNarrations: previousNarrationsForReview,
+          enforceActionFidelity: Boolean(params.actionResolution),
         });
         if (candidateCheck.valid) {
           validation.turnPackage = candidateTurnPackage;
@@ -8995,6 +9242,35 @@ export class MultiModelOrchestrator {
       }
     }
 
+    const finalSemanticReview = SemanticNarrativeReview.review({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: richnessEvaluationPlan,
+      turnPackage: validation.turnPackage,
+      actionResolution: params.actionResolution,
+    });
+    const finalLiteraryReview = LiteraryNarrativeReview.review({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: richnessEvaluationPlan,
+      turnPackage: validation.turnPackage,
+      voice: narratorVoiceState,
+      noveltyState: narrativeNoveltyState,
+      previousNarrations: previousNarrationsForReview,
+    });
+    const finalActionFidelity = params.actionResolution
+      ? this.evaluateActionConsequenceFidelity({
+          narrativeText: finalNarrationText,
+          playerAction,
+          actionResolution: params.actionResolution,
+          situation: currentSituation,
+          intent: playerIntent,
+        })
+      : { valid: true, missingConsequences: [] as string[] };
+    (narrativeQualityAudit as any).literaryReview = finalLiteraryReview;
+    (narrativeQualityAudit as any).semanticReview = finalSemanticReview;
+    (narrativeQualityAudit as any).actionFidelity = finalActionFidelity;
+
     const finalCandidateValidation = this.validateNarrativeCandidate({
       storyId,
       playerAction,
@@ -9002,24 +9278,34 @@ export class MultiModelOrchestrator {
       situation: currentSituation,
       plan: richnessEvaluationPlan,
       storyBeat,
+      actionResolution: params.actionResolution,
       turnPackage: validation.turnPackage,
       repository: worldRepo,
       pacingContract: narrativePacingContract,
+      voice: narratorVoiceState,
+      noveltyState: narrativeNoveltyState,
+      previousNarrations: previousNarrationsForReview,
+      enforceActionFidelity: Boolean(params.actionResolution),
     });
     if (!finalCandidateValidation.valid) {
       return {
         success: false,
+        validationRejected: true,
         providerId: generated.providerId,
         modelId: generated.modelId,
         source: generated.source,
         fallbackReason: finalCandidateValidation.errorReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
-        narrativePlan,
+        narrativePlan: richnessEvaluationPlan,
+        narrativePacingContract,
         storyBeat,
         researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
         narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
+        narrativeReview: finalSemanticReview,
+        literaryReview: finalLiteraryReview,
+        actionFidelity: finalActionFidelity,
         narrativeQualityAudit,
         error: finalCandidateValidation.errorReason || 'Narration failed complete final-candidate validation.',
       };
@@ -9042,6 +9328,9 @@ export class MultiModelOrchestrator {
       researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
       contextAudit,
       narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
+      narrativeReview: finalSemanticReview,
+      literaryReview: finalLiteraryReview,
+      actionFidelity: finalActionFidelity,
       narrativeQualityAudit,
       storyBeat,
     };
@@ -9624,8 +9913,9 @@ export class MultiModelOrchestrator {
                 turnPackage: reviewedTurnPackage,
                 previousNarrations,
               });
-              const needsLiteraryRewrite = literary.decision === 'REWRITE';
+              const needsLiteraryRewrite = literary.decision === 'REWRITE' && !semanticRewriteUsed;
               if (needsLiteraryRewrite) {
+                semanticRewriteUsed = true;
                 const literaryBudget = turnAiCallBudget.beginTask('narrative.review');
                 if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary/richness review call budget exhausted.');
                 turnAiCallBudget.recordProviderAttempt('narrative.review');

@@ -2051,3 +2051,752 @@ test('World Director staged commit remains committed when post-rename snapshot p
   }
 });
 
+test('World Director Phase 6: multi-effect combat spell projects damage, conditions, forced movement, collision, and concentration into ActionResolution', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { CombatPlayerActionService } = await import('../server/domain/combatPlayerActionService');
+
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'wd_phase6_multi_effect_spell';
+  repository.seedStory(storyId);
+
+  const actorId = repository.getPlayerLifecycle(storyId)!.actorId;
+  const combat = repository.getCombatEngine(storyId);
+  combat.clear();
+  combat.addParticipant({
+    id: actorId,
+    name: 'Aelion',
+    team: 'player_allies',
+    x: 0,
+    y: 0,
+    initiative: 25,
+    armorClass: 14,
+    hpCurrent: 28,
+    hpMax: 28,
+    speedCells: 6,
+    attackBonus: 6,
+    damageFormula: '1d8+3',
+    conditions: [],
+    isDead: false,
+    spellAttackBonus: 8,
+    spellSaveDc: 16,
+  });
+  combat.addParticipant({
+    id: 'enemy_sentry',
+    name: 'Sentry',
+    team: 'enemies',
+    x: 2,
+    y: 0,
+    initiative: 10,
+    armorClass: 11,
+    hpCurrent: 24,
+    hpMax: 24,
+    speedCells: 6,
+    attackBonus: 4,
+    damageFormula: '1d6+2',
+    conditions: ['blessed'],
+    isDead: false,
+  });
+  combat.addObstacle({ x: 4, y: 0, isImpassable: true });
+  combat.rollInitiative();
+
+  const spellRuntime = combat.getSpellRuntime();
+  spellRuntime.initializeSlots(actorId, { 1: { current: 2, max: 2 } });
+  spellRuntime.learnSpell(actorId, 'magic_missile');
+  spellRuntime.prepareSpell(actorId, 'magic_missile');
+
+  let executeSpellCalls = 0;
+  const originalExecuteSpellCast = combat.executeSpellCast.bind(combat);
+  (combat as any).executeSpellCast = (req: any) => {
+    executeSpellCalls += 1;
+    const base = originalExecuteSpellCast(req);
+    combat.updateParticipant('enemy_sentry', {
+      hpCurrent: 15,
+      x: 3,
+      y: 0,
+      conditions: ['prone'],
+    });
+    return {
+      ...base,
+      success: true,
+      result: {
+        ...(base.result || {}),
+        damageInflicted: 7,
+        conditionsApplied: ['prone'],
+        conditionsRemoved: ['blessed'],
+        movementApplied: {
+          from: { x: 2, y: 0 },
+          to: { x: 3, y: 0 },
+        },
+        movementCollision: {
+          moved: true,
+          actualDistanceCells: 1,
+          from: { x: 2, y: 0 },
+          to: { x: 3, y: 0 },
+          collisions: [
+            {
+              kind: 'OBSTACLE',
+              blockerName: 'stone pillar',
+              damageToMover: 2,
+            },
+          ],
+        },
+        targetConcentrationCheck: {
+          concentrationBroken: true,
+          spellName: 'Shield of Faith',
+        },
+      },
+    };
+  };
+
+  let capturedActionResolution: any;
+  const orchestrator = repository.getAiOrchestrator();
+  const originalGenerateNarrativeOnly = orchestrator.generateNarrativeOnly.bind(orchestrator);
+  (orchestrator as any).generateNarrativeOnly = async (params: any) => {
+    capturedActionResolution = params.actionResolution;
+    return {
+      success: true,
+      source: 'AI_PRIMARY',
+      modelId: 'fixture-primary',
+      turnPackage: {
+        narrative: [
+          'You unleash Magic Missile with concussive force that blasts the Sentry across the stones, slamming him into the stone pillar and knocking him prone while shattering his concentration and stripping away his blessing.',
+        ],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+      },
+    };
+  };
+
+  try {
+    const service = new CombatPlayerActionService();
+    const res = await service.resolve({
+      storyId,
+      actorId,
+      actionText: 'I cast Magic Missile at the Sentry',
+      repository,
+    });
+
+    assert.equal(res.success, true);
+    assert.equal(executeSpellCalls, 1, 'canonical spell execution must run once');
+    assert.ok(capturedActionResolution, 'CombatPlayerActionService must pass ActionResolution to narration');
+
+    const visible = capturedActionResolution.playerVisibleConsequences.join(' | ');
+    assert.match(visible, /Damage: 7/i);
+    assert.match(visible, /Applied condition: prone/i);
+    assert.match(visible, /Removed condition: blessed/i);
+    assert.match(visible, /forced to move 5 feet/i);
+    assert.match(visible, /collided with stone pillar for 2 collision damage/i);
+    assert.match(visible, /lost concentration on Shield of Faith/i);
+
+    const changeKinds = capturedActionResolution.canonicalStateChanges.map((entry: any) => entry.kind);
+    assert.ok(changeKinds.includes('COMBAT_DAMAGE'));
+    assert.ok(changeKinds.includes('COMBAT_CONDITION_APPLIED'));
+    assert.ok(changeKinds.includes('COMBAT_CONDITION_REMOVED'));
+    assert.ok(changeKinds.includes('COMBAT_FORCED_MOVEMENT'));
+    assert.ok(changeKinds.includes('COMBAT_COLLISION_DAMAGE'));
+    assert.ok(changeKinds.includes('COMBAT_CONCENTRATION'));
+  } finally {
+    (orchestrator as any).generateNarrativeOnly = originalGenerateNarrativeOnly;
+  }
+});
+
+test('World Director Phase 6: multi-effect combat capability projects damage, applied condition, forced movement, and obstacle collision into ActionResolution', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { CombatPlayerActionService } = await import('../server/domain/combatPlayerActionService');
+
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'wd_phase6_multi_effect_capability';
+  repository.seedStory(storyId);
+
+  const actorId = repository.getPlayerLifecycle(storyId)!.actorId;
+  const capabilityEngine = repository.getCapabilityEngine(storyId);
+  capabilityEngine.registerCapability({
+    id: 'cap_gravity_lance',
+    name: 'Gravity Lance',
+    category: 'Combat',
+    activationMode: 'immediate',
+    powerTier: 'Moderate',
+    baseEnergyCost: 0,
+    baseStrainCost: 0,
+    minVesselCapacityRequired: 0,
+    description: 'Hurls a gravitic lance that damages, pushes, and pins the target.',
+    provenance: 'wd_phase6_test',
+    effectDefinition: {
+      id: 'cap_gravity_lance',
+      name: 'Gravity Lance',
+      resolutionMode: 'SINGLE_ATTACK',
+      scale: 'PERSON',
+      actionCost: 'ACTION',
+      targetingMode: 'ONE_TARGET',
+      attackFormula: '1d20+25',
+      damageFormula: '2d6+4',
+      damageType: 'force',
+      conditionEffects: [
+        {
+          conditionIdOrName: 'Restrained',
+          trigger: 'ON_HIT',
+        },
+      ],
+      forcedMovement: {
+        type: 'PUSH',
+        distanceCells: 3,
+        collision: {
+          damageFormula: '1d4',
+          damageType: 'bludgeoning',
+        },
+      },
+    } as any,
+  });
+  capabilityEngine.acquireSkill(actorId, 'cap_gravity_lance');
+
+  const combat = repository.getCombatEngine(storyId);
+  combat.clear();
+  combat.addParticipant({
+    id: actorId,
+    name: 'Aelion',
+    team: 'player_allies',
+    x: 0,
+    y: 0,
+    initiative: 30,
+    armorClass: 15,
+    hpCurrent: 30,
+    hpMax: 30,
+    speedCells: 6,
+    attackBonus: 12,
+    damageFormula: '1d8+4',
+    conditions: [],
+    isDead: false,
+  });
+  combat.addParticipant({
+    id: 'enemy_raider',
+    name: 'Raider',
+    team: 'enemies',
+    x: 1,
+    y: 0,
+    initiative: 10,
+    armorClass: 10,
+    hpCurrent: 40,
+    hpMax: 40,
+    speedCells: 6,
+    attackBonus: 3,
+    damageFormula: '1d6+1',
+    conditions: [],
+    isDead: false,
+  });
+  combat.addObstacle({ x: 3, y: 0, isImpassable: true });
+  combat.rollInitiative();
+
+  let capturedActionResolution: any;
+  const orchestrator = repository.getAiOrchestrator();
+  const originalGenerateNarrativeOnly = orchestrator.generateNarrativeOnly.bind(orchestrator);
+  (orchestrator as any).generateNarrativeOnly = async (params: any) => {
+    capturedActionResolution = params.actionResolution;
+    return {
+      success: true,
+      source: 'AI_PRIMARY',
+      modelId: 'fixture-primary',
+      turnPackage: {
+        narrative: [
+          'Your Gravity Lance strikes the Raider square in the chest, hurling him backward into the stone barrier and pinning him in place, restrained by crushing force.',
+        ],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+      },
+    };
+  };
+
+  try {
+    const service = new CombatPlayerActionService();
+    const res = await service.resolve({
+      storyId,
+      actorId,
+      actionText: 'I use Gravity Lance on the Raider',
+      repository,
+    });
+
+    assert.equal(res.success, true);
+    assert.ok(capturedActionResolution, 'capability combat action must produce ActionResolution');
+    const visible = capturedActionResolution.playerVisibleConsequences.join(' | ');
+    assert.match(visible, /Damage: \d+/i);
+    assert.match(visible, /Applied condition: Restrained/i);
+    assert.match(visible, /forced to move/i);
+    assert.match(visible, /collided/i);
+
+    const changeKinds = capturedActionResolution.canonicalStateChanges.map((entry: any) => entry.kind);
+    assert.ok(changeKinds.includes('COMBAT_DAMAGE'));
+    assert.ok(changeKinds.includes('COMBAT_CONDITION_APPLIED'));
+    assert.ok(changeKinds.includes('COMBAT_FORCED_MOVEMENT'));
+  } finally {
+    (orchestrator as any).generateNarrativeOnly = originalGenerateNarrativeOnly;
+  }
+});
+
+test('World Director Phase 6: story-action skill check with damage and applied condition projects all consequences into ActionResolution', async () => {
+  const { worldRepository } = await import('../server/repositories/worldRepository');
+  const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
+
+  const storyId = 'wd_phase6_story_action_consequences_' + Date.now();
+  worldRepository.seedStory(storyId);
+
+  const location = worldRepository.getGeographyGraph(storyId).getAllNodes()[0]!;
+  const run = worldRepository.getStoryRun(storyId)!;
+  (run as any).storyCheckChallenges = [
+    {
+      id: 'challenge_unstable_machinery',
+      label: 'Unstable Conduit',
+      keywords: ['wrench', 'conduit'],
+      difficultyClass: 35,
+      ability: 'Strength',
+      skill: 'Athletics',
+      reason: 'The pressurized conduit lashes back violently when wrenched.',
+      triggerReason: 'Forcing the pressurized conduit risks an arc discharge.',
+      onFailure: {
+        summary: 'The pressurized conduit discharges a violent shock that knocks you off balance.',
+        damageFormula: '1d2+3',
+        damageType: 'lightning',
+        conditions: [{ definitionIdOrName: 'Prone' }],
+      },
+    },
+  ];
+  worldRepository.saveStoryRun(run);
+
+  const orchestrator = worldRepository.getAiOrchestrator();
+  const originalGenerateNarrativeOnly = orchestrator.generateNarrativeOnly.bind(orchestrator);
+  let capturedActionResolution: any;
+
+  (orchestrator as any).generateNarrativeOnly = async (params: any) => {
+    capturedActionResolution = params.actionResolution;
+    return {
+      success: true,
+      source: 'AI_PRIMARY',
+      modelId: 'fixture-primary',
+      turnPackage: {
+        narrative: [
+          `You wrench at the unstable conduit in ${location.name}, but a violent arc discharge blasts you backward, leaving you bruised and knocked prone on the flagstones.`,
+        ],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+      },
+    };
+  };
+
+  try {
+    const result = await serverMockAuthority.processCustomAction(
+      {
+        type: 'CUSTOM_ACTION',
+        storyId,
+        actionText: 'I wrench the unstable conduit open with my bare hands.',
+      } as any,
+      undefined,
+      { bypassCapabilityAdvisor: true },
+    );
+
+    assert.equal(result.success, true);
+    assert.ok(capturedActionResolution, 'story action must pass ActionResolution to generateNarrativeOnly');
+    const visible = capturedActionResolution.playerVisibleConsequences.join(' | ');
+    assert.match(visible, /Suffered \d+ lightning damage/i);
+    assert.match(visible, /Applied condition: Prone/i);
+
+    const changeKinds = capturedActionResolution.canonicalStateChanges.map((entry: any) => entry.kind);
+    assert.ok(changeKinds.includes('DAMAGE'));
+    assert.ok(changeKinds.includes('CONDITION_APPLIED'));
+  } finally {
+    (orchestrator as any).generateNarrativeOnly = originalGenerateNarrativeOnly;
+  }
+});
+
+test('World Director Phase 6: SemanticNarrativeReview detects omitted visible consequences and generateNarrativeOnly repairs via single rewrite without re-executing canonical mechanics', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { CombatPlayerActionService } = await import('../server/domain/combatPlayerActionService');
+  const { SemanticNarrativeReview } = await import('../server/domain/semanticNarrativeReview');
+
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'wd_phase6_single_rewrite_no_reexecution';
+  repository.seedStory(storyId);
+
+  const actorId = repository.getPlayerLifecycle(storyId)!.actorId;
+  const capabilityEngine = repository.getCapabilityEngine(storyId);
+  capabilityEngine.registerCapability({
+    id: 'cap_shockwave_palm',
+    name: 'Shockwave Palm',
+    category: 'Combat',
+    activationMode: 'immediate',
+    powerTier: 'Moderate',
+    baseEnergyCost: 0,
+    baseStrainCost: 0,
+    minVesselCapacityRequired: 0,
+    description: 'Strikes a target with concussive force, knocking them prone and shoving them backward.',
+    provenance: 'wd_phase6_test',
+    effectDefinition: {
+      id: 'cap_shockwave_palm',
+      name: 'Shockwave Palm',
+      resolutionMode: 'SINGLE_ATTACK',
+      scale: 'PERSON',
+      actionCost: 'ACTION',
+      targetingMode: 'ONE_TARGET',
+      attackFormula: '1d20+25',
+      damageFormula: '1d8+4',
+      damageType: 'bludgeoning',
+      conditionEffects: [
+        {
+          conditionIdOrName: 'Prone',
+          trigger: 'ON_HIT',
+        },
+      ],
+      forcedMovement: {
+        type: 'PUSH',
+        distanceCells: 2,
+        collision: {
+          damageFormula: '1d4',
+          damageType: 'bludgeoning',
+        },
+      },
+    } as any,
+  });
+  capabilityEngine.acquireSkill(actorId, 'cap_shockwave_palm');
+
+  const location = repository.getGeographyGraph(storyId).getAllNodes()[0]!;
+  const combat = repository.getCombatEngine(storyId);
+  combat.clear();
+  combat.addParticipant({
+    id: actorId,
+    name: 'Aelion',
+    team: 'player_allies',
+    x: 0,
+    y: 0,
+    initiative: 30,
+    armorClass: 15,
+    hpCurrent: 30,
+    hpMax: 30,
+    speedCells: 6,
+    attackBonus: 12,
+    damageFormula: '1d8+4',
+    conditions: [],
+    isDead: false,
+  });
+  combat.addParticipant({
+    id: 'enemy_warden',
+    name: 'Warden',
+    team: 'enemies',
+    x: 1,
+    y: 0,
+    initiative: 10,
+    armorClass: 10,
+    hpCurrent: 35,
+    hpMax: 35,
+    speedCells: 6,
+    attackBonus: 3,
+    damageFormula: '1d6+1',
+    conditions: [],
+    isDead: false,
+  });
+  combat.addObstacle({ x: 2, y: 0, isImpassable: true });
+  combat.rollInitiative();
+
+  const orchestrator = repository.getAiOrchestrator();
+  const originalExecuteTaskGeneration = orchestrator.executeTaskGeneration.bind(orchestrator);
+
+  // Incomplete primary candidate: mentions the hit/damage, but omits prone + forced movement/collision.
+  const incompleteNarration = `In ${location.name}, you drive your Shockwave Palm into the Warden's breastplate, bruising his ribs with the impact.`;
+  // Repaired rewrite candidate: depicts the hit/damage, forced movement + collision, and prone state in natural prose.
+  const completeNarration = `In ${location.name}, you drive your Shockwave Palm into the Warden's breastplate, hurling him backward into the stone barrier and knocking him sprawling prone across the floor.`;
+
+  const taskCalls: string[] = [];
+  let capturedReviewPrompt = '';
+  let capturedReviewCheck: { valid: boolean; errorReason?: string } | undefined;
+  (orchestrator as any).executeTaskGeneration = async (taskType: string, prompt: string, _sys: string, options?: any) => {
+    taskCalls.push(taskType);
+    if (taskType === 'narrative.generate') {
+      const text = JSON.stringify({
+        narrative: [incompleteNarration],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+      });
+      if (options?.validateResponse) {
+        const check = options.validateResponse(text);
+        if (!check.valid) throw new Error(check.errorReason);
+      }
+      return {
+        text,
+        providerId: 'fixture-provider',
+        modelId: 'fixture-primary',
+        source: 'AI_PRIMARY',
+      };
+    }
+    if (taskType === 'narrative.review') {
+      capturedReviewPrompt = prompt;
+      const text = JSON.stringify({
+        narrative: [completeNarration],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+      });
+      if (options?.validateResponse) {
+        capturedReviewCheck = options.validateResponse(text);
+      }
+      return {
+        text,
+        providerId: 'fixture-provider',
+        modelId: 'fixture-review',
+        source: 'AI_PRIMARY',
+      };
+    }
+    return originalExecuteTaskGeneration(taskType as any, prompt, _sys, options);
+  };
+
+  try {
+    const service = new CombatPlayerActionService();
+    const result = await service.resolve({
+      storyId,
+      actorId,
+      actionText: 'I strike the Warden with Shockwave Palm',
+      repository,
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(
+      taskCalls.filter((t) => t === 'narrative.generate').length,
+      1,
+      'primary narrative generation must run once',
+    );
+    assert.equal(
+      taskCalls.filter((t) => t === 'narrative.review').length,
+      1,
+      'single rewrite must run once when primary candidate omits resolved consequences',
+    );
+    assert.match(capturedReviewPrompt, /MISSING_VISIBLE_CONSEQUENCE/, 'rewrite prompt must surface the missing visible consequence violation');
+    assert.equal(capturedReviewCheck?.valid, true, `repaired candidate should pass validation: ${capturedReviewCheck?.errorReason || ''}`);
+    assert.equal(result.resolution?.narrativeResponse, completeNarration, 'repaired narration must be returned to the player');
+    assert.equal(result.resolution?.fallbackUsed, false);
+
+    const wardenAfterFirst = combat.getParticipant('enemy_warden')!;
+    assert.ok(wardenAfterFirst.hpCurrent < 35, 'canonical HP deduction must be applied once');
+    assert.ok(
+      wardenAfterFirst.conditions.some((c) => c.toLowerCase() === 'prone'),
+      'canonical prone condition must be applied',
+    );
+    assert.equal(
+      combat.getTurnResources(actorId)?.actionAvailable,
+      false,
+      'canonical action economy must be consumed once',
+    );
+
+    // Direct verification that if the single rewrite ALSO omits the visible consequence,
+    // generateNarrativeOnly rejects the candidate without re-executing canonical combat state.
+    const hpBeforeFailedNarration = wardenAfterFirst.hpCurrent;
+    const eventCountBeforeFailedNarration = combat.getCombatEffectEvents().length;
+    const failTaskCalls: string[] = [];
+    (orchestrator as any).executeTaskGeneration = async (taskType: string, prompt: string, _sys: string, options?: any) => {
+      failTaskCalls.push(taskType);
+      if (taskType === 'narrative.generate' || taskType === 'narrative.review') {
+        const text = JSON.stringify({
+          narrative: [incompleteNarration],
+          dialogue: [],
+          events: [],
+          stateChanges: [],
+          memoryCandidates: [],
+          audioCues: [],
+        });
+        if (options?.validateResponse) {
+          const check = options.validateResponse(text);
+          if (!check.valid) {
+            return {
+              text: '',
+              providerId: 'fixture-provider',
+              modelId: 'fixture-review',
+              source: 'AI_PRIMARY',
+              fallbackReason: check.errorReason,
+            };
+          }
+        }
+        return {
+          text,
+          providerId: 'fixture-provider',
+          modelId: 'fixture-primary',
+          source: 'AI_PRIMARY',
+        };
+      }
+      return originalExecuteTaskGeneration(taskType as any, prompt, _sys, options);
+    };
+
+    const rejectedNarration = await orchestrator.generateNarrativeOnly({
+      storyId,
+      playerAction: 'I strike the Warden with Shockwave Palm',
+      actionResolution: {
+        resolutionId: 'combat_Warden_reject_check',
+        storyId,
+        turnId: 'turn_reject_check',
+        playerAction: 'I strike the Warden with Shockwave Palm',
+        playerIntent: {
+          action: 'Shockwave Palm',
+          interactionMode: 'COMBAT',
+          movementIntent: false,
+          observationIntent: false,
+          speechIntent: false,
+          targetIds: ['enemy_warden'],
+        },
+        attemptedEffect: 'I strike the Warden with Shockwave Palm',
+        targetEntityIds: ['enemy_warden'],
+        resolutionMethod: 'COMBAT',
+        outcomeTier: 'SUCCESS_WITH_COST',
+        actualEffect: result.resolution?.mechanicalSummary || 'Shockwave Palm resolved.',
+        physicalConsequences: ['Applied condition: Prone.', 'Target collided for 2 collision damage.'],
+        playerVisibleConsequences: [
+          'Damage: 8.',
+          'Applied condition: Prone.',
+          'Target was forced to move 5 feet to (1, 0).',
+          'Target collided for 2 collision damage.',
+        ],
+        canonicalStateChanges: [
+          { kind: 'COMBAT_DAMAGE', targetId: 'enemy_warden', value: { damage: 8 } },
+          { kind: 'COMBAT_CONDITION_APPLIED', targetId: 'enemy_warden', value: { condition: 'Prone' } },
+          { kind: 'COMBAT_FORCED_MOVEMENT', targetId: 'enemy_warden', value: { moved: true, collided: true } },
+        ],
+        evidenceIds: [],
+        uncertainty: [],
+        provenance: { source: 'CANONICAL_ENGINE' },
+      },
+      worldRepository: repository,
+      maxRetries: 1,
+    });
+
+    assert.equal(rejectedNarration.success, false, 'narration must be rejected if the single rewrite still omits visible consequences');
+    assert.match(String(rejectedNarration.error || ''), /semantic review|consequence|prone|forced movement|collision/i);
+    assert.equal(
+      failTaskCalls.filter((t) => t === 'narrative.review').length,
+      1,
+      'at most one rewrite attempt may run before rejection',
+    );
+    const wardenAfterRejectedNarration = combat.getParticipant('enemy_warden')!;
+    assert.equal(
+      wardenAfterRejectedNarration.hpCurrent,
+      hpBeforeFailedNarration,
+      'narrative review/rejection must never re-execute or alter canonical combat HP',
+    );
+    assert.equal(
+      combat.getCombatEffectEvents().length,
+      eventCountBeforeFailedNarration,
+      'narrative review/rejection must never emit additional combat effect events',
+    );
+
+    const directReview = SemanticNarrativeReview.review({
+      intent: {
+        action: 'attack',
+        goal: 'strike_target',
+        interactionMode: 'DIRECT_ACTION',
+        speechIntent: false,
+        movementIntent: false,
+        observationIntent: false,
+        explicitTargets: [{ id: 'enemy_warden', name: 'Warden', kind: 'NPC' }],
+        impliedTargets: [],
+        confidence: 0.95,
+        source: 'DETERMINISTIC',
+        originalText: 'I strike the Warden with Shockwave Palm',
+      } as any,
+      situation: {
+        storyId,
+        turnId: 'turn_direct_review',
+        worldId: 'world',
+        worldTime: 'Cycle 1',
+        player: {
+          actorId,
+          name: 'Aelion',
+          locationId: location.id,
+          currentActivity: 'combat',
+          isTraveling: false,
+          isDead: false,
+          isTransformed: false,
+          isPossessed: false,
+          injuries: [],
+        },
+        location: {
+          id: location.id,
+          name: location.name,
+          regionId: location.regionId,
+          description: location.description,
+          ambientSensory: location.ambientSensory || 'Cold air.',
+          connectedLocations: [],
+        },
+        nearbyEntities: [],
+        visibleEvents: [],
+        recentTurns: [],
+        plot: { currentArc: 'COMBAT', summary: 'Combat encounter', recentBeats: [] },
+        openThreads: [],
+        relevantMemories: [],
+        relevantLore: [],
+        playerKnowledge: { viewerActorId: actorId, knownFacts: [] },
+        worldFacts: [],
+        activeConditions: [],
+        availableInteractions: [],
+      } as any,
+      plan: {
+        turnId: 'turn_direct_review',
+        objective: 'Narrate the resolved combat action.',
+        immediateSteps: [],
+        informationToReveal: [],
+        entitiesToReact: [],
+        continuityRequirements: [],
+        forbiddenAssumptions: [],
+        stateEffectsExpected: [],
+      } as any,
+      turnPackage: {
+        narrative: [incompleteNarration],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+      },
+      actionResolution: {
+        resolutionId: 'combat_direct_review',
+        storyId,
+        turnId: 'turn_direct_review',
+        playerAction: 'I strike the Warden with Shockwave Palm',
+        playerIntent: {
+          action: 'Shockwave Palm',
+          interactionMode: 'COMBAT',
+          movementIntent: false,
+          observationIntent: false,
+          speechIntent: false,
+          targetIds: ['enemy_warden'],
+        },
+        attemptedEffect: 'I strike the Warden with Shockwave Palm',
+        targetEntityIds: ['enemy_warden'],
+        resolutionMethod: 'COMBAT',
+        outcomeTier: 'SUCCESS_WITH_COST',
+        actualEffect: 'Shockwave Palm resolved.',
+        physicalConsequences: ['Applied condition: Prone.'],
+        playerVisibleConsequences: [
+          'Damage: 8.',
+          'Applied condition: Prone.',
+          'Target was forced to move 5 feet to (1, 0).',
+          'Target collided for 2 collision damage.',
+        ],
+        canonicalStateChanges: [],
+        evidenceIds: [],
+        uncertainty: [],
+        provenance: { source: 'CANONICAL_ENGINE' },
+      },
+    });
+    assert.equal(directReview.decision, 'REWRITE');
+    assert.ok(directReview.violations.some((v) => v.code === 'MISSING_VISIBLE_CONSEQUENCE'));
+  } finally {
+    (orchestrator as any).executeTaskGeneration = originalExecuteTaskGeneration;
+  }
+});
+
+

@@ -1558,10 +1558,15 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       }
     }
 
+    const rawIdempotencyKey =
+      (req.headers['x-idempotency-key'] as string | undefined) ||
+      (req.body?.idempotencyKey as string | undefined);
     const requestedCommandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/action", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
+      (rawIdempotencyKey
+        ? deterministicId('cmd_route_idem', storyId, '/action', String(rawIdempotencyKey))
+        : deterministicId('cmd_route', storyId, "/action", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1));
     const source = 'PLAYER' as const;
     const serverPlayer = worldRepository.getPlayerLifecycle(storyId);
     const actorId = serverPlayer?.actorId || `player_actor_${storyId}`;
@@ -1601,12 +1606,19 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
                 }),
     };
 
+    const preActionRun = worldRepository.getStoryRun(storyId);
+    const wasAlreadyCommitted = Boolean(
+      preActionRun?.canonicalEvents?.some((event: any) =>
+        event.commandId === requestedCommandId ||
+        (rawIdempotencyKey && event.idempotencyKey === String(rawIdempotencyKey))
+      ),
+    );
+
     const mockStateBefore = serverMockAuthority.exportTransactionalState(storyId);
     // A story may have been lazily initialized before its first player action.
     // Persist that exact visible-history prefix before the canonical engine captures
     // its pre-turn snapshot, so the first turn can be rolled back safely too.
-    const preActionRun = worldRepository.getStoryRun(storyId);
-    if (preActionRun) {
+    if (preActionRun && !wasAlreadyCommitted) {
       preActionRun.runtimeState = {
         ...(preActionRun.runtimeState || {}),
         actionHistory: JSON.parse(JSON.stringify(mockStateBefore.actionHistory || [])),
@@ -1623,7 +1635,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         type: canonicalActionType,
         payload: commandPayload,
         source,
-        idempotencyKey: req.body?.idempotencyKey,
+        idempotencyKey: rawIdempotencyKey,
         transactionMode: 'ROLLBACK',
       },
       async () => {
@@ -1648,73 +1660,77 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     );
 
     if (!commandResult.success) {
-      serverMockAuthority.importTransactionalState(storyId, mockStateBefore);
+      if (!wasAlreadyCommitted) {
+        serverMockAuthority.importTransactionalState(storyId, mockStateBefore);
+      }
       return res.status(400).json({
         ...commandResult,
         error: commandResult.errorReason,
       });
     }
 
-    // Link every recorded player turn to its canonical command. This makes safe
-    // rollback available for movement, dialogue, inspection, equipment and freeform turns.
-    try {
-      const actionData: any = commandResult.data;
-      const liveState = serverMockAuthority.getDynamicStoryState(storyId);
-      const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
-      if (actionLog) {
-        actionLog.canonicalCommandId = commandResult.commandId;
-        actionLog.canonicalEventId = commandResult.event?.eventId;
+    if (!wasAlreadyCommitted) {
+      // Link every recorded player turn to its canonical command. This makes safe
+      // rollback available for movement, dialogue, inspection, equipment and freeform turns.
+      try {
+        const actionData: any = commandResult.data;
+        const liveState = serverMockAuthority.getDynamicStoryState(storyId);
+        const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
+        if (actionLog) {
+          actionLog.canonicalCommandId = commandResult.commandId;
+          actionLog.canonicalEventId = commandResult.event?.eventId;
+        }
+        const committedRun = worldRepository.getStoryRun(storyId);
+        const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
+        if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
+          const committedEvent = committedRun.canonicalEvents[eventIndex];
+          committedRun.canonicalEvents[eventIndex] = {
+            ...committedEvent,
+            replay: {
+              ...committedEvent.replay,
+              ...(actionRequest.type === 'CUSTOM_ACTION' ? { mockStateBefore } : {}),
+              ...(universeBefore ? { universeBefore } : {}),
+            },
+          };
+          committedRun.runtimeState = {
+            ...(committedRun.runtimeState || {}),
+            actionHistory: JSON.parse(JSON.stringify(liveState.actionHistory || [])),
+          };
+          worldRepository.saveStoryRun(committedRun);
+          commandResult.event = committedRun.canonicalEvents[eventIndex];
+        }
+        if (actionLog) {
+          (commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId);
+        }
+      } catch (checkpointError) {
+        console.warn('[StoryHistory] Failed to attach rollback checkpoint metadata:', checkpointError);
       }
-      const committedRun = worldRepository.getStoryRun(storyId);
-      const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
-      if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
-        const committedEvent = committedRun.canonicalEvents[eventIndex];
-        committedRun.canonicalEvents[eventIndex] = {
-          ...committedEvent,
-          replay: {
-            ...committedEvent.replay,
-            ...(actionRequest.type === 'CUSTOM_ACTION' ? { mockStateBefore } : {}),
-            ...(universeBefore ? { universeBefore } : {}),
-          },
-        };
-        committedRun.runtimeState = {
-          ...(committedRun.runtimeState || {}),
-          actionHistory: JSON.parse(JSON.stringify(liveState.actionHistory || [])),
-        };
-        worldRepository.saveStoryRun(committedRun);
-        commandResult.event = committedRun.canonicalEvents[eventIndex];
-      }
-      if (actionLog) {
-        (commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId);
-      }
-    } catch (checkpointError) {
-      console.warn('[StoryHistory] Failed to attach rollback checkpoint metadata:', checkpointError);
-    }
 
-    // Automatically record durable cross-world memories from the authoritative outcome.
-    // The player never needs to tell the system to "save" an acquired item or important action.
-    try {
-      const actionData: any = commandResult.data;
-      UniverseRuntimeService.captureAction(worldRepository, {
-        storyId,
-        actionType: canonicalActionType,
-        actionText: String(
-          (actionRequest as any).actionText ||
-          (actionRequest as any).customText ||
-          (actionRequest as any).description ||
-          (actionRequest as any).input ||
-          actionRequest.type
-        ),
-        commandId: commandResult.commandId,
-        authoritativeFeedback: actionData?.authoritativeFeedback || actionData?.message,
-        narrativeResponse: actionData?.narrativeResponse,
-        beforeInventoryState,
-        beforeWorldElapsedSeconds,
-      });
-    } catch (memoryError) {
-      // Memory capture is a derived continuity layer. Never roll back a successful canonical action
-      // because a non-authoritative memory projection failed.
-      console.warn('[UniverseRuntime] Automatic continuity capture failed:', memoryError);
+      // Automatically record durable cross-world memories from the authoritative outcome.
+      // The player never needs to tell the system to "save" an acquired item or important action.
+      try {
+        const actionData: any = commandResult.data;
+        UniverseRuntimeService.captureAction(worldRepository, {
+          storyId,
+          actionType: canonicalActionType,
+          actionText: String(
+            (actionRequest as any).actionText ||
+            (actionRequest as any).customText ||
+            (actionRequest as any).description ||
+            (actionRequest as any).input ||
+            actionRequest.type
+          ),
+          commandId: commandResult.commandId,
+          authoritativeFeedback: actionData?.authoritativeFeedback || actionData?.message,
+          narrativeResponse: actionData?.narrativeResponse,
+          beforeInventoryState,
+          beforeWorldElapsedSeconds,
+        });
+      } catch (memoryError) {
+        // Memory capture is a derived continuity layer. Never roll back a successful canonical action
+        // because a non-authoritative memory projection failed.
+        console.warn('[UniverseRuntime] Automatic continuity capture failed:', memoryError);
+      }
     }
 
     res.json(commandResult.data);

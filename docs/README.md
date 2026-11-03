@@ -4,6 +4,26 @@
 **Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and PR #76 code/test head `15f1477599c0e09695e752789e31cc9819f3101a` (2026-10-17). Earlier code/test checkpoints are superseded; earlier `090b7d7…` source traces remain explicitly baseline snapshots.  
 **Purpose:** tell future developers/AI agents which documents are authoritative, what is complete, what is still planned, and which files must not be used as implementation instructions.
 
+## 0. CURRENT FOCUS PLAN (2026-11-03)
+
+**[UNIFIED_AUDIT_RECONCILIATION.md](UNIFIED_AUDIT_RECONCILIATION.md) is now the single active focus plan for this repository.**
+
+- All new work follows its roadmap phase-by-phase, starting at **Phase 1A (stabilise the live narration and validation contract)** after Phase 0 baseline reconciliation.
+- It **supersedes every other plan document in `docs/`** as a work queue — including `WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md`, `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`, the phase checklists and all other roadmaps. Do not start new work from those; they remain only as contracts/traceability for their respective subsystems.
+- `docs/README.md` (this index) and the per-subsystem owner contracts it lists are not superseded for their own narrow topics; everywhere else, when documents conflict, UNIFIED_AUDIT_RECONCILIATION.md wins.
+
+## 1. Source-of-truth order
+
+When documents disagree, use this order:
+
+1. Current code and tests on the target branch, plus the most recent verified CI result.
+2. This index and the current project identity/authority boundary in the root `README.md`.
+3. The active focus plan `UNIFIED_AUDIT_RECONCILIATION.md` (Section 0) for roadmap/phase priority.
+4. The active owner specification for the subsystem being changed.
+5. The cross-system plan `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` for the narrative-grounding work covered there.
+6. A current verification report for the exact code/commit being discussed.
+7. Historical audit records only as evidence of what was found at their recorded commit.
+
 ## Current integration status — 2026-10-17
 
 The latest verified code/test head is `15f1477599c0e09695e752789e31cc9819f3101a` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head workflows passed: **1,530/1,530 tests across 117 suites**, zero failures; release contracts, lint, type-check, and production build passed. This checkpoint also verifies that opening prose must contain a canonical scene anchor while distinct, canonically grounded opening prose remains eligible.
@@ -23,10 +43,11 @@ When documents disagree, use this order:
 
 1. Current code and tests on the target branch, plus the most recent verified CI result.
 2. This index and the current project identity/authority boundary in the root `README.md`.
-3. The active owner specification for the subsystem being changed.
-4. The active cross-system plan `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` for the narrative-grounding work covered there.
-5. A current verification report for the exact code/commit being discussed.
-6. Historical audit records only as evidence of what was found at their recorded commit.
+3. The active focus plan `UNIFIED_AUDIT_RECONCILIATION.md` for roadmap/phase priority.
+4. The active owner specification for the subsystem being changed.
+5. The cross-system plan `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` for the narrative-grounding work covered there.
+6. A current verification report for the exact code/commit being discussed.
+7. Historical audit records only as evidence of what was found at their recorded commit.
 
 **Do not use documents inside `docs/outdated/` as implementation instructions.** They are kept for traceability and to explain previous decisions, not as a queue of unfinished work.
 

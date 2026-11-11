@@ -163,3 +163,48 @@ test('multi-effect spell narration must cover every canonical visible consequenc
 	}
 	assert.deepEqual(spellResolution, originalResolution, 'Narrative quality evaluation must not mutate committed mechanics.');
 });
+
+test('Phase 1A: live narration gate accepts consequence-faithful human phrasing (knockdown/movement/collision without schema vocabulary)', () => {
+	const combatResolution = {
+		...resolution(),
+		playerAction: 'I strike the Warden with Shockwave Palm',
+		attemptedEffect: 'strike the Warden with Shockwave Palm',
+		targetEntityIds: ['enemy_warden'],
+		resolutionMethod: 'COMBAT',
+		outcomeTier: 'SUCCESS_WITH_COST',
+		actualEffect: 'Shockwave Palm: resolved successfully. Damage: 12. Applied condition: Prone. Target collided with Impassable obstacle for 2 collision damage.',
+		physicalConsequences: [
+			'Shockwave Palm: resolved successfully. Damage: 12. Applied condition: Prone. Target collided with Impassable obstacle for 2 collision damage.',
+			'Applied condition: Prone.',
+			'Target collided with Impassable obstacle for 2 collision damage.',
+		],
+		playerVisibleConsequences: ['Target enemy_warden remains at 23 HP.'],
+	};
+	const combatSituation = { ...situation(), nearbyEntities: [
+		{ id: 'enemy_warden', name: 'Warden', visibleToPlayer: true },
+	] };
+	const combatIntent = { action: 'attack', interactionMode: 'COMBAT', speechIntent: false } as any;
+
+	// Complete human narration: hit, forced movement + collision, prone — no schema words.
+	const complete = serverMockAuthority.evaluateLiveNarrativeQuality({
+		narrativeText: 'You drive your Shockwave Palm into the Warden’s breastplate, hurling him backward into the stone barrier and knocking him sprawling prone across the floor.',
+		playerAction: combatResolution.playerAction,
+		actionResolution: combatResolution as any,
+		situation: combatSituation as any,
+		intent: combatIntent,
+	});
+	assert.equal(complete.actionFidelity.valid, true);
+	assert.deepEqual(complete.actionFidelity.missingConsequences, []);
+
+	// Incomplete human narration: hit only — knockdown and collision are genuinely omitted.
+	const incomplete = serverMockAuthority.evaluateLiveNarrativeQuality({
+		narrativeText: 'You drive your Shockwave Palm into the Warden’s breastplate, bruising his ribs with the impact.',
+		playerAction: combatResolution.playerAction,
+		actionResolution: combatResolution as any,
+		situation: combatSituation as any,
+		intent: combatIntent,
+	});
+	assert.equal(incomplete.actionFidelity.valid, false);
+	assert.ok(incomplete.actionFidelity.missingConsequences.some(value => /prone/i.test(value)));
+	assert.ok(incomplete.actionFidelity.missingConsequences.some(value => /collided/i.test(value) || /obstacle/i.test(value)));
+});

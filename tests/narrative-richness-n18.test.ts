@@ -220,7 +220,7 @@ test('N18 evaluator remains presentation-only in the production orchestrator sou
 test('N18 does not create a provider call of its own', async () => {
 	const fs = await import('node:fs/promises');
 	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');
-	assert.match(source, /const needsLiteraryRewrite = literary\.decision === 'REWRITE';/);
+	assert.match(source, /const needsLiteraryRewrite = literary\.decision === 'REWRITE' && !semanticRewriteUsed;/);
 	assert.doesNotMatch(source, /needsLiteraryRewrite = .*narrativeRichnessEvaluation\.decision/);
 });
 

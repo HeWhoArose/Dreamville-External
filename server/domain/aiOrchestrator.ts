@@ -31,6 +31,9 @@ import { NarrativePacingEngine, type NarrativePacingContract } from './narrative
 import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
+import { buildRequiredConsequences, isConsequenceCovered } from './narrativeConsequenceCoverage';
+import type { NarratorVoiceState } from './narratorVoiceEngine';
+import type { NarrativeNoveltyState } from './narrativeNoveltyEngine';
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
 import { NarratorVoiceEngine, type NarratorVoiceControls } from './narratorVoiceEngine';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
@@ -7985,66 +7988,18 @@ export class MultiModelOrchestrator {
     const consequenceVerbOverlap = /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(params.narrativeText) &&
       /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(consequenceText);
     const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled)\b/i.test(params.narrativeText);
-    const requiredConsequences = Array.from(new Map(
-      [
-        ...(params.actionResolution.physicalConsequences || []),
-        ...(params.actionResolution.playerVisibleConsequences || []),
-      ]
-        .map((value) => String(value || '').trim())
-        .filter((value) => Boolean(value) && !/^the character is now canonically positioned\b/i.test(value))
-        .map((value) => [value.toLocaleLowerCase(), value] as const),
-    ).values());
-    const groups: Record<string, string[]> = {
-      reaction: ['react','reacts','reacted','reaction','turn','turns','turned','look','looks','looked','glance','glances','glanced','lift','lifts','lifted','raise','raises','raised','notice','notices','noticed','attention','draw','draws','drew','catch','catches','caught','snap','snaps','snapped','pause','pauses','paused','freeze','freezes','froze','frozen','stop','stops','stopped','shift','shifts','shifted','face','faces','faced','peer','peers','peered','startle','startles','startled','stiffen','stiffens','stiffened','flinch','flinches','flinched','recoil','recoils','recoiled'],
-      impact: ['strike','strikes','struck','hit','hits','impact','clang','clangs','clanged','collide','collides','collided','slam','slams','slammed'],
-      fire: ['fire','fires','fired','flame','flames','flaming','ignite','ignites','ignited','burn','burns','burned','burning','alight'],
-      knockdown: ['knock','knocks','knocked','prone','fall','falls','fell','fallen','stagger','staggers','staggered','collapse','collapses','collapsed'],
-    };
-    const actionTerms = new Set([
-      'reaction','impact','fire','knockdown','strike','lodge','embed','pierce','split','splinter','break','open','close','damage','restore','heal',
-      'move','shift','change','stop','turn','retreat','approach','notice','react','draw','catch','raise','lower','look','glance','freeze','stiffen',
-      'step','burn','ignite','knock','stagger','collapse','engulf','set','alight','fall','lift','pause','face','peer','startle','recoil','grind','drop',
-    ]);
-    const normalizeToken = (token: string) => {
-      for (const [group, members] of Object.entries(groups)) {
-        if (members.includes(token)) return group;
-      }
-      if (token.length > 5 && token.endsWith('ing')) return token.slice(0, -3);
-      if (token.length > 4 && token.endsWith('ed')) return token.slice(0, -2);
-      if (token.length > 4 && token.endsWith('s')) return token.slice(0, -1);
-      return token;
-    };
-    const orderedTokens = (value: string) => String(value || '')
-      .toLowerCase()
-      .split(/[^a-z0-9'-]+/)
-      .map((v) => v.replace(/^['-]+|['-]+$/g, ''))
-      .filter((v) => v.length >= 4 && !stop.has(v))
-      .map(normalizeToken);
-    const isConsequenceCovered = (consequence: string): boolean => {
-      const requiredOrdered = orderedTokens(consequence);
-      const observedOrdered = orderedTokens(params.narrativeText);
-      const requiredAnchors = Array.from(new Set(requiredOrdered));
-      const observed = new Set(observedOrdered);
-      const matchedAnchors = requiredAnchors.filter((token) => observed.has(token));
-      if (requiredAnchors.length === 0) return true;
-      const requiredActionAnchors = Array.from(new Set(requiredOrdered.filter((token) => actionTerms.has(token))));
-      if (requiredActionAnchors.some((token) => !observed.has(token))) return false;
-      const nounTokens = requiredOrdered.filter((token) => !actionTerms.has(token));
-      const nounBigrams = requiredOrdered.slice(0, -1)
-        .map((token, index) => [token, requiredOrdered[index + 1]] as const)
-        .filter(([left, right]) => !actionTerms.has(left) && !actionTerms.has(right) && left.length >= 4 && right.length >= 4)
-        .map(([left, right]) => left + ' ' + right);
-      const observedBigrams = new Set(observedOrdered.slice(0, -1).map((token, index) => token + ' ' + observedOrdered[index + 1]));
-      const hasNounAnchor = nounBigrams.length
-        ? nounBigrams.some((phrase) => observedBigrams.has(phrase))
-        : nounTokens.some((token) => observed.has(token));
-      const minimumMatches = requiredAnchors.length <= 2 ? requiredAnchors.length : 2;
-      const coverage = matchedAnchors.length / requiredAnchors.length;
-      return hasNounAnchor && matchedAnchors.length >= minimumMatches && coverage >= 0.2;
-    };
+    // Narration consequence coverage is judged by the single shared calibrated
+    // contract in ./narrativeConsequenceCoverage (Phase 1A unification). The
+    // former inline copy and the serverMockAuthority duplicate had drifted and
+    // both demanded unsatisfiable schema bookkeeping vocabulary ("Applied
+    // condition:", "collided with Impassable obstacle") from natural prose.
+    const requiredConsequences = buildRequiredConsequences({
+      physicalConsequences: params.actionResolution.physicalConsequences,
+      playerVisibleConsequences: params.actionResolution.playerVisibleConsequences,
+    });
     const enforcePerEffectCoverage = params.actionResolution.resolutionMethod !== 'CHECK';
     const missingConsequences = enforcePerEffectCoverage
-      ? requiredConsequences.filter((consequence) => !isConsequenceCovered(consequence)).slice(0, 8)
+      ? requiredConsequences.filter((consequence) => !isConsequenceCovered(params.narrativeText, consequence).covered).slice(0, 8)
       : [];
     const hasConsequenceBeat = enforcePerEffectCoverage && requiredConsequences.length > 0
       ? missingConsequences.length === 0
@@ -9440,9 +9395,13 @@ export class MultiModelOrchestrator {
         worldRepo: repo,
       });
 
-      // The HTTP action route reaches executeTurn(), not only the standalone
-      // narration helper above. Restore committed NPC-initiation evidence here
-      // before research, planning, context budgeting, and prompt construction.
+      // The production HTTP action route (POST /api/game/action) does NOT reach
+      // executeTurn(). It runs serverMockAuthority.processCustomAction ->
+      // generateNarrativeOnly (the unified narration pipeline above); only
+      // POST /api/game/orchestrator/turn adapters call executeTurn(). This code
+      // block runs for both callers and restores committed NPC-initiation
+      // evidence before research, planning, context budgeting, and prompt
+      // construction.
       const committedNpcInitiationsForTurn = repo.getRecentCanonicalCommandEvents(storyId, 32)
         .filter((event: any) =>
           event?.type === 'NPC_INITIATED_INTERACTION' &&

@@ -92,7 +92,7 @@ test('Phase 3 — migrated core action routes use true staged transactions', () 
 
 test('Phase 3 — legacy action endpoint maps movement/equipment/time intent to canonical command types', () => {
 	const block = routeBlock('/action');
-	assert.match(block, /canonicalActionType\s*=\s*\n\s*actionRequest\.type === 'TRAVEL_REQUEST'\n\s*\? 'MOVE'/);
+	assert.match(block, /canonicalActionType\s*=\s*\r?\n\s*actionRequest\.type === 'TRAVEL_REQUEST'\r?\n\s*\? 'MOVE'/);
 	assert.match(block, /actionRequest\.type === 'EQUIP_REQUEST'/);
 	assert.match(block, /actionRequest\.type === 'UNEQUIP_REQUEST'/);
 	assert.match(block, /actionRequest\.type === 'ADVANCE_TIME'/);

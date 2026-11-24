@@ -106,7 +106,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		.join(' | ') || 'None';
 
 	const recentTurns = (Array.isArray(situation.recentTurns) ? situation.recentTurns : [])
-		.slice(-2)
+		.slice(-narrationRecentTurnWindow())
 		.map((turn) => [
 			turn.playerAction ? 'Player: ' + turn.playerAction : '',
 			turn.narration ? 'Narration: ' + turn.narration : '',
@@ -164,6 +164,15 @@ export function defaultNarrationStyle(): string {
 		'Keep rumor/hearsay uncertain and stay in the canonical scene/time unless supplied state confirms a change.',
 		'Do not expose research or engine terminology. Follow this turn’s Narrative Quality Contract for length.',
 	].join(' ');
+}
+
+/**
+ * How many recent turns the narration prompt carries. Default 2. Raise with NARRATION_RECENT_TURNS (1-12) to test
+ * whether more continuity helps; the reference study (Talemate) sends a much longer transcript.
+ */
+export function narrationRecentTurnWindow(): number {
+	const configured = Number(process.env.NARRATION_RECENT_TURNS);
+	return Number.isFinite(configured) && configured >= 1 ? Math.min(12, Math.floor(configured)) : 2;
 }
 
 function section(title: string, body: string): string {

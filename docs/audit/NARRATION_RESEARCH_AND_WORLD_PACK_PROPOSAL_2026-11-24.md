@@ -140,3 +140,19 @@ Result (stubbed prompts confirmed the block; live run on Gemini 3.5 Flash Lite t
 - The answer-bearing facts block was merged (fast-forward) into `feat/unified-audit-reconciliation-programme`.
 - The existing one-call rewrite path (`narrative.review`) now receives the same block and is told to state the answer first, so a scenery-only reply is rewritten toward the answer instead of being discarded. (The rewrite already existed; its prompt did not carry the facts.) `buildAnswerBearingFactsBlock` is exported and unit-tested (`tests/answer-bearing-facts.test.ts`).
 - New repeatable baseline: `npm run narration:baseline` plays the 8 scripted Ren turns through the real `/action` pipeline. Stub mode (default, no network) verifies that each information question's prompt contains the fact that answers it; live mode (`BASELINE_MODE=live`, keys from the environment, `BASELINE_MODELS`) reports acceptance per turn and the rejection reason. It backs up and restores the tracked orchestrator config and removes the temporary credential file. Stub result: 5 of 5 information turns carry their answering fact. Live run (Gemini 3.5 Flash Lite then Groq qwen3.8-27b): 2 of 8 accepted (Mei answered "Inspector Calder... warn us off the pier" and "the spent .38 casing lay right beside the body"); the others were provider failures or the scenery gates. Acceptance varies run to run between 2 and 4 of 8 on this route, so compare changes over several runs, not one.
+
+## 15. Soft gates and history window: measured, not proven (2026-11-24)
+
+Changes: (a) the baseline script moves the player to the docks before "examine the bloodstain"; (b) generation-time action-substance and the final N18 environment-excess rejections are skipped when the reply states the fact that answers an information question (`NARRATION_SOFT_GATES=0` restores strict behaviour); (c) the narration prompt's recent-turn window is configurable (`NARRATION_RECENT_TURNS`, default 2, max 12).
+
+Live A/B/C, two runs each, Gemini 3.5 Flash Lite then Groq qwen3.8-27b, 8 scripted turns:
+
+| Config | Accepted (run 1, run 2) | Total | Rejections by cause |
+| --- | --- | --- | --- |
+| A strict gates, history 2 | 1, 5 | 6/16 | provider/unavailable 6, scenery gate 3, other 1 |
+| B soft gates, history 2 | 2, 3 | 5/16 | provider/unavailable 5, scenery gate 3, action-fidelity 2, presentation guard 1 |
+| C soft gates, history 6 | 1, 1 | 2/16 | provider/unavailable 12, scenery gate 2 |
+
+Reading: provider unavailability is the largest single cause in every configuration, and run-to-run swings (A: 1 versus 5) exceed any difference between configurations. Soft gates showed no measurable change, plausibly because the scenery rejections occurred on non-information turns (desk scan, walking to the docks), which the exemption deliberately does not cover. Configuration C's low score is dominated by provider failures (12 of 16 turns), so it is **not** evidence that a longer history hurts. The defaults are unchanged (soft gates on, history 2).
+
+Conclusion: live runs on free, overloaded providers cannot separate small prompt and gate effects. Next step is the replay harness (V2 gap G6/X5b): record real candidate narrations once and replay them through the gates offline, so gate and prompt changes are scored deterministically.

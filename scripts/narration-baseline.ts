@@ -9,7 +9,7 @@
  *
  * Environment (all optional): BASELINE_MODE=stub|live (default stub), BASELINE_MODELS (comma list; bare ids are Gemini,
  * `provider::model` otherwise), GEMINI_API_KEY, GROQ_KEY, BASELINE_CALL_CAP (live provider requests, default 120),
- * BASELINE_OUT (JSON report path), BASELINE_TURNS (JSON array of action strings).
+ * BASELINE_OUT (JSON report path), BASELINE_TURNS (JSON array of action strings), NARRATION_RECENT_TURNS (prompt history window).
  *
  * Safety: the tracked orchestrator config is backed up first and restored afterwards, and the temporary
  * provider credential file is removed. Keys are read from the environment only and never written to the report.
@@ -26,18 +26,18 @@ const CALL_CAP = Number(process.env.BASELINE_CALL_CAP || 120);
 const OUT = process.env.BASELINE_OUT || path.join(ROOT, 'tests/artifacts/narration_baseline_latest.json');
 
 /** Each scripted turn, with the substrings that a correct answer (and therefore the prompt) must contain. */
-const DEFAULT_TURNS: Array<{ action: string; expectFacts?: string[] }> = [
+const DEFAULT_TURNS: Array<{ action: string; expectFacts?: string[]; moveTo?: string }> = [
 	{ action: 'I look around the office and check my desk for anything about the Pendelton case.' },
 	{ action: 'Who found the body?', expectFacts: ['Okafor'] },
 	{ action: 'Where exactly was he found?', expectFacts: ['Pier 4'] },
 	{ action: 'I ask Mei what the police have said so far.', expectFacts: ['Calder'] },
 	{ action: 'What did they say about the bullet casing?', expectFacts: ['.38'] },
 	{ action: 'I head out to the docks.' },
-	{ action: 'I examine the bloodstain.' },
+	{ action: 'I examine the bloodstain.', moveTo: 'loc_warehouse_docks' },
 	{ action: 'So who found the body again?', expectFacts: ['Okafor'] },
 ];
 
-function turnsFromEnv(): Array<{ action: string; expectFacts?: string[] }> {
+function turnsFromEnv(): Array<{ action: string; expectFacts?: string[]; moveTo?: string }> {
 	if (!process.env.BASELINE_TURNS) return DEFAULT_TURNS;
 	return (JSON.parse(process.env.BASELINE_TURNS) as string[]).map((action) => ({ action }));
 }
@@ -112,6 +112,10 @@ async function main(): Promise<void> {
 		const turns = turnsFromEnv();
 		const report: any[] = [];
 		for (const turn of turns) {
+			if (turn.moveTo) {
+				const player = worldRepository.getPlayerLifecycle(storyId);
+				if (player) worldRepository.updatePlayerLifecycle(storyId, player.copyWith({ locationId: turn.moveTo }));
+			}
 			const firstBody = requestBodies.length;
 			const response = await post('/action', { storyId, type: 'CUSTOM_ACTION', actionText: turn.action });
 			const body = response.json || {};

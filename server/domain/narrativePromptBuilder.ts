@@ -17,6 +17,7 @@ import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 import { NarrativeEpisodeProjectionEngine, type NarrativeEpisodeProjection } from './narrativeEpisodeProjection';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
 import { CharacterCanonSteward } from './characterCanonSteward';
+import { questionContentTokens } from './knownFactUse';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -284,6 +285,32 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		}
 	}
 
+	// Reference study (Talemate): its query path puts the question-conditioned facts in their own block close to
+	// the instruction. Ours left the answering facts buried in research and offered "no reliable answer" as an
+	// easy exit, so models took it. For information questions, restate the matching authorized facts last.
+	const answerBearingFacts = (() => {
+		const isInformationTurn = input.intent.interactionMode === 'INFORMATION_SEEKING' || input.intent.interactionMode === 'DIALOGUE' || Boolean(input.intent.informationGoal);
+		if (!isInformationTurn) return '';
+		const tokens = questionContentTokens([input.intent.informationGoal, input.intent.originalText].filter(Boolean).join(' '));
+		if (tokens.length === 0) return '';
+		const statements = (boundedResearch.blocks || [])
+			.filter((block) => block.kind === 'KNOWLEDGE')
+			.map((block) => String(block.content || '').replace(/\s+/g, ' ').trim())
+			.filter((content) => {
+				const lower = content.toLowerCase();
+				return tokens.some((token) => lower.includes(token));
+			})
+			.map((content) => content.replace(/^.*?\bscope=\w+\s+/, '').trim())
+			.filter((content) => content.length >= 12)
+			.slice(0, 4);
+		if (statements.length === 0) return '';
+		return [
+			'The player already holds these established facts about this question. Answer from them, in character, in specific terms.',
+			'Do not claim that nobody knows, that records are silent, or that the answer is unavailable when a fact below answers it.',
+			...statements.map((statement) => '- ' + statement),
+		].join('\n');
+	})();
+
 	const compose = (
 		researchContext: string,
 		workingContext: string,
@@ -322,6 +349,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		speakerBoundaryContext ? section('NPC KNOWLEDGE BOUNDARY', speakerBoundaryContext) : '',
 		section('SUPPORTING WORKING CONTEXT', workingContext),
 		overrides?.canonicalConstraints || canonicalConstraints,
+		answerBearingFacts ? section('ESTABLISHED FACTS THAT ANSWER THIS QUESTION', answerBearingFacts) : '',
 		section('OUTPUT CONTRACT', overrides?.outputContract || outputContract),
 	].filter(Boolean).join('\n\n');
 

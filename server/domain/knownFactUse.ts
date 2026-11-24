@@ -16,6 +16,11 @@ export const REFUSAL_PATTERN = /\b(?:refuses?|refused|declines?|declined|won['�
  */
 export const IGNORANCE_PATTERN = /\b(?:doesn['’]?t|does not|don['’]?t|do not|didn['’]?t|did not|isn['’]?t|aren['’]?t|hasn['’]?t|haven['’]?t|has not|have not|no one|nobody|not sure|unsure|unclear|unknown|can['’]?t say|cannot say|no record|nothing (?:on|about|to))\b/i;
 
+/** Content words of a player question (stopwords removed); shared with the prompt builder. */
+export function questionContentTokens(question: string): string[] {
+	return contentTokens(question).filter((token) => !QUERY_STOPWORDS.has(token));
+}
+
 function contentTokens(value: string, minLength = 4): string[] {
 	return Array.from(new Set(String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= minLength)));
 }

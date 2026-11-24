@@ -10,7 +10,8 @@
     "lint": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "postinstall": "node scripts/copy-dice-assets.mjs",
-    "verify:contracts": "node scripts/verify-release-contract.mjs"
+    "verify:contracts": "node scripts/verify-release-contract.mjs",
+    "narration:baseline": "tsx scripts/narration-baseline.ts"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",

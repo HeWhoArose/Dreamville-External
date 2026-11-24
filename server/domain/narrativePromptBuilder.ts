@@ -208,6 +208,33 @@ function compactRelevantResearch(value: string, maxChars: number, priorities: st
 	return truncatePromptSection(compact || normalized, maxChars);
 }
 
+/**
+ * For information-seeking turns, the authorized facts that answer the player's question, worded as a block placed
+ * next to the instruction (reference study: Talemate's question-conditioned query path). Returns '' when none apply.
+ */
+export function buildAnswerBearingFactsBlock(blocks: Array<{ kind: string; content?: string }>, intent: PlayerIntent): string {
+	const isInformationTurn = intent.interactionMode === 'INFORMATION_SEEKING' || intent.interactionMode === 'DIALOGUE' || Boolean(intent.informationGoal);
+	if (!isInformationTurn) return '';
+	const tokens = questionContentTokens([intent.informationGoal, intent.originalText].filter(Boolean).join(' '));
+	if (tokens.length === 0) return '';
+	const statements = (blocks || [])
+		.filter((block) => block.kind === 'KNOWLEDGE')
+		.map((block) => String(block.content || '').replace(/\s+/g, ' ').trim())
+		.filter((content) => {
+			const lower = content.toLowerCase();
+			return tokens.some((token) => lower.includes(token));
+		})
+		.map((content) => content.replace(/^.*?\bscope=\w+\s+/, '').trim())
+		.filter((content) => content.length >= 12)
+		.slice(0, 4);
+	if (statements.length === 0) return '';
+	return [
+		'The player already holds these established facts about this question. Answer from them, in character, in specific terms.',
+		'Do not claim that nobody knows, that records are silent, or that the answer is unavailable when a fact below answers it.',
+		...statements.map((statement) => '- ' + statement),
+	].join('\n');
+}
+
 export function buildNarrationPrompt(input: NarrationPromptInput): NarrationPromptResult {
 	const rawSituation = input.situation;
 	const boundedResearch = EpistemicBoundaryEnforcer.sanitizeResearch(input.research, rawSituation).result;
@@ -288,28 +315,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	// Reference study (Talemate): its query path puts the question-conditioned facts in their own block close to
 	// the instruction. Ours left the answering facts buried in research and offered "no reliable answer" as an
 	// easy exit, so models took it. For information questions, restate the matching authorized facts last.
-	const answerBearingFacts = (() => {
-		const isInformationTurn = input.intent.interactionMode === 'INFORMATION_SEEKING' || input.intent.interactionMode === 'DIALOGUE' || Boolean(input.intent.informationGoal);
-		if (!isInformationTurn) return '';
-		const tokens = questionContentTokens([input.intent.informationGoal, input.intent.originalText].filter(Boolean).join(' '));
-		if (tokens.length === 0) return '';
-		const statements = (boundedResearch.blocks || [])
-			.filter((block) => block.kind === 'KNOWLEDGE')
-			.map((block) => String(block.content || '').replace(/\s+/g, ' ').trim())
-			.filter((content) => {
-				const lower = content.toLowerCase();
-				return tokens.some((token) => lower.includes(token));
-			})
-			.map((content) => content.replace(/^.*?\bscope=\w+\s+/, '').trim())
-			.filter((content) => content.length >= 12)
-			.slice(0, 4);
-		if (statements.length === 0) return '';
-		return [
-			'The player already holds these established facts about this question. Answer from them, in character, in specific terms.',
-			'Do not claim that nobody knows, that records are silent, or that the answer is unavailable when a fact below answers it.',
-			...statements.map((statement) => '- ' + statement),
-		].join('\n');
-	})();
+	const answerBearingFacts = buildAnswerBearingFactsBlock(boundedResearch.blocks || [], input.intent);
 
 	const compose = (
 		researchContext: string,

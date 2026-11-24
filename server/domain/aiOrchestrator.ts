@@ -22,7 +22,7 @@ import { CurrentSituationBuilder, type CurrentSituation } from './currentSituati
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
-import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
+import { buildAnswerBearingFactsBlock, buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
 import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation, type NarrativeRichnessDecision, type NarrativeRichnessIssue } from './narrativeRichnessEvaluation';
@@ -8939,6 +8939,10 @@ export class MultiModelOrchestrator {
                 '',
               ]
             : []),
+          (() => {
+            const answerFacts = buildAnswerBearingFactsBlock(researchResult.blocks || [], playerIntent);
+            return answerFacts ? 'ESTABLISHED FACTS THAT ANSWER THIS QUESTION:\n' + answerFacts + '\nThe rewrite must state the answer first, in character, instead of describing the room.' : '';
+          })(),
           'PRESENTATION QUALITY REVIEW:',
           NarrativeRichnessEvaluator.buildRewriteGuidance(finalNarrativeRichnessEvaluation),
           initialLiteraryReview.issues.length > 0

@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "recordedAt": "2026-11-24T20:33:32.030Z",
+  "models": [
+    "gemini-3.5-flash-lite",
+    "groq::qwen/qwen3.8-27b"
+  ],
+  "turns": [
+    {
+      "action": "I look around the office and check my desk for anything about the Pendelton case.",
+      "replies": [
+        {
+          "kind": "other",
+          "text": "{\n  \"tips\": [\n    {\n      \"title\": \"Examine the Case Files\",\n      \"description\": \"The oak desk is heaped with files, which likely contain the documentation needed for the Pendelton case.\",\n      \"actionText\": \"Open the folders on the desk related to the Pendelton case.\"\n    },\n    {\n      \"title\": \"Observe Mei Sato\",\n      \"description\": \"Mei Sato is present in the office and high in canonical importance; observing her may reveal contextual clues about the ongoing investigation.\",\n      \"actionText\": \"Watch Mei Sato closely for any signs of distress or activity.\"\n    },\n    {\n      \"title\": \"Inspect the Kettle\",\n      \"description\": \"The kettle that 'never quite boils' is a specified environmental anomaly in the location description that might hold a clue or serve as a distraction.\",\n      \"actionText\": \"Look closely at the kettle on the desk.\"\n    },\n    {\n      \"title\": \"Check the Frosted Glass\",\n      \"description\": \"The frosted glass doors could obscure movement or visibility; checking them helps determine if someone is entering or leaving without being fully seen.\",\n      \"actionText\": \"Peel a small piece of the frost off the door to look outside.\"\n    }\n  ]\n}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Rain patters steadily against the frosted glass of the second-floor office while the desk lamp casts a low, yellow hum over the utilitarian oak surface. Piles of case files and manila folders crowd the wood, heaped haphazardly around the cold brass base of the lamp. A thorough sweep through the scattered paperwork reveals no mention or documentation concerning the Pendelton case among the visible clutter. Mei Sato sits quietly nearby, watching as the search yields nothing connected to that particular inquiry.\"\n  ],\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Searched the oak desk in the Crimson Eye Agency office but found no files relating to the Pendelton case.\"\n  ],\n  \"audioCues\": [\n    \"Rain pattering on frosted glass\",\n    \"Desk lamp humming softly\"\n  ],\n  \"visualCues\": [\n    \"An oak desk heaped with disordered files under a humming lamp\",\n    \"Mei Sato present in the office\"\n  ]\n}"
+        },
+        {
+          "kind": "rewrite",
+          "text": "```json\n{\n  \"narrative\": \"Ren Takahashi searches through the heaped files and manila folders across the utilitarian oak desk, checking for any documentation concerning the Pendelton case. The sweep through the scattered paperwork reveals no mention or file connected to that particular inquiry. Mei Sato sits quietly nearby, watching as the search yields nothing.\",\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [],\n  \"audioCues\": []\n}\n```"
+        },
+        {
+          "kind": "other",
+          "text": "{\n  \"tips\": [\n    {\n      \"title\": \"Review the Case Files\",\n      \"description\": \"The oak desk is heaped with files, so sorting through them is the direct way to find information about the Pendelton case.\",\n      \"actionText\": \"Sort through the files on the desk for any documents related to the Pendelton case.\"\n    },\n    {\n      \"title\": \"Examine Mei Sato's Activity\",\n      \"description\": \"Mei Sato is present in the room and is a key figure; observing her location and actions might reveal immediate context or clues.\",\n      \"actionText\": \"Observe Mei Sato to see what she is doing or if she has any case-related materials in front of her.\"\n    },\n    {\n      \"title\": \"Check Personal Desk Items\",\n      \"description\": \"Since the intent is to check your own desk, closely inspect the immediate workspace for notes, phones, or hidden items you may have missed during a general look.\",\n      \"actionText\": \"Thoroughly inspect the drawers and corners of my desk for personal notes or evidence regarding the case.\"\n    }\n  ]\n}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Rain patters against the frosted glass of the second-floor office, blurring the amber neon glow from the Neon Ward outside. Beneath the hum of the brass desk lamp, you pull open the drawers of the utilitarian wooden desk, your fingers sorting through loose stationery, ink-stained blotting paper, and stacks of unrelated utility bills. No case files, retainers, or notes bearing the name Pendelton rest among the clutter.\"\n  ],\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Searched the Crimson Eye Agency desk and found no files regarding the Pendelton case.\"\n  ],\n  \"audioCues\": [\n    \"Rain patters steadily on frosted glass.\",\n    \"A desk lamp hums quietly.\"\n  ],\n  \"visualCues\": [\n    \"Rainwater streaks the frosted glass doors of the office.\",\n    \"A desk lamp casts light over a wooden desk heaped with loose papers.\"\n  ]\n}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Rain taps a steady rhythm against the frosted glass of the second-floor office while the old desk lamp hums in the corner. You look over the utilitarian wooden desk, moving past the piles of accumulated paperwork to sift through the available workspace. The search yields the standard equipment of the agency: a brass paperweight, a row of ink-stained ledgers, and various routine inquiry forms, but no specific dossier or paperwork concerning the Pendelton case rests among them. Mei Sato remains seated nearby, her attention momentarily caught by the movement as you check the wooden surface.\"\n  ],\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Checked the office desk for Pendelton case files without finding any.\"\n  ],\n  \"audioCues\": [\n    \"Rain pattering on frosted glass\",\n    \"Desk lamp humming\"\n  ],\n  \"visualCues\": [\n    \"Utilitarian wooden working desk heaped with files\",\n    \"Mei Sato present in the office\"\n  ]\n}"
+        },
+        {
+          "kind": "other",
+          "text": "{\n  \"tips\": [\n    {\n      \"title\": \"Inspect the Heaped Files\",\n      \"description\": \"The oak desk is described as being heaped with files, which is the most likely place for the Pendelton case documents to be located among the clutter.\",\n      \"actionText\": \"Sort through the files on the oak desk looking for the Pendelton case.\"\n    },\n    {\n      \"title\": \"Observe Mei Sato\",\n      \"description\": \"Mei Sato is present in the office and has high canonical importance, suggesting she may hold information or be reacting to your search in a way that offers context.\",\n      \"actionText\": \"Watch Mei Sato to see if she reacts to your search of the desk.\"\n    },\n    {\n      \"title\": \"Check the Kettle Area\",\n      \"description\": \"The kettle that never quite boils is a distinct environmental anomaly; checking its status or nearby surfaces might reveal tucked-away notes or clues obscured by the clutter.\",\n      \"actionText\": \"Look near the kettle on the desk for any hidden papers or objects.\"\n    }\n  ]\n}"
+        }
+      ],
+      "recordedAccepted": true
+    },
+    {
+      "action": "Who found the body?",
+      "replies": [
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Night watchman Silas Okafor found the body shortly after midnight.\"\n  ],\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Night watchman Silas Okafor found the body shortly after midnight.\"\n  ],\n  \"audioCues\": [\n    \"Rain patters on the frosted glass\",\n    \"A desk lamp hums\"\n  ],\n  \"visualCues\": [\n    \"Mei Sato is present in the office\"\n  ]\n}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\"narrative\":[\"Night watchman Silas Okafor found the body shortly after midnight.\"],\"dialogue\":[],\"events\":[],\"stateChanges\":[],\"memoryCandidates\":[\"Silas Okafor found the body shortly after midnight.\"],\"audioCues\":[\"Rain patters on the frosted glass\",\"desk lamp hums\"],\"visualCues\":[\"Mei Sato is present\"]}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Night watchman Silas Okafor found the body shortly after midnight on Pier 4.\"\n  ],\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [],\n  \"audioCues\": [\n    \"Rain patters against the frosted glass of the office.\"\n  ],\n  \"visualCues\": [\n    \"A desk lamp hums quietly over the oak desk heaped with files.\"\n  ]\n}"
+        },
+        {
+          "kind": "other",
+          "text": "{\n  \"tips\": [\n    {\n      \"title\": \"Ask Mei Sato\",\n      \"description\": \"Directly question Mei Sato in the office to find out who discovered the body.\",\n      \"actionText\": \"Ask Mei Sato who found the body.\"\n    },\n    {\n      \"title\": \"Examine the Desk Files\",\n      \"description\": \"Search through the chaotic heaps of files on the oak desk for incident reports or case notes.\",\n      \"actionText\": \"Search through the files on the oak desk for case notes.\"\n    },\n    {\n      \"title\": \"Check the Frosted Glass Door\",\n      \"description\": \"Look toward the frosted glass entrance to see if anyone is approaching or waiting outside.\",\n      \"actionText\": \"Look through the frosted glass door toward the hallway.\"\n    }\n  ]\n}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Night watchman Silas Okafor found the body shortly after midnight on Pier 4.\"\n  ],\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [],\n  \"audioCues\": [\n    \"rain pattering on glass\",\n    \"humming desk lamp\"\n  ],\n  \"visualCues\": [\n    \"frosted glass office door\",\n    \"piles of accumulated paperwork\"\n  ]\n}"
+        }
+      ],
+      "recordedAccepted": false
+    },
+    {
+      "action": "Where exactly was he found?",
+      "replies": [
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Rain taps a steady rhythm against the frosted glass of the second-floor office, blurring the neon lights of the ward outside while the desk lamp casts a warm, solitary glow over the cluttered oak surface. Among the scattered files and case notes, the established record points directly to the harbor front, where night watchman Silas Okafor discovered Arthur Pendelton, the fifty-four-year-old harbor customs ledger clerk, shot dead on Pier 4 shortly after midnight.\"\n  ],\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [],\n  \"audioCues\": [\n    \"Rain patters steadily on frosted glass\",\n    \"Desk lamp hums quietly\"\n  ],\n  \"visualCues\": [\n    \"Rain streaking across the frosted glass doors\",\n    \"Desk lamp illuminating the heap of case files on the oak desk\"\n  ]\n}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\"narrative\":[\"Rain patters against the frosted glass of the second-floor office while the desk lamp hums in the quiet room. Arthur Pendelton, a fifty-four-year-old harbor customs ledger clerk, was discovered dead from a gunshot on Pier 4. Night watchman Silas Okafor found the body shortly after midnight.\"],\"dialogue\":[],\"events\":[\"The player inquired about the location where the body was found.\"],\"stateChanges\":[],\"memoryCandidates\":[\"Arthur Pendelton was found shot dead on Pier 4 by night watchman Silas Okafor shortly after midnight.\"],\"audioCues\":[\"Rain patters on the frosted glass\",\"A desk lamp hums quietly\"],\"visualCues\":[\"Rain streaking the frosted office glass\",\"Mei Sato present near the desk\"]}"
+        }
+      ],
+      "recordedAccepted": true
+    },
+    {
+      "action": "I ask Mei what the police have said so far.",
+      "replies": [
+        {
+          "kind": "narrate",
+          "text": "{\"narrative\":[\"Mei looks up from a stack of case folders on the cluttered oak desk, her fingers pausing over a paper clip she has been bending back and forth. The desk lamp hums quietly in the dim office, casting long shadows across the piles of paperwork while rain continues its steady patter against the frosted glass panes.\"],\"dialogue\":[{\"speaker\":\"Mei Sato\",\"text\":\"Inspector Calder hasn't given us much besides another warning to stay away from the pier. He dropped by yesterday afternoon while you were out, strictly to reiterate that the harbor division has the docks entirely sealed off. Beyond that official line, he's kept every detail about Nora Pendelton's missing shipment under lock and key.\"}],\"events\":[],\"stateChanges\":[],\"memoryCandidates\":[\"Mei reports that Inspector Calder warned the agency to stay away from the pier and shared no details about the Pendelton case.\"],\"audioCues\":[\"Rain patters against the frosted glass\",\"Desk lamp hums quietly\"],\"visualCues\":[\"Mei Sato sitting at the cluttered oak desk\",\"Papers and case folders scattered across the surface\"]}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Mei pauses, setting down a stack of case folders on the cluttered oak desk. The hum of the desk lamp fills the brief silence as she considers what to share about the harbor authorities.\",\n    \"\\\"Inspector Calder hasn't given us much room to breathe,\\\" she says, resting her hands on the edge of the paperwork. \\\"He's warned us twice now to keep entirely away from the pier. As far as the official word goes, they're treating Arthur Pendelton's death at the docks as an open matter, but they're sharing nothing with private agencies.\\\"\"\n  ],\n  \"dialogue\": [\n    {\n      \"speaker\": \"Mei Sato\",\n      \"text\": \"Inspector Calder hasn't given us much room to breathe. He's warned us twice now to keep entirely away from the pier. As far as the official word goes, they're treating Arthur Pendelton's death at the docks as an open matter, but they're sharing nothing with private agencies.\"\n    }\n  ],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Inspector Calder has warned the Crimson Eye Agency twice to keep away from the pier regarding the Pendelton case.\"\n  ],\n  \"audioCues\": [\n    \"desk lamp humming\",\n    \"rain pattering on glass\"\n  ],\n  \"visualCues\": [\n    \"Mei Sato resting her hands on a stack of case folders across the oak desk\"\n  ]\n}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"You direct your question across the utilitarian oak desk, asking Mei what word has come down from the municipal constabulary regarding the ongoing inquiries. Outside the frosted panes, the steady patter of precipitation fills the quiet space between the heaped case files and the humming lamp.\",\n    \"Mei looks up from her work, adjusting her collar before answering your query about the police response.\"\n  ],\n  \"dialogue\": [\n    {\n      \"speaker\": \"Mei Sato\",\n      \"text\": \"Inspector Calder hasn't offered anything new beyond what we already know. He dropped by earlier to reiterate his warning to stay entirely away from the pier. He didn't share any case details with us, and from the sound of it, they're keeping everything locked down tight on that end.\"\n    }\n  ],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Mei reported that Inspector Calder warned the agency again to stay away from the pier and shared no new police findings.\"\n  ],\n  \"audioCues\": [\n    \"rain patters steadily against the frosted glass\",\n    \"desk lamp hums softly in the corner\"\n  ],\n  \"visualCues\": [\n    \"Mei Sato looking up from her papers across the oak desk\"\n  ]\n}"
+        },
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Mei shifts her weight away from the cluttered stack of case files, her sleeve brushing against the edge of the old oak desk as she looks up from the paperwork. Outside the second-floor window, the unrelenting drizzle continues its rhythmic patter against the frosted glass panes, blurring the Neon Ward lights into smeared streaks of amber and grey.\",\n    \"\\\"Inspector Calder hasn't given us much to work with, Ren,\\\" she says, her voice cutting cleanly through the low, steady hum of the corner desk lamp. \\\"He stopped by earlier to deliver his usual warning about keeping away from the pier, but as for the details of the investigation itself, he kept his cards close. He mentioned they've cordoned off the lower docks following the incident at dawn, but official word from the precinct is practically nonexistent.\\\"\"\n  ],\n  \"dialogue\": [\n    {\n      \"speaker\": \"Mei Sato\",\n      \"text\": \"Inspector Calder hasn't given us much to work with, Ren. He stopped by earlier to deliver his usual warning about keeping away from the pier, but as for the details of the investigation itself, he kept his cards close. He mentioned they've cordoned off the lower docks following the incident at dawn, but official word from the precinct is practically nonexistent.\"\n    }\n  ],\n  \"events\": [\n    \"Mei Sato responds to Ren Takahashi regarding the police statements and Inspector Calder's warning.\"\n  ],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Inspector Calder warned the agency to keep away from the pier and shared no official details on the investigation.\"\n  ],\n  \"audioCues\": [\n    \"Rain patters steadily against the frosted glass.\",\n    \"The old desk lamp hums quietly in the corner.\"\n  ],\n  \"visualCues\": [\n    \"Mei Sato looking up from the oak desk piled with files.\",\n    \"Neon Ward lights blurring through the rain-streaked frosted glass.\"\n  ]\n}"
+        },
+        {
+          "kind": "rewrite",
+          "text": "```json\n{\n  \"narrative\": \"You turn to Mei and ask what the police have said about the situation so far. Mei shifts her weight away from the cluttered stack of case files on the oak desk, her sleeve brushing against the edge as she looks up at you. \\\"Inspector Calder hasn't given us much to work with, Ren,\\\" she says, her voice cutting through the hum of the desk lamp. \\\"He stopped by earlier to deliver his usual warning about keeping away from the pier, but as for the details of the investigation itself, he kept his cards close. He mentioned they've cordoned off the lower docks following the incident at dawn, but official word from the precinct is practically nonexistent.\\\"\",\n  \"dialogue\": [\n    {\n      \"speaker\": \"Mei Sato\",\n      \"text\": \"Inspector Calder hasn't given us much to work with, Ren. He stopped by earlier to deliver his usual warning about keeping away from the pier, but as for the details of the investigation itself, he kept his cards close. He mentioned they've cordoned off the lower docks following the incident at dawn, but official word from the precinct is practically nonexistent.\",\n      \"target\": \"Ren Takahashi\"\n    }\n  ],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [],\n  \"audioCues\": []\n}\n```"
+        }
+      ],
+      "recordedAccepted": true
+    },
+    {
+      "action": "What did they say about the bullet casing?",
+      "replies": [
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Rain taps a steady rhythm against the frosted glass of the Crimson Eye Agency office while the desk lamp casts a warm, low glare over the heaped papers. Mei Sato looks up from her stack of files as the question cuts through the hum of the room, her expression sharpening slightly at the mention of the evidence recovered from the scene.\"\n  ],\n  \"dialogue\": [\n    {\n      \"speaker\": \"Mei Sato\",\n      \"text\": \"The report from the district precinct notes it was a spent thirty-eight caliber, found right beside the body.\"\n    }\n  ],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Mei Sato confirmed the bullet casing recovered from the scene is a .38 caliber.\"\n  ],\n  \"audioCues\": [\n    \"Rain patters on the frosted glass\",\n    \"A desk lamp hums quietly\"\n  ],\n  \"visualCues\": [\n    \"Mei Sato looking up from the oak desk heaped with files\"\n  ]\n}"
+        },
+        {
+          "kind": "rewrite",
+          "text": "```json\n{\n  \"narrative\": \"Mei Sato looks up from the heaped files on the oak desk, her expression sharpening as she recalls the evidence from the scene. A spent .38 bullet casing lay beside the body.\",\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [],\n  \"audioCues\": []\n}\n```"
+        }
+      ],
+      "recordedAccepted": true
+    },
+    {
+      "action": "I head out to the docks.",
+      "replies": [],
+      "recordedAccepted": false
+    },
+    {
+      "action": "I examine the bloodstain.",
+      "moveTo": "loc_warehouse_docks",
+      "replies": [
+        {
+          "kind": "narrate",
+          "text": "{\n  \"narrative\": [\n    \"Cold river wind sweeps across the wet timber of Pier 4, tugging at the yellow perimeter tape as you kneel beside Arthur Pendelton's chalk outline. The dark crimson stain clings to the grain of the weathered planks near where the customs clerk fell, soaking deep into the wood rather than pooling on the surface. Faint traces of dried spray rim the outer edge of the discoloration where the damp air and river mist have begun to cool it.\",\n    \"A few yards away, a local resident pauses near a stack of crated cargo, watching your inspection with silent, wary eyes while the distant foghorn echoes across the water.\"\n  ],\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [\n    \"Examined the dark crimson bloodstain near Arthur Pendelton's chalk outline on Pier 4.\"\n  ],\n  \"audioCues\": [\n    \"Cold water slaps rotting pilings\",\n    \"A foghorn sounds downriver\",\n    \"Police tape snaps in the wind\"\n  ],\n  \"visualCues\": [\n    \"Dark crimson stain on the weathered pier planks near the chalk outline\",\n    \"Yellow crime scene barrier tape fluttering in the river wind\"\n  ]\n}"
+        }
+      ],
+      "recordedAccepted": false
+    },
+    {
+      "action": "So who found the body again?",
+      "replies": [
+        {
+          "kind": "narrate",
+          "text": "{\"narrative\":[\"Night watchman Silas Okafor discovered Arthur Pendelton's body shortly after midnight on these rain-slicked planks. The fifty-four-year-old harbor customs ledger clerk lay within the chalk perimeter, already cold by the time the authorities were summoned from the nearby wardhouse.\"],\"dialogue\":[],\"events\":[],\"stateChanges\":[],\"memoryCandidates\":[\"Night watchman Silas Okafor found Arthur Pendelton's body shortly after midnight.\"],\"audioCues\":[\"Cold water slaps rotting pilings\",\"A foghorn sounds downriver\"],\"visualCues\":[\"Police tape snapping in the wind\",\"Yellow crime scene barrier tape cordoning the pier\"]}"
+        },
+        {
+          "kind": "rewrite",
+          "text": "```json\n{\n  \"narrative\": \"Night watchman Silas Okafor found Arthur Pendelton's body shortly after midnight on the rain-slicked planks of Warehouse Docks Pier 4. The fifty-four-year-old harbor customs ledger clerk lay within the chalk perimeter, already cold by the time authorities arrived from the wardhouse.\",\n  \"dialogue\": [],\n  \"events\": [],\n  \"stateChanges\": [],\n  \"memoryCandidates\": [],\n  \"audioCues\": []\n}\n```"
+        },
+        {
+          "kind": "other",
+          "text": "{\n  \"tips\": [\n    {\n      \"title\": \"Question the NPC\",\n      \"description\": \"Speak directly with ambient_npc_684248cb standing nearby on the pier to ask who discovered the body.\",\n      \"actionText\": \"Excuse me, do you know who found the body here?\"\n    },\n    {\n      \"title\": \"Inspect the Surroundings\",\n      \"description\": \"Scan the stacked crates and wet planks near the police tape for any dropped items or footprint trails left by the person who found the victim.\",\n      \"actionText\": \"I examine the ground around the stacked crates for any footprints.\"\n    }\n  ]\n}"
+        }
+      ],
+      "recordedAccepted": true
+    }
+  ]
+}

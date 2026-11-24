@@ -11,6 +11,7 @@ import {
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { HistoricalEvidence } from '../domain/historicalEvidence';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
+import { LivingWorldEngine } from '../domain/livingWorldEngine';
 
 export class WorldSimulationService {
   constructor(private worldRepo: WorldRepository) {}
@@ -144,6 +145,9 @@ export class WorldSimulationService {
     const previousElapsed = clock.getTimestamp().totalElapsedSeconds;
     const updatedClockState = clock.advanceSeconds(secondsToAdvance);
     const currentElapsed = updatedClockState.timestamp.totalElapsedSeconds;
+    if (typeof (this.worldRepo as any).setLastTurnElapsedSeconds === 'function') {
+      (this.worldRepo as any).setLastTurnElapsedSeconds(storyId, currentElapsed);
+    }
     const completedArrivals: string[] = [];
 
     const player = this.worldRepo.getPlayerLifecycle(storyId);
@@ -239,7 +243,11 @@ export class WorldSimulationService {
     // Refresh ordinary local routines and presence for the player's location.
     // The director is idempotent; this only updates existing ambient cards.
     const refreshedPopulation = WorldActivityDirector.ensureAmbientPopulation(this.worldRepo, storyId, playerLoc);
-    if (livingProjectionChanged || refreshedPopulation.length > 0) {
+    const evictedTemp =
+      secondsToAdvance > 0
+        ? LivingWorldEngine.evictTemporaryEntities(this.worldRepo, storyId, playerLoc, updatedClockState.timestamp)
+        : { evictedEntityIds: [] };
+    if (livingProjectionChanged || refreshedPopulation.length > 0 || evictedTemp.evictedEntityIds.length > 0) {
       const projectedRun = this.worldRepo.getStoryRun(storyId);
       if (projectedRun) this.worldRepo.saveStoryRun(projectedRun);
     }

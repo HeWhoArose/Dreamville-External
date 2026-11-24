@@ -181,6 +181,51 @@ export class LivingWorldSimulation {
     return Array.from(this.scheduledEvents.values()).map((e) => ({ ...e }));
   }
 
+  /**
+   * Authoritatively evaluates scheduled world events against the current world clock.
+   */
+  public evaluateScheduledEvents(currentClock: WorldTimestamp): {
+    triggeredEvents: ScheduledWorldEvent[];
+    missedEvents: ScheduledWorldEvent[];
+  } {
+    const triggeredEvents: ScheduledWorldEvent[] = [];
+    const missedEvents: ScheduledWorldEvent[] = [];
+
+    const dueEvents: ScheduledWorldEvent[] = [];
+    for (const ev of this.scheduledEvents.values()) {
+      if (!ev.isResolved && currentClock.totalElapsedSeconds >= ev.triggerTimestamp.totalElapsedSeconds) {
+        dueEvents.push(ev);
+      }
+    }
+    if (dueEvents.length === 0) {
+      return { triggeredEvents, missedEvents };
+    }
+    if (dueEvents.length > 1) {
+      dueEvents.sort(
+        (a, b) => a.triggerTimestamp.totalElapsedSeconds - b.triggerTimestamp.totalElapsedSeconds
+      );
+    }
+
+    for (const ev of dueEvents) {
+      if (ev.deadlineTimestamp && currentClock.totalElapsedSeconds > ev.deadlineTimestamp.totalElapsedSeconds) {
+        if (ev.status !== 'missed') {
+          ev.status = 'missed';
+          ev.isResolved = true;
+          ev.consequenceSummary = `${ev.name} deadline passed before arrival; event missed.`;
+          missedEvents.push({ ...ev });
+        }
+      } else {
+        if (ev.status !== 'active') {
+          ev.status = 'active';
+          ev.consequenceSummary = `${ev.name} triggered at world time.`;
+          triggeredEvents.push({ ...ev });
+        }
+      }
+    }
+
+    return { triggeredEvents, missedEvents };
+  }
+
   public registerNpcSchedule(profile: NpcScheduleProfile): void {
     this.npcProfiles.set(profile.npcId, {
       ...profile,
@@ -228,6 +273,51 @@ export class LivingWorldSimulation {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Zero-clone schedule activity lookup for hot synchronous tick loops.
+   */
+  public determineActiveActivityReadOnly(
+    npcId: string,
+    hour: number,
+    minute: number = 0
+  ): {
+    found: boolean;
+    activity?: NpcActivity;
+    locationId?: string;
+    fallbackActivity?: NpcActivity;
+    fallbackLocationId?: string;
+  } {
+    const prof = this.npcProfiles.get(npcId);
+    if (!prof) return { found: false };
+    for (const entry of prof.entries) {
+      if (
+        isTimeInScheduleWindow(
+          entry.startHour,
+          entry.startMinute ?? 0,
+          entry.endHour,
+          entry.endMinute ?? 0,
+          hour,
+          minute
+        )
+      ) {
+        return {
+          found: true,
+          activity: entry.activity,
+          locationId: entry.targetLocationId,
+          fallbackActivity: prof.fallbackActivity,
+          fallbackLocationId: prof.fallbackLocationId,
+        };
+      }
+    }
+    return {
+      found: true,
+      activity: prof.fallbackActivity,
+      locationId: prof.fallbackLocationId,
+      fallbackActivity: prof.fallbackActivity,
+      fallbackLocationId: prof.fallbackLocationId,
+    };
   }
 
   /**

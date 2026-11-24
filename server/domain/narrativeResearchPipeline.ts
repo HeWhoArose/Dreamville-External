@@ -213,7 +213,7 @@ export class NarrativeResearchPipeline {
 		entities: 700,
 		relationships: 450,
 		memories: 600,
-		lore: 600,
+		lore: 1400,
 		plot: 500,
 		total: 2400,
 	};
@@ -614,7 +614,9 @@ export class NarrativeResearchPipeline {
 					? 'Authorized player knowledge directly concerns the explicit/current target.'
 					: 'Authorized player knowledge overlaps the current information goal or scene.',
 				expiration: 'UNTIL_CHANGED',
-				relevanceScore: Math.min(0.95, 0.76 + (entityRelated ? 0.12 : overlap * 0.12)),
+				// A fact that overlaps the player's question outranks one that is merely about a present entity:
+				// the prompt builder sheds research from the tail, and the answering fact must not be the tail.
+				relevanceScore: Math.min(0.97, 0.76 + (entityRelated ? 0.12 : 0) + Math.min(0.2, overlap * 2)),
 				content: truncate(content, 1800),
 			}, queryTokens);
 		}

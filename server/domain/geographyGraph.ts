@@ -162,6 +162,10 @@ export class GeographyGraph {
     return Array.from(this.nodes.values()).map((n) => ({ ...n }));
   }
 
+  public getAllNodeIds(): string[] {
+    return Array.from(this.nodes.keys());
+  }
+
   public getAllEdges(): RouteEdge[] {
     return Array.from(this.edges.values()).map((e) => ({ ...e }));
   }
@@ -283,7 +287,7 @@ export class GeographyGraph {
 
       const outgoing = this.getOutgoingEdges(currentId);
       for (const edge of outgoing) {
-        if (!edge.allowedModes.includes(mode) || edge.isBlocked) continue;
+        if ((edge.allowedModes && !edge.allowedModes.includes(mode)) || edge.isBlocked) continue;
         if (!unvisited.has(edge.toLocationId)) continue;
 
         const edgeDuration = this.calculateEdgeDurationSeconds(edge, mode);

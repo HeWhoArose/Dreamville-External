@@ -655,18 +655,21 @@ test('Phase 3 — staged transaction does not persist speculative repository sta
 	}
 });
 
-test('Phase 3 — staged story-director resolution reads and writes the transaction repository', async () => {
-	const storyId = 'phase3_story_director_transaction_scope';
+test('Phase 3 — a staged handler reads its own writes through the transaction repository and they commit', async () => {
+	// Formerly exercised through StoryDirectorService (archived, decision D1). The guarantee under test is
+	// transaction scoping: facts saved via context.repository are visible through it inside the handler and
+	// are committed to the real repository afterwards.
+	const storyId = 'phase3_staged_transaction_scope';
 	const repo = seedRepo(storyId);
 
 	const result = await canonicalCommandEngine.execute(
 		repo,
 		{
-			commandId: 'cmd_story_director_transaction_scope_001',
+			commandId: 'cmd_staged_transaction_scope_001',
 			storyId,
 			actorId: repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`,
 			type: 'INTERACT',
-			payload: { action: 'STORY_DIRECTOR_STEP' },
+			payload: { action: 'STAGED_TRANSACTION_PROBE' },
 			source: 'SYSTEM',
 			transactionMode: 'STAGED',
 		},
@@ -685,11 +688,9 @@ test('Phase 3 — staged story-director resolution reads and writes the transact
 				acquiredAtTimestamp: { totalElapsedSeconds: 0, cycle: 1, period: 'Dawn' },
 			});
 
-			const { storyDirectorService } = await import('../server/services/storyDirectorService');
-			const result = storyDirectorService.stepDirector(storyId, context.repository);
-			assert.equal(result.eventGenerated, true);
-			assert.equal(result.beat?.beatId, 'beat_coded_cipher');
-			return { success: true, data: result, summary: 'Story Director observed staged transaction state.' };
+			const visibleInsideTransaction = context.repository.getWorldFacts(storyId).some((fact) => fact.factId === 'phase3_coded_cipher');
+			assert.equal(visibleInsideTransaction, true, 'staged write must be visible through the transaction repository');
+			return { success: true, data: { visibleInsideTransaction }, summary: 'Staged transaction state was readable inside the handler.' };
 		}
 	);
 

@@ -28,6 +28,7 @@ import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { combatEncounterService } from '../domain/combatEncounterService';
 import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
+import { NarrativeStateAdjudicator, type StateAdjudicationResult } from '../domain/narrativeStateAdjudicator';
 import { narrativeStateBroker, type ItemUseResolution } from '../domain/narrativeStateBroker';
 import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
@@ -41,12 +42,19 @@ import { outcomeTierFromCheck, type ActionResolution } from '../domain/actionRes
 import { type ContextTransparency } from '../../src/types';
 import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from '../domain/narrativeRichnessEvaluation';
 import { NarrativePacingEngine } from '../domain/narrativePacingEngine';
+import { LivingWorldEngine, type LivingWorldTickResult } from '../domain/livingWorldEngine';
+import { TimeBudgetGovernor } from '../domain/timeBudgetGovernor';
+import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
 import type { PlayerIntent } from '../domain/playerIntentInterpreter';
 import {
   buildRequiredConsequences,
   isConsequenceCovered as sharedNarrativeConsequenceCovered,
 } from '../domain/narrativeConsequenceCoverage';
+import { analyzeKnownFactUse } from '../domain/knownFactUse';
+
+/** Token budget for the live narration prompt's context sections (situation, lore, research). */
+export const LIVE_NARRATION_PROMPT_TOKEN_BUDGET = 4500;
 
 /**
  * ServerMockAuthority
@@ -88,6 +96,62 @@ function liveNarrativeLexicalOverlap(left: string, right: string): number {
 // contract in server/domain/narrativeConsequenceCoverage.ts (Phase 1A). The
 // former inline duplicate drifted from the orchestrator's copy and demanded
 // unsatisfiable schema bookkeeping vocabulary from human prose.
+
+export interface CustomActionNarrationSnapshot {
+  storyId: string;
+  actionId: string;
+  freeformText: string;
+  actionResolution: ActionResolution;
+  committedOutcome: string;
+  worldVersion: number;
+  baseStateHash: string;
+  recentTurns: Array<{
+    playerAction: string;
+    narration: string;
+    worldTime: string;
+  }>;
+  previousNarrations: string[];
+  npcTargetId?: string;
+  sceneContext: string;
+  continuationDirective?: string;
+}
+
+export interface PreparedCustomActionContext {
+  requiresNarration: boolean;
+  immediateResult?: ActionResult;
+  storyId: string;
+  actorId: string;
+  freeformText: string;
+  baseResult?: ActionResult;
+  actionResolution?: ActionResolution;
+  committedOutcome?: string;
+  stateAdjudication?: StateAdjudicationResult;
+  storyCheck?: any;
+  resolutionSituation?: any;
+  resolutionIntent?: PlayerIntent;
+  options?: {
+    bypassCapabilityAdvisor?: boolean;
+    narrationDirective?: string;
+  };
+  livingTick?: LivingWorldTickResult;
+  narrationSnapshot?: CustomActionNarrationSnapshot;
+}
+
+export interface GeneratedCustomActionNarration {
+  narrativeResponse: string;
+  narrativeTurnPackage?: import('../domain/aiOrchestrator').StructuredTurnPackage;
+  narrativeError?: import('../../src/types').ActionLog['narrativeError'];
+  narrativeGeneration?: import('../../src/types').ActionLog['narrativeGeneration'];
+  narrativeVisualCues?: string[];
+  narrativePlanForFinalReview?: EphemeralNarrativePlan;
+  narrativeResearchPacket?: any;
+  narrativeContextAudit?: any;
+  generatedResult?: any;
+  deterministicFallbackMessage: string;
+  actionTips: import('../../src/types').ActionTip[];
+  forensicSink: import('../domain/aiOrchestrator').NarrativeOnlyForensicSink;
+  forensicPayloads: Array<{ genResult?: any; thrown?: any }>;
+}
 
 export class ServerMockAuthority {
   private recordChronicleEvidence(
@@ -693,6 +757,10 @@ export class ServerMockAuthority {
     pacingValid: boolean;
     pacingReason?: string;
     actionFidelity: { valid: boolean; reason?: string; missingConsequences: string[] };
+    /** Hard safety/fidelity result: pacing contract and required canonical consequences. A failure here always rejects. */
+    hardAccepted: boolean;
+    /** Quality-only findings (richness score, generic action-anchor/reaction beat). They never discard a turn on their own. */
+    softIssues: string[];
   } {
     const sceneComposition: any = params.plan?.sceneComposition || {
       version: 1,
@@ -781,14 +849,28 @@ export class ServerMockAuthority {
     const hasConsequenceBeat = enforcePerEffectCoverage && requiredConsequences.length > 0
       ? missingConsequences.length === 0
       : consequenceSignal || consequenceVerbOverlap;
-    const actionFidelityValid = observationLike || (actionAnchor && hasConsequenceBeat);
+    // An information question answered by the fact the player already holds is a complete response: it needs no
+    // separate physical "reaction beat" (that gate rejected "Silas Okafor found the body shortly after midnight").
+    const answeredFromKnownFact = (params.intent.interactionMode === 'INFORMATION_SEEKING' || Boolean(params.intent.informationGoal)) && analyzeKnownFactUse(
+      params.narrativeText,
+      [params.intent.informationGoal, params.intent.originalText].filter(Boolean).join(' '),
+      [...((params.situation as any).playerKnowledge?.knownFacts || []), ...((params.situation as any).relevantLore || [])],
+    ).used;
+    const actionFidelityValid = observationLike || (answeredFromKnownFact && missingConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
     const actionFidelityReason = actionFidelityValid
       ? undefined
       : missingConsequences.length
         ? 'Narration omits required canonical consequence(s): ' + missingConsequences.join(' | ')
         : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
+    const hardAccepted = pacing.valid && (observationLike || missingConsequences.length === 0);
+    const softIssues = [
+      richness.decision !== 'PASS' ? `Narrative richness ${richness.decision} (${richness.overallScore.toFixed(2)})` : '',
+      !actionFidelityValid && missingConsequences.length === 0 ? actionFidelityReason || '' : '',
+    ].filter(Boolean);
     return {
       accepted: richness.decision === 'PASS' && pacing.valid && actionFidelityValid,
+      hardAccepted,
+      softIssues,
       richness,
       pacingValid: pacing.valid,
       pacingReason: pacing.reason,
@@ -798,8 +880,168 @@ export class ServerMockAuthority {
   public async processCustomAction(
     request: ActionRequest,
     canonicalCommandId?: string,
-    options?: { bypassCapabilityAdvisor?: boolean },
+    options?: {
+      bypassCapabilityAdvisor?: boolean;
+      narrationDirective?: string;
+      deferNarration?: boolean;
+      onPrepared?: (prepared: PreparedCustomActionContext) => void;
+    },
   ): Promise<ActionResult> {
+    const prepared = await this.prepareCustomActionState(request, canonicalCommandId, options);
+    if (options?.onPrepared) {
+      options.onPrepared(prepared);
+    }
+
+    if (!prepared.requiresNarration) {
+      return prepared.immediateResult!;
+    }
+
+    if (options?.deferNarration) {
+      return prepared.baseResult!;
+    }
+
+    const targetStoryId = prepared.storyId;
+    worldRepository.scheduleBackgroundDrain(targetStoryId);
+
+    const canDetachLock =
+      canonicalCommandEngine.isInsideExclusiveContext(targetStoryId) &&
+      !worldRepository.isCanonicalCommandTransactionActive();
+
+    if (canDetachLock) {
+      const narrationOutput = await canonicalCommandEngine.withDecoupledLock(targetStoryId, () =>
+        this.generateCustomActionNarration(prepared)
+      );
+      return this.finalizeCustomActionNarration(targetStoryId, prepared, narrationOutput);
+    }
+
+    if (worldRepository.isCanonicalCommandTransactionActive()) {
+      const narrationOutput = await this.generateCustomActionNarration(prepared);
+      return this.finalizeCustomActionNarration(targetStoryId, prepared, narrationOutput);
+    }
+
+    const narrationOutput = await this.generateCustomActionNarration(prepared);
+    return canonicalCommandEngine.runExclusive(targetStoryId, async () =>
+      this.finalizeCustomActionNarration(targetStoryId, prepared, narrationOutput)
+    );
+  }
+
+  public resolveReadOnlyPlayerStateQuery(
+    request: ActionRequest,
+    canonicalCommandId?: string,
+    idempotencyKey?: string,
+  ): ActionResult | null {
+    if (!request || request.type !== 'CUSTOM_ACTION') return null;
+    const targetStoryId = (request as any).storyId || this.activeStoryId;
+    const freeformText = String(
+      (request as any).actionText ||
+      (request as any).customText ||
+      (request as any).description ||
+      (request as any).input ||
+      ''
+    ).trim();
+    if (!freeformText) return null;
+    if (/\b(?:take|pick\s*up|grab|pocket|put|place|store|stash|drop|discard|throw|use|drink|eat|equip|unequip|give|hand|steal|loot)\b/i.test(freeformText)) {
+      return null;
+    }
+
+    const player = worldRepository.getPlayerLifecycle(targetStoryId);
+    const actorId = player?.actorId || `player_actor_${targetStoryId}`;
+    const state = this.getDynamicStoryState(targetStoryId);
+    const query = PlayerStateQueryResolver.resolve({
+      actionText: freeformText,
+      actorId,
+      inventory: worldRepository.getInventoryEngine(targetStoryId),
+      recentActions: state.actionHistory.slice(0, 8).map((entry) => ({
+        description: entry.description,
+        actionType: entry.actionType,
+      })),
+    });
+    if (!query) return null;
+
+    const clock = worldRepository.getWorldClock(targetStoryId);
+    const timestamp = formatCanonicalTimestamp(clock.getTimestamp());
+    const actionId = deterministicId('state_query', targetStoryId, freeformText, state.actionHistory.length);
+    const canonicalSequence = worldRepository.getCanonicalCommandEventCount(targetStoryId) + 1;
+    const effectiveCommandId = canonicalCommandId || deterministicId('cmd_state_query', targetStoryId, actionId);
+    const eventId = deterministicId('evt_cmd', targetStoryId, canonicalSequence, effectiveCommandId);
+
+    const logEntry: ActionLog = {
+      id: actionId,
+      timestamp,
+      cycle: clock.getTimestamp().day,
+      actionType: 'CUSTOM_ACTION',
+      description: freeformText,
+      epistemicValidation: 'MOCK_ENGINE_COMMITTED',
+      authoritativeFeedback: query.response,
+      narrativeResponse: query.response,
+      presentationFeedback: 'Answered directly from canonical player state; no world-state mutation or time advancement.',
+      ...(canonicalCommandId ? { canonicalCommandId: effectiveCommandId, canonicalEventId: eventId } : {}),
+    };
+    state.actionHistory = [logEntry, ...state.actionHistory];
+
+    const run = worldRepository.getStoryRun(targetStoryId);
+    if (run) {
+      if (canonicalCommandId) {
+        const stateHash = worldRepository.getCanonicalStateHash(targetStoryId);
+        const event = {
+          eventId,
+          commandId: effectiveCommandId,
+          ...(idempotencyKey ? { idempotencyKey: String(idempotencyKey) } : {}),
+          storyId: targetStoryId,
+          actorId,
+          commandType: 'INTERACT',
+          source: 'PLAYER',
+          committedAt: timestamp,
+          success: true,
+          summary: 'Authoritative CUSTOM_ACTION command resolved.',
+          mutationPaths: [],
+          mutationCount: 0,
+          transactionMode: 'ROLLBACK',
+          replay: {
+            preStateHash: stateHash,
+            postStateHash: stateHash,
+            canonicalSequence,
+            resolvedDataHash: deterministicId('hash', actionId, query.response),
+            commandPayload: { storyHistoryTurn: true, actionRequest: request },
+          },
+        };
+        const existingEvents = Array.isArray(run.canonicalEvents) ? run.canonicalEvents : [];
+        if (!existingEvents.some((item: any) => item?.eventId === eventId)) {
+          run.canonicalEvents = [...existingEvents, event];
+        }
+      }
+      run.runtimeState = {
+        ...(run.runtimeState || {}),
+        actionHistory: state.actionHistory.map((entry) => ({ ...entry })),
+      };
+      if (worldRepository.getPersistenceHealth().enabled) {
+        worldRepository.saveStoryRun(run);
+      }
+    }
+
+    const result: ActionResult = {
+      success: true,
+      actionId,
+      requestType: request.type,
+      status: 'MOCK_ENGINE_COMMITTED',
+      message: query.response,
+      authoritativeFeedback: query.response,
+      narrativeResponse: query.response,
+      viewState: this.filterForExternalClient(state, targetStoryId),
+    };
+
+    if (canonicalCommandId) {
+      canonicalCommandEngine.updateCompletedResult(targetStoryId, effectiveCommandId, result);
+    }
+
+    return result;
+  }
+
+  public async prepareCustomActionState(
+    request: ActionRequest,
+    canonicalCommandId?: string,
+    options?: { bypassCapabilityAdvisor?: boolean; narrationDirective?: string },
+  ): Promise<PreparedCustomActionContext> {
     // Bypass is an internal server option only. A client cannot inject it through the HTTP payload.
     const bypassCapabilityAdvisor = Boolean(options?.bypassCapabilityAdvisor);
     const preventCapabilityExecution = Boolean((request as any).preventCapabilityExecution);
@@ -845,14 +1087,21 @@ export class ServerMockAuthority {
         state.actionHistory = [logEntry, ...state.actionHistory];
         this.persistActionHistory(targetStoryId, state);
         return {
-          success: true,
-          actionId,
-          requestType: request.type,
-          status: 'MOCK_ENGINE_COMMITTED',
-          message: query.response,
-          authoritativeFeedback: query.response,
-          narrativeResponse: query.response,
-          viewState: this.filterForExternalClient(state, targetStoryId),
+          requiresNarration: false,
+          storyId: targetStoryId,
+          actorId,
+          freeformText: String(freeformText),
+          options,
+          immediateResult: {
+            success: true,
+            actionId,
+            requestType: request.type,
+            status: 'MOCK_ENGINE_COMMITTED',
+            message: query.response,
+            authoritativeFeedback: query.response,
+            narrativeResponse: query.response,
+            viewState: this.filterForExternalClient(state, targetStoryId),
+          },
         };
       }
     }
@@ -875,14 +1124,21 @@ export class ServerMockAuthority {
 
       if (advice.mode === 'SUGGEST_ALTERNATIVE' || advice.mode === 'CAPABILITY_SIMULATION') {
         return {
-          success: false,
-          actionId: deterministicId('advice_pending', targetStoryId, String((request as any).actionText || '')),
-          requestType: request.type,
-          status: 'MOCK_ENGINE_REJECTED',
-          message: advice.simulation?.explanation || 'Action requires a capability decision before execution.',
-          authoritativeFeedback: advice.proposal?.reasonRequestedCapabilityUnavailable || advice.simulation?.explanation || 'Capability decision required.',
-          actionAdvice: advice,
-          viewState: this.getSanitizedViewState(targetStoryId),
+          requiresNarration: false,
+          storyId: targetStoryId,
+          actorId,
+          freeformText: String(freeformText),
+          options,
+          immediateResult: {
+            success: false,
+            actionId: deterministicId('advice_pending', targetStoryId, String((request as any).actionText || '')),
+            requestType: request.type,
+            status: 'MOCK_ENGINE_REJECTED',
+            message: advice.simulation?.explanation || 'Action requires a capability decision before execution.',
+            authoritativeFeedback: advice.proposal?.reasonRequestedCapabilityUnavailable || advice.simulation?.explanation || 'Capability decision required.',
+            actionAdvice: advice,
+            viewState: this.getSanitizedViewState(targetStoryId),
+          },
         };
       }
 
@@ -897,7 +1153,14 @@ export class ServerMockAuthority {
 
     let baseResult: ActionResult | null = null;
     if (request.type !== 'CUSTOM_ACTION') {
-      return this.processAction(request, canonicalCommandId);
+      return {
+        requiresNarration: false,
+        storyId: targetStoryId,
+        actorId,
+        freeformText: String(freeformText),
+        options,
+        immediateResult: this.processAction(request, canonicalCommandId),
+      };
     }
 
     // Encounter detection must happen before the generic story-action resolver.
@@ -920,30 +1183,47 @@ export class ServerMockAuthority {
         canonicalCommandId || 'story-action',
       );
       return {
-        success: true,
-        actionId: transitionActionId,
-        requestType: request.type,
-        status: 'MOCK_ENGINE_COMMITTED',
-        message: encounterCandidate.targetAwareOfPlayer
-          ? 'Hostile encounter detected; tactical combat transition prepared.'
-          : 'Hostile encounter detected; a pre-combat opening is available.',
-        authoritativeFeedback: encounterCandidate.reason,
-        narrativeResponse: pending.precombatActionPending
-          ? 'A hostile presence is here, but it has not perceived you. Your opening action can resolve before initiative.'
-          : 'A hostile presence has perceived you. Tactical combat is now ready to begin.',
-        combatTransition: pending,
-        viewState: this.getSanitizedViewState(targetStoryId),
+        requiresNarration: false,
+        storyId: targetStoryId,
+        actorId,
+        freeformText: String(freeformText),
+        options,
+        immediateResult: {
+          success: true,
+          actionId: transitionActionId,
+          requestType: request.type,
+          status: 'MOCK_ENGINE_COMMITTED',
+          message: encounterCandidate.targetAwareOfPlayer
+            ? 'Hostile encounter detected; tactical combat transition prepared.'
+            : 'Hostile encounter detected; a pre-combat opening is available.',
+          authoritativeFeedback: encounterCandidate.reason,
+          narrativeResponse: pending.precombatActionPending
+            ? 'A hostile presence is here, but it has not perceived you. Your opening action can resolve before initiative.'
+            : 'A hostile presence has perceived you. Tactical combat is now ready to begin.',
+          combatTransition: pending,
+          viewState: this.getSanitizedViewState(targetStoryId),
+        },
       };
     }
 
     const preResolutionPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
     const preResolutionSpatial = preResolutionPlayer?.localSpatialState ? JSON.parse(JSON.stringify(preResolutionPlayer.localSpatialState)) : undefined;
     const preResolutionLocationId = preResolutionPlayer?.locationId;
+    const clockBeforeProcessAction = worldRepository.getWorldClock(targetStoryId).getTimestamp().totalElapsedSeconds;
 
     baseResult = this.processAction(request, canonicalCommandId);
     if (!baseResult) {
-      return baseResult;
+      return {
+        requiresNarration: false,
+        storyId: targetStoryId,
+        actorId,
+        freeformText: String(freeformText),
+        options,
+        immediateResult: baseResult as any,
+      };
     }
+    const clockAfterProcessAction = worldRepository.getWorldClock(targetStoryId).getTimestamp().totalElapsedSeconds;
+    const alreadyElapsedThisTurnSeconds = Math.max(0, clockAfterProcessAction - clockBeforeProcessAction);
 
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
@@ -1498,6 +1778,131 @@ export class ServerMockAuthority {
       );
     }
 
+    // Adjudicate canonical mechanics and build certified commit records for continuity.
+    const stateAdjudication = NarrativeStateAdjudicator.adjudicateCanonicalAction({
+      repository: worldRepository,
+      storyId: targetStoryId,
+      turnId: baseResult.actionId,
+      actorId,
+      actionResolution,
+      canonicalCommandId,
+    });
+
+    // Execute unified living-world simulation tick during player turn (Feature F20)
+    const livingTick = LivingWorldEngine.tickTurn(worldRepository, {
+      storyId: targetStoryId,
+      actionType: request.type,
+      actionText: String(freeformText || ''),
+      isQueryOnly: TimeBudgetGovernor.isStateQuery(String(freeformText || '')),
+      alreadyElapsedThisTurnSeconds,
+    });
+
+    if (livingTick.commitRecords.length > 0) {
+      for (const rec of livingTick.commitRecords) {
+        stateAdjudication.commitRecords.push({
+          commandId: canonicalCommandId || `cmd_living_${rec.targetId}`,
+          kind: rec.kind,
+          targetId: rec.targetId,
+          transactionMode: 'OUTER_STAGED_TRANSACTION',
+          source: 'CANONICAL_ENGINE',
+          summary: `Living world tick: ${rec.kind} on ${rec.targetId} (${rec.provenance})`,
+        });
+      }
+    }
+
+    // Monotonically advance worldVersion and capture immutable snapshot for lock-decoupled narration and background CAS (Feature F21)
+    const currentWorldVersion = worldRepository.incrementWorldVersion(targetStoryId);
+    const currentBaseStateHash = worldRepository.getCanonicalStateHash(targetStoryId);
+    const liveStateForSnapshot = this.getDynamicStoryState(targetStoryId);
+    const narrationSnapshot: CustomActionNarrationSnapshot = {
+      storyId: targetStoryId,
+      actionId: baseResult.actionId,
+      freeformText: String(freeformText || ''),
+      actionResolution: JSON.parse(JSON.stringify(actionResolution)),
+      committedOutcome,
+      worldVersion: currentWorldVersion,
+      baseStateHash: currentBaseStateHash,
+      recentTurns: liveStateForSnapshot.actionHistory
+        .filter((entry) => entry.id !== baseResult?.actionId && Boolean(entry.narrativeResponse || entry.description))
+        .slice(-2)
+        .reverse()
+        .map((entry) => ({
+          playerAction: String(entry.description || ''),
+          narration: String(entry.narrativeResponse || entry.authoritativeFeedback || ''),
+          worldTime: String(entry.timestamp || ''),
+        })),
+      previousNarrations: liveStateForSnapshot.actionHistory
+        .filter((entry) => Boolean(entry.narrativeResponse))
+        .slice(-6)
+        .map((entry) => String(entry.narrativeResponse || '')),
+      npcTargetId: liveStateForSnapshot.activeDialogue?.speakerId || undefined,
+      sceneContext: [
+        run?.openingScene?.narrativeText,
+        run?.startingSituation?.summary,
+        run?.startingSituation?.hook,
+        location?.name,
+        location?.description,
+        location?.ambientSensory && !/^\s*Visual:\s*First light over\b/i.test(String(location.ambientSensory))
+          ? location.ambientSensory
+          : undefined,
+      ].filter(Boolean).join(' '),
+      continuationDirective: (options as any)?.narrationDirective
+        ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective
+        : undefined,
+    };
+
+    // Enqueue post-turn background jobs (e.g., memory consolidation) into the bounded background queue
+    const backgroundQueue = worldRepository.getBackgroundProcessingQueue(targetStoryId);
+    backgroundQueue.enqueue({
+      id: deterministicId('bg_mem', targetStoryId, String(currentWorldVersion)),
+      storyId: targetStoryId,
+      type: 'MEMORY_CONSOLIDATION',
+      taskType: 'MEMORY_CONSOLIDATION',
+      idempotencyKey: `idemp_mem_${targetStoryId}_v${currentWorldVersion}`,
+      priority: 'NORMAL',
+      snapshot: {
+        worldVersion: currentWorldVersion,
+        baseStateHash: currentBaseStateHash,
+        worldElapsedSeconds: worldRepository.getWorldClock(targetStoryId).getTimestamp().totalElapsedSeconds,
+        capturedAt: new Date().toISOString(),
+      },
+      payload: { turnId: baseResult.actionId },
+      maxRetries: 2,
+      rebasePolicy: 'SAFE_REBASE_DISJOINT',
+      targetDomain: 'memories',
+    });
+
+    return {
+      requiresNarration: true,
+      storyId: targetStoryId,
+      actorId,
+      freeformText: String(freeformText || ''),
+      baseResult,
+      actionResolution,
+      committedOutcome,
+      stateAdjudication,
+      storyCheck,
+      resolutionSituation,
+      resolutionIntent,
+      options,
+      livingTick,
+      narrationSnapshot,
+    };
+  }
+
+  public async generateCustomActionNarration(
+    prepared: PreparedCustomActionContext,
+  ): Promise<GeneratedCustomActionNarration> {
+    const snap = prepared.narrationSnapshot!;
+    const targetStoryId = snap.storyId;
+    const freeformText = snap.freeformText;
+    const actionResolution = snap.actionResolution;
+    const committedOutcome = snap.committedOutcome;
+    const resolutionSituation = prepared.resolutionSituation;
+    const resolutionIntent = prepared.resolutionIntent!;
+    const baseResult = prepared.baseResult!;
+    const storyCheck = prepared.storyCheck;
+
     let narrativeResponse = '';
     let narrativeTurnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage | undefined;
     let narrativeError: import('../../src/types').ActionLog['narrativeError'];
@@ -1510,67 +1915,25 @@ export class ServerMockAuthority {
     let narrativePacingContractForFinalReview: import('../domain/narrativePacingEngine').NarrativePacingContract | undefined;
     let generatedResult: any;
     const forensicSink: import('../domain/aiOrchestrator').NarrativeOnlyForensicSink = {};
-    const stageNarrativeForensics = (genResult?: any, thrown?: any) => {
-      try {
-        worldRepository.stageStorySessionTurn(targetStoryId, {
-          task: 'narrative.generate',
-          playerAction: String(freeformText),
-          ...(forensicSink.playerIntent ? { playerIntent: forensicSink.playerIntent } : {}),
-          ...(forensicSink.forensicContext || {}),
-          ...(genResult?.contextAudit ? { contextAudit: genResult.contextAudit } : {}),
-          ...(genResult?.turnPackage ? { turnPackage: genResult.turnPackage } : {}),
-          ...(genResult?.narrativeRichnessEvaluation ? { narrativeRichnessEvaluation: genResult.narrativeRichnessEvaluation } : {}),
-          telemetry: {
-            path: 'narrative-only',
-            success: Boolean(genResult?.success),
-            providerId: genResult?.providerId,
-            modelId: genResult?.modelId,
-            source: genResult?.source,
-            fallbackReason: genResult?.fallbackReason,
-            error: genResult?.error ?? (thrown ? String(thrown?.message || thrown) : undefined),
-            storyBeat: genResult?.storyBeat,
-            narrativeQualityAudit: genResult?.narrativeQualityAudit,
-          },
-          attemptsTrail: genResult?.attemptsTrail ?? thrown?.attemptsTrail,
-        });
-      } catch {
-        // Forensic recording is observability only and must never affect gameplay.
-      }
-    };
+    const forensicPayloads: Array<{ genResult?: any; thrown?: any }> = [];
+
     try {
       const narrator = worldRepository.getAiOrchestrator();
       const generated = await narrator.generateNarrativeOnly({
         storyId: targetStoryId,
-        playerAction: String(freeformText),
+        playerAction: freeformText,
         forensicSink,
         actionResolution,
         committedOutcome,
-        hardTokenBudget: 700,
+        // 700 tokens clipped the situation (and the authorized-lore section at its end) to ~520 characters, so the
+        // model never saw the facts it was then rejected for not using. Current providers take far more context.
+        hardTokenBudget: LIVE_NARRATION_PROMPT_TOKEN_BUDGET,
         timeoutMs: 30000,
         maxRetries: 1,
-        recentTurns: this.getDynamicStoryState(targetStoryId).actionHistory
-          .filter((entry) => entry.id !== baseResult?.actionId && Boolean(entry.narrativeResponse || entry.description))
-          .slice(-2)
-          .reverse()
-          .map((entry) => ({
-            playerAction: entry.description,
-            narration: entry.narrativeResponse || entry.authoritativeFeedback || '',
-            worldTime: entry.timestamp,
-          })),
-        npcTargetId: this.getDynamicStoryState(targetStoryId).activeDialogue?.speakerId || undefined,
-        sceneContext: [
-          run?.openingScene?.narrativeText,
-          run?.startingSituation?.summary,
-          run?.startingSituation?.hook,
-          location?.name,
-          location?.description,
-          location?.ambientSensory && !/^\s*Visual:\s*First light over\b/i.test(String(location.ambientSensory))
-            ? location.ambientSensory
-            : undefined,
-        ].filter(Boolean).join(' '),
-        continuationDirective: (options as any)?.narrationDirective
-          ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective
-          : undefined,
+        recentTurns: snap.recentTurns,
+        npcTargetId: snap.npcTargetId,
+        sceneContext: snap.sceneContext,
+        continuationDirective: snap.continuationDirective,
       } as any);
       generatedResult = generated;
 
@@ -1579,7 +1942,7 @@ export class ServerMockAuthority {
       narrativePacingContractForFinalReview = generated.narrativePacingContract;
       narrativeResearchPacket = generated.researchPacket;
       narrativeContextAudit = generated.contextAudit;
-      stageNarrativeForensics(generated);
+      forensicPayloads.push({ genResult: generated });
       narrativeGeneration = {
         source: generated.source,
         providerId: generated.providerId,
@@ -1645,7 +2008,7 @@ export class ServerMockAuthority {
         });
       }
     } catch (error: any) {
-      stageNarrativeForensics(undefined, error);
+      forensicPayloads.push({ thrown: error });
       narrativeResponse = '';
       narrativeTurnPackage = undefined;
       narrativeGeneration = undefined;
@@ -1670,18 +2033,11 @@ export class ServerMockAuthority {
     }
 
     // N18/N8 continuation-turn gate.
-    // When the real unified generateNarrativeOnly() pipeline ran (indicated by generatedResult?.narrativeQualityAudit),
-    // it has already executed the single permitted narrative.review repair pass. We never make a second
-    // narrative.review LLM call here. The fallback executeTaskGeneration('narrative.review') below is only
-    // used when a test stub replaces generateNarrativeOnly without running the unified validator.
     if (narrativeResponse && narrativeTurnPackage && narrativeGeneration?.source !== 'DETERMINISTIC_FALLBACK') {
-      const previousNarrations = this.getDynamicStoryState(targetStoryId).actionHistory
-        .filter((entry) => Boolean(entry.narrativeResponse))
-        .slice(-6)
-        .map((entry) => String(entry.narrativeResponse || ''));
+      const previousNarrations = snap.previousNarrations;
       const firstReview = this.evaluateLiveNarrativeQuality({
         narrativeText: narrativeResponse,
-        playerAction: String(freeformText),
+        playerAction: freeformText,
         actionResolution,
         situation: resolutionSituation,
         intent: resolutionIntent,
@@ -1692,8 +2048,6 @@ export class ServerMockAuthority {
       if (!firstReview.accepted) {
         const originalGeneration = narrativeGeneration;
         const rejectFinalCandidate = (reason: string, providerId?: string, modelId?: string) => {
-          // The canonical action has already committed. Never roll it back, but also
-          // never display the original narration after this gate rejected it.
           narrativeResponse = '';
           narrativeTurnPackage = undefined;
           narrativeGeneration = undefined;
@@ -1707,7 +2061,11 @@ export class ServerMockAuthority {
           };
         };
         const unifiedPipelineAlreadyRan = Boolean(generatedResult?.narrativeQualityAudit);
-        if (unifiedPipelineAlreadyRan) {
+        if (unifiedPipelineAlreadyRan && firstReview.hardAccepted) {
+          // The unified pipeline already ran its own repair. Quality-only findings must not discard
+          // otherwise grounded prose: keep it and surface the warnings (hard/soft split, 2026-11-24).
+          console.warn('[NarrationQualityGate] Kept narration despite soft quality findings.', { storyId: targetStoryId, softIssues: firstReview.softIssues });
+        } else if (unifiedPipelineAlreadyRan) {
           const failureReason = [
             firstReview.actionFidelity.reason,
             firstReview.pacingReason,
@@ -1721,18 +2079,18 @@ export class ServerMockAuthority {
           try {
             const rewritePrompt = [
               'CANONICAL LIVE-TURN CONTEXT — preserve exactly; never invent beyond it:',
-              'PLAYER ACTION: ' + String(freeformText),
+              'PLAYER ACTION: ' + freeformText,
               'CANONICAL ACTION RESOLUTION: ' + JSON.stringify(actionResolution),
               'COMMITTED OUTCOME: ' + committedOutcome,
               'CURRENT SITUATION: ' + JSON.stringify({
                 ...resolutionSituation,
-                nearbyEntities: resolutionSituation.nearbyEntities.map((entity) => ({
+                nearbyEntities: resolutionSituation.nearbyEntities.map((entity: any) => ({
                   ...entity,
                   name: entity.displayName || entity.name,
                 })),
                 sceneEvidence: {
                   ...resolutionSituation.sceneEvidence,
-                  entities: resolutionSituation.sceneEvidence.entities.map((entity) => ({
+                  entities: resolutionSituation.sceneEvidence.entities.map((entity: any) => ({
                     ...entity,
                     name: entity.displayName || entity.name,
                   })),
@@ -1788,7 +2146,7 @@ export class ServerMockAuthority {
               };
               const finalCandidateValidation = worldRepository.getAiOrchestrator().validateNarrativeCandidate({
                 storyId: targetStoryId,
-                playerAction: String(freeformText),
+                playerAction: freeformText,
                 intent: resolutionIntent,
                 situation: resolutionSituation,
                 plan: narrativePlanForFinalReview,
@@ -1800,7 +2158,7 @@ export class ServerMockAuthority {
               });
               const postReview = this.evaluateLiveNarrativeQuality({
                 narrativeText: parsed.narrativeText,
-                playerAction: String(freeformText),
+                playerAction: freeformText,
                 actionResolution,
                 situation: resolutionSituation,
                 intent: resolutionIntent,
@@ -1812,8 +2170,6 @@ export class ServerMockAuthority {
               if (postReview.accepted && finalCandidateValidation.valid) {
                 narrativeResponse = parsed.narrativeText;
                 narrativeError = undefined;
-                // The rewrite has no matching generated image cues; prevent stale cues
-                // from the rejected primary prose being associated with the new text.
                 narrativeVisualCues = undefined;
                 narrativeTurnPackage = {
                   ...rewrittenTurnPackage,
@@ -1861,33 +2217,133 @@ export class ServerMockAuthority {
       (narrativeError as any).fallbackUsed = true;
     }
 
-    const state = this.getDynamicStoryState(targetStoryId);
-    const actionLog = state.actionHistory.find((entry) => entry.id === baseResult.actionId);
     const actionTips = await storyActionAdvisor.getTipsForAction(
       targetStoryId,
-      String(freeformText)
+      freeformText
     );
 
-    if (actionLog) {
-      actionLog.narrativeResponse = narrativeResponse || undefined;
-      actionLog.presentationFeedback = narrativeResponse || deterministicFallbackMessage;
-      actionLog.narrativeError = narrativeError;
-      actionLog.narrativeGeneration = narrativeGeneration;
-      actionLog.visualCues = narrativeVisualCues;
-      if (storyCheck) {
-        actionLog.checkResult = storyCheck;
-      }
-      actionLog.actionResolution = actionResolution;
-      if (actionTips.length > 0) {
-        actionLog.actionAdvice = {
-          mode: 'NORMAL_ACTION',
-          actionText: String(freeformText),
-          actorId,
-          tips: actionTips,
-          canExecuteNow: true,
-        };
+    return {
+      narrativeResponse,
+      narrativeTurnPackage,
+      narrativeError,
+      narrativeGeneration,
+      narrativeVisualCues,
+      narrativePlanForFinalReview,
+      narrativeResearchPacket,
+      narrativeContextAudit,
+      generatedResult,
+      deterministicFallbackMessage,
+      actionTips,
+      forensicSink,
+      forensicPayloads,
+    };
+  }
+
+  public finalizeCustomActionNarration(
+    storyId: string,
+    prepared: PreparedCustomActionContext,
+    narrationOutput: GeneratedCustomActionNarration,
+  ): ActionResult {
+    const targetStoryId = storyId || prepared.storyId;
+    const baseResult = prepared.baseResult!;
+    const freeformText = prepared.freeformText;
+    const actorId = prepared.actorId;
+    const actionResolution = prepared.actionResolution!;
+    const stateAdjudication = prepared.stateAdjudication!;
+    const storyCheck = prepared.storyCheck;
+    const resolutionSituation = prepared.resolutionSituation;
+    const resolutionIntent = prepared.resolutionIntent!;
+    const committedOutcome = prepared.committedOutcome || '';
+
+    const {
+      narrativeResponse,
+      narrativeTurnPackage,
+      narrativeError,
+      narrativeGeneration,
+      narrativeVisualCues,
+      narrativePlanForFinalReview,
+      narrativeResearchPacket,
+      narrativeContextAudit,
+      generatedResult,
+      deterministicFallbackMessage,
+      actionTips,
+      forensicSink,
+      forensicPayloads,
+    } = narrationOutput;
+
+    const state = this.getDynamicStoryState(targetStoryId);
+    const actionLog = state.actionHistory.find((entry) => entry.id === baseResult.actionId);
+
+    if (!actionLog) {
+      return {
+        ...baseResult,
+        message: narrativeResponse || deterministicFallbackMessage || baseResult.message || 'Action resolved; narration is currently unavailable.',
+        narrativeResponse: narrativeResponse || undefined,
+        narrativeError,
+        narrativeGeneration,
+        checkResult: storyCheck || undefined,
+        stateAdjudication,
+        actionAdvice: actionTips.length > 0
+          ? {
+              mode: 'NORMAL_ACTION',
+              actionText: freeformText,
+              actorId,
+              tips: actionTips,
+              canExecuteNow: true,
+            }
+          : undefined,
+        viewState: this.filterForExternalClient(state, targetStoryId),
+      };
+    }
+
+    for (const payload of forensicPayloads) {
+      try {
+        worldRepository.stageStorySessionTurn(targetStoryId, {
+          task: 'narrative.generate',
+          playerAction: freeformText,
+          ...(forensicSink.playerIntent ? { playerIntent: forensicSink.playerIntent } : {}),
+          ...(forensicSink.forensicContext || {}),
+          ...(payload.genResult?.contextAudit ? { contextAudit: payload.genResult.contextAudit } : {}),
+          ...(payload.genResult?.turnPackage ? { turnPackage: payload.genResult.turnPackage } : {}),
+          ...(payload.genResult?.narrativeRichnessEvaluation ? { narrativeRichnessEvaluation: payload.genResult.narrativeRichnessEvaluation } : {}),
+          telemetry: {
+            path: 'narrative-only',
+            success: Boolean(payload.genResult?.success),
+            providerId: payload.genResult?.providerId,
+            modelId: payload.genResult?.modelId,
+            source: payload.genResult?.source,
+            fallbackReason: payload.genResult?.fallbackReason,
+            error: payload.genResult?.error ?? (payload.thrown ? String(payload.thrown?.message || payload.thrown) : undefined),
+            storyBeat: payload.genResult?.storyBeat,
+            narrativeQualityAudit: payload.genResult?.narrativeQualityAudit,
+          },
+          attemptsTrail: payload.genResult?.attemptsTrail ?? payload.thrown?.attemptsTrail,
+        });
+      } catch {
+        // Forensic recording is observability only and must never affect gameplay.
       }
     }
+
+    actionLog.narrativeResponse = narrativeResponse || undefined;
+    actionLog.presentationFeedback = narrativeResponse || deterministicFallbackMessage;
+    actionLog.narrativeError = narrativeError;
+    actionLog.narrativeGeneration = narrativeGeneration;
+    actionLog.visualCues = narrativeVisualCues;
+    if (storyCheck) {
+      actionLog.checkResult = storyCheck;
+    }
+    actionLog.actionResolution = actionResolution;
+    actionLog.stateAdjudication = stateAdjudication;
+    if (actionTips.length > 0) {
+      actionLog.actionAdvice = {
+        mode: 'NORMAL_ACTION',
+        actionText: freeformText,
+        actorId,
+        tips: actionTips,
+        canExecuteNow: true,
+      };
+    }
+
     // Persist again after narration is attached, so the saved record includes
     // the actual narrative response and diagnostics rather than only the action.
     this.persistActionHistory(targetStoryId, state);
@@ -1897,11 +2353,12 @@ export class ServerMockAuthority {
     narrativeContinuityEngine.recordTurn(worldRepository, {
       storyId: targetStoryId,
       turnId: baseResult.actionId,
-      playerAction: String(freeformText),
+      playerAction: freeformText,
       playerIntent: forensicSink.playerIntent || resolutionIntent,
       currentSituation: (forensicSink.forensicContext as any)?.currentSituation || resolutionSituation,
       narrativePlan: narrativePlanForFinalReview,
       narrativeReview: generatedResult?.narrativeReview,
+      stateAdjudication,
       turnPackage: narrativeTurnPackage || {
         narrative: narrativeResponse ? [narrativeResponse] : [],
         dialogue: [],
@@ -1930,7 +2387,7 @@ export class ServerMockAuthority {
           ...existingHistory,
           {
             actionId: baseResult.actionId,
-            playerAction: String(freeformText),
+            playerAction: freeformText,
             committedOutcome,
             research: narrativeResearchPacket || null,
             contextAudit: narrativeContextAudit || null,
@@ -1953,10 +2410,11 @@ export class ServerMockAuthority {
       narrativeError,
       narrativeGeneration,
       checkResult: storyCheck || undefined,
+      stateAdjudication,
       actionAdvice: actionTips.length > 0
         ? {
             mode: 'NORMAL_ACTION',
-            actionText: String(freeformText),
+            actionText: freeformText,
             actorId,
             tips: actionTips,
             canExecuteNow: true,
@@ -2433,16 +2891,6 @@ The moment does not end so much as shift, leaving the scene open to whatever the
             : 14400; // 4 hours per cycle step
 
         const advanceResult = worldSimulationService.advanceTime(targetStoryId, secondsToAdvance);
-
-        // World time drives ambient NPC schedules. Refresh canonical occupants
-        // immediately after the clock advances so the next scene projection
-        // cannot keep presenting a stale activity/presence snapshot.
-        const advancedPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
-        const advancedRun = worldRepository.getStoryRun(targetStoryId);
-        const advancedLocationId = advancedPlayer?.locationId || advancedRun?.currentLocationId || '';
-        if (advancedLocationId) {
-          WorldActivityDirector.ensureAmbientPopulation(worldRepository, targetStoryId, advancedLocationId);
-        }
 
         const clock = worldRepository.getWorldClock(targetStoryId);
         const ts = clock.getTimestamp();

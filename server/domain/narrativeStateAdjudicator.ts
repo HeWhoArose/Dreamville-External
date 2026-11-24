@@ -29,7 +29,8 @@ export interface StateAdjudicationResult {
 		kind: string;
 		targetId: string;
 		transactionMode: 'OUTER_STAGED_TRANSACTION';
-		source: 'AI_PROPOSAL';
+		source: 'AI_PROPOSAL' | 'CANONICAL_ENGINE' | 'CANONICAL_ACTION';
+		summary?: string;
 	}>;
 }
 
@@ -83,6 +84,32 @@ export class NarrativeStateAdjudicator {
 
 			const canonicalOutcome = canonicalOutcomeFor(proposal, params.canonicalAdjudication);
 			const verified = isVerifiedCanonicalProposal(proposal, verifiedCanonicalChanges);
+
+			// F12 Invariant: Cannot move deceased bodies into inventory
+			if (kind === 'inventory') {
+				const val = proposal.value as Record<string, unknown> | undefined;
+				const targetEntityId = String(val?.entityId || val?.targetEntityId || val?.itemId || proposal.targetId || '');
+				const card = targetEntityId ? params.repository.getEntityCard(params.storyId, targetEntityId) : undefined;
+				if (
+					card &&
+					(card.worldState?.isAlive === false ||
+					 card.lifecycle?.status === 'DEAD' ||
+					 (card.classification?.tags || []).some((t: string) => t.toLowerCase() === 'corpse') ||
+					 (card.traits || []).some((t: string) => t.toLowerCase() === 'corpse' || t.toLowerCase() === 'deceased_body'))
+				) {
+					outcomes.push({
+						proposal,
+						commandId,
+						approved: false,
+						reason: 'CANNOT_TAKE_CORPSE: Deceased bodies cannot be moved into inventory.',
+						canonicalEngine: 'InventoryItemEngine',
+						committed: false,
+						rollbackSafe: true,
+					});
+					return;
+				}
+			}
+
 			if (verified && canonicalOutcome?.approved) {
 				if (kind === 'health') {
 					if (proposal.targetId !== params.actorId) {
@@ -128,6 +155,168 @@ export class NarrativeStateAdjudicator {
 			rolledBack: false,
 			outcomes,
 			commitRecords: [],
+		};
+	}
+
+	/**
+	 * Adjudicates and certifies canonical mechanics resolved by server authority.
+	 * Directly produces a StateAdjudicationResult populated with durable commitRecords,
+	 * ensuring full parity with executeTurn while preserving the World Simulator boundary.
+	 */
+	public static adjudicateCanonicalAction(
+		actionResolutionOrParams: import('../../src/types').ActionResolution | {
+			repository?: WorldRepository;
+			storyId?: string;
+			turnId?: string;
+			actorId?: string;
+			actionResolution: import('../../src/types').ActionResolution;
+			canonicalCommandId?: string;
+			situation?: CurrentSituation;
+			options?: any;
+		},
+		situationOrOptions?: CurrentSituation | { repository?: WorldRepository; storyId?: string; turnId?: string; actorId?: string; canonicalCommandId?: string },
+		maybeOptions?: { repository?: WorldRepository; storyId?: string; turnId?: string; actorId?: string; canonicalCommandId?: string },
+	): StateAdjudicationResult {
+		let actionResolution: import('../../src/types').ActionResolution;
+		let storyId = 'default_story';
+		let turnId = 'turn_default';
+		let actorId = 'player';
+		let canonicalCommandId: string | undefined;
+
+		if (actionResolutionOrParams && 'resolutionId' in actionResolutionOrParams) {
+			actionResolution = actionResolutionOrParams;
+			const situation = (situationOrOptions && 'location' in situationOrOptions) ? situationOrOptions : undefined;
+			const opts = (maybeOptions || (situationOrOptions && !('location' in situationOrOptions) ? situationOrOptions : {})) as any;
+			storyId = opts?.storyId || situation?.storyId || 'default_story';
+			turnId = opts?.turnId || situation?.turnId || 'turn_default';
+			actorId = opts?.actorId || 'player';
+			canonicalCommandId = opts?.canonicalCommandId;
+		} else {
+			const params = actionResolutionOrParams as {
+				repository?: WorldRepository;
+				storyId?: string;
+				turnId?: string;
+				actorId?: string;
+				actionResolution: import('../../src/types').ActionResolution;
+				canonicalCommandId?: string;
+				situation?: CurrentSituation;
+				options?: any;
+			};
+			actionResolution = params?.actionResolution;
+			storyId = params?.storyId || params?.situation?.storyId || 'default_story';
+			turnId = params?.turnId || params?.situation?.turnId || 'turn_default';
+			actorId = params?.actorId || 'player';
+			canonicalCommandId = params?.canonicalCommandId;
+		}
+
+		const outcomes: StateAdjudicationOutcome[] = [];
+		const commitRecords: StateAdjudicationResult['commitRecords'] = [];
+		const changes = Array.isArray(actionResolution?.canonicalStateChanges)
+			? actionResolution.canonicalStateChanges
+			: [];
+
+		changes.forEach((change, index) => {
+			const commandId = canonicalCommandId || deterministicId(
+				'canonical_adj',
+				storyId,
+				turnId,
+				index,
+				change.kind,
+				change.targetId || actorId
+			);
+			const kind = normalize(change.kind).toUpperCase();
+			const targetId = String(change.targetId || actorId);
+			const canonicalEngine = typeof change.metadata?.source === 'string'
+				? change.metadata.source
+				: 'CanonicalEngine';
+
+			outcomes.push({
+				proposal: {
+					kind: change.kind,
+					targetId,
+					value: change.value,
+					metadata: change.metadata,
+				},
+				commandId,
+				approved: true,
+				canonicalEngine,
+				committed: true,
+				rollbackSafe: true,
+			});
+
+			commitRecords.push({
+				commandId,
+				kind,
+				targetId,
+				transactionMode: 'OUTER_STAGED_TRANSACTION',
+				source: 'CANONICAL_ENGINE',
+				summary: typeof change.metadata?.summary === 'string'
+					? change.metadata.summary
+					: `${kind} committed for ${targetId}`,
+			});
+		});
+
+		// If no granular state mutation occurred, derive a canonical outcome from check/interaction resolution.
+		if (commitRecords.length === 0 && actionResolution) {
+			const commandId = canonicalCommandId || deterministicId(
+				'canonical_action_adj',
+				storyId,
+				turnId,
+				actionResolution.resolutionMethod || 'NO_CHECK',
+				actionResolution.outcomeTier || 'NO_CHECK'
+			);
+
+			let recordKind = 'ACTION_RESOLVED';
+			let summary = actionResolution.actualEffect || 'Canonical action resolved.';
+
+			if (actionResolution.check) {
+				const check = actionResolution.check;
+				recordKind = `CHECK_${check.outcomeTier || (check.success ? 'SUCCESS' : 'FAILURE')}`;
+				const checkType = check.testType === 'SAVING_THROW'
+					? `${check.ability} saving throw`
+					: `${check.skill || check.ability} check`;
+				summary = `${checkType} ${check.success ? 'succeeded' : 'failed'} (${check.total} vs DC ${check.difficultyClass}).`;
+			} else if (actionResolution.outcomeTier && actionResolution.outcomeTier !== 'NO_CHECK') {
+				recordKind = `ACTION_${actionResolution.outcomeTier}`;
+			}
+
+			outcomes.push({
+				proposal: {
+					kind: recordKind,
+					targetId: actorId,
+					value: {
+						method: actionResolution.resolutionMethod,
+						tier: actionResolution.outcomeTier,
+					},
+				},
+				commandId,
+				approved: true,
+				canonicalEngine: 'CanonicalCommandEngine',
+				committed: true,
+				rollbackSafe: true,
+			});
+
+			commitRecords.push({
+				commandId,
+				kind: recordKind,
+				targetId: actorId,
+				transactionMode: 'OUTER_STAGED_TRANSACTION',
+				source: 'CANONICAL_ACTION',
+				summary,
+			});
+		}
+
+		return {
+			turnId,
+			storyId,
+			actorId,
+			allApproved: outcomes.every((o) => o.approved),
+			approvedCount: outcomes.filter((o) => o.approved).length,
+			rejectedCount: outcomes.filter((o) => !o.approved).length,
+			committedCount: commitRecords.length,
+			rolledBack: false,
+			outcomes,
+			commitRecords,
 		};
 	}
 

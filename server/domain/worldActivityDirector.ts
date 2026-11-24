@@ -248,7 +248,11 @@ export class WorldActivityDirector {
 			: undefined;
 		const viewerActorId = viewer?.actorId;
 		const viewerName = viewer?.name;
-		const existing = repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card) =>
+		const locationCandidates: ReadonlyArray<EntityCard> =
+			typeof (repository as any).getEntityRegistry === 'function'
+				? (repository.getEntityRegistry(storyId).listReadOnly({ status: 'ACTIVE', locationId }) as ReadonlyArray<EntityCard>)
+				: repository.getEntityCards(storyId, { status: 'ACTIVE', locationId });
+		const existing = locationCandidates.filter((card) =>
 			card.worldState.locationId === locationId &&
 			card.worldState.isAlive &&
 			['NPC', 'MERCHANT', 'CHARACTER', 'FACTION_MEMBER'].includes(card.kind) &&

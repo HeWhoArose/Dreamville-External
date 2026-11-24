@@ -132,6 +132,7 @@ export interface RelationshipHistoryEntry {
 		respect: number;
 		fear: number;
 		hostility: number;
+		suspicion?: number;
 	};
 	metricsAfter: {
 		trust: number;
@@ -139,6 +140,7 @@ export interface RelationshipHistoryEntry {
 		respect: number;
 		fear: number;
 		hostility: number;
+		suspicion?: number;
 	};
 }
 
@@ -152,6 +154,7 @@ export interface DynamicRelationshipState {
 	respect: number;
 	fear: number;
 	hostility: number;
+	suspicion: number;
 	stance: RelationshipStance;
 	activeCause: RelationshipCause;
 	lastChangedAtSeconds: number;
@@ -171,6 +174,7 @@ export interface RelationshipDelta {
 	respect?: number;
 	fear?: number;
 	hostility?: number;
+	suspicion?: number;
 }
 
 export interface RelationshipMutationParams {
@@ -184,6 +188,27 @@ export interface RelationshipMutationParams {
 	evidenceIds?: string[];
 	delta?: RelationshipDelta;
 	explicitStance?: RelationshipStance;
+}
+
+export interface BidirectionalRelationshipParams {
+	storyId: string;
+	partyAId: string;
+	partyBId: string;
+	eventId: string;
+	timestampSeconds: number;
+	cause: RelationshipCause;
+	description: string;
+	evidenceIds?: string[];
+	symmetricDelta?: RelationshipDelta;
+	forwardDelta?: RelationshipDelta;
+	backwardDelta?: RelationshipDelta;
+	explicitStanceA?: RelationshipStance;
+	explicitStanceB?: RelationshipStance;
+}
+
+export interface BidirectionalRelationshipResult {
+	forward: DynamicRelationshipState;
+	backward: DynamicRelationshipState;
 }
 
 function clone<T>(value: T): T {
@@ -215,6 +240,10 @@ function normalizeControlState(value: unknown): AgencyControlState {
 		value === 'COMPELLED'
 		? value
 		: 'FREE';
+}
+
+function normalizeBeliefStatus(value: unknown): BeliefStatus {
+	return value === 'CORRECTED' || value === 'DISPROVEN' || value === 'REPLACED' ? value : 'HELD';
 }
 
 const STANCE_VALUES: RelationshipStance[] = [
@@ -354,7 +383,8 @@ export class DynamicCharacterAgencyEngine {
 						affection: relation?.affection ?? 50,
 						respect: relation?.respect ?? 50,
 						fear: relation?.fear ?? 0,
-						hostility: 0,
+						hostility: relation?.hostility ?? 0,
+						suspicion: relation?.suspicion ?? 0,
 						activeCause: 'INITIAL_BOND',
 						history: [],
 						lastChangedAtSeconds: 0,
@@ -444,6 +474,7 @@ export class DynamicCharacterAgencyEngine {
 			respect: 50,
 			fear: 0,
 			hostility: 0,
+			suspicion: 0,
 			stance: 'NEUTRAL',
 			activeCause: 'INITIAL_BOND',
 			lastChangedAtSeconds: nowSeconds,
@@ -472,6 +503,7 @@ export class DynamicCharacterAgencyEngine {
 			respect: clampScore(relationship.respect),
 			fear: clampScore(relationship.fear),
 			hostility: clampScore(relationship.hostility),
+			suspicion: clampScore(relationship.suspicion),
 			stance: normalizeStance(relationship.stance) || this.deriveStance(relationship),
 			activeCause: relationship.activeCause || 'OTHER',
 			lastChangedAtSeconds: typeof relationship.lastChangedAtSeconds === 'number' && Number.isFinite(relationship.lastChangedAtSeconds) ? relationship.lastChangedAtSeconds : 0,
@@ -506,6 +538,7 @@ export class DynamicCharacterAgencyEngine {
 		relationship.respect = clampScore(relationship.respect + (params.delta?.respect || 0));
 		relationship.fear = clampScore(relationship.fear + (params.delta?.fear || 0));
 		relationship.hostility = clampScore(relationship.hostility + (params.delta?.hostility || 0));
+		relationship.suspicion = clampScore((relationship.suspicion || 0) + (params.delta?.suspicion || 0));
 		relationship.stance = params.explicitStance || this.deriveStance(relationship);
 		relationship.activeCause = params.cause;
 		relationship.lastChangedAtSeconds = params.timestampSeconds;
@@ -525,6 +558,7 @@ export class DynamicCharacterAgencyEngine {
 				respect: before.respect,
 				fear: before.fear,
 				hostility: before.hostility,
+				suspicion: before.suspicion || 0,
 			},
 			metricsAfter: {
 				trust: relationship.trust,
@@ -532,11 +566,58 @@ export class DynamicCharacterAgencyEngine {
 				respect: relationship.respect,
 				fear: relationship.fear,
 				hostility: relationship.hostility,
+				suspicion: relationship.suspicion || 0,
 			},
 		};
 		relationship.history.push(historyEntry);
 		this.changed();
 		return clone(relationship);
+	}
+
+	public applyBidirectionalRelationshipDelta(
+		params: BidirectionalRelationshipParams,
+	): BidirectionalRelationshipResult {
+		const forwardDelta = params.forwardDelta || params.symmetricDelta || {};
+		const backwardDelta = params.backwardDelta || params.symmetricDelta || {};
+
+		const forward = this.applyRelationshipDelta({
+			storyId: params.storyId,
+			sourceId: params.partyAId,
+			targetId: params.partyBId,
+			eventId: params.eventId,
+			timestampSeconds: params.timestampSeconds,
+			cause: params.cause,
+			description: params.description,
+			evidenceIds: params.evidenceIds,
+			delta: forwardDelta,
+			explicitStance: params.explicitStanceA,
+		});
+
+		const backward = this.applyRelationshipDelta({
+			storyId: params.storyId,
+			sourceId: params.partyBId,
+			targetId: params.partyAId,
+			eventId: `${params.eventId}_reciprocal`,
+			timestampSeconds: params.timestampSeconds,
+			cause: params.cause,
+			description: params.description,
+			evidenceIds: params.evidenceIds,
+			delta: backwardDelta,
+			explicitStance: params.explicitStanceB,
+		});
+
+		return { forward, backward };
+	}
+
+	public getBidirectionalRelationship(
+		storyId: string,
+		partyAId: string,
+		partyBId: string,
+	): { forward: DynamicRelationshipState | null; backward: DynamicRelationshipState | null } {
+		return {
+			forward: this.getRelationship(storyId, partyAId, partyBId),
+			backward: this.getRelationship(storyId, partyBId, partyAId),
+		};
 	}
 
 	public setRelationshipStance(params: RelationshipMutationParams): DynamicRelationshipState {
@@ -818,7 +899,7 @@ export class DynamicCharacterAgencyEngine {
 		return clone(this.state);
 	}
 
-	public importState(state: unknown): void {
+	public importState(state: unknown, targetStoryId?: string): void {
 		const incoming = state as Partial<DynamicCharacterAgencyState> | null | undefined;
 		if (!incoming || incoming.schemaVersion !== 1) {
 			this.state = {
@@ -833,9 +914,14 @@ export class DynamicCharacterAgencyEngine {
 		const characters: Record<string, CharacterAgencyProfile> = {};
 		for (const [key, profile] of Object.entries(incoming.characters || {})) {
 			if (!profile || typeof profile !== 'object') continue;
-			characters[key] = {
-				characterId: String(profile.characterId),
-				worldId: String(profile.worldId || ''),
+			let charId = String(profile.characterId || '');
+			if (!charId && key.includes('::')) {
+				charId = key.split('::')[1];
+			}
+			const charKey = targetStoryId ? this.characterKey(targetStoryId, charId) : key;
+			characters[charKey] = {
+				characterId: charId,
+				worldId: String(profile.worldId || targetStoryId || ''),
 				name: String(profile.name || profile.characterId || 'Unknown'),
 				factionId: profile.factionId ? String(profile.factionId) : undefined,
 				personality: normalizePersonality(profile.personality || {}),
@@ -867,28 +953,41 @@ export class DynamicCharacterAgencyEngine {
 		const relationships: Record<string, DynamicRelationshipState> = {};
 		for (const [key, relation] of Object.entries(incoming.relationships || {})) {
 			if (!relation || typeof relation !== 'object') continue;
+			let sourceId = String(relation.sourceId || '');
+			let targetId = String(relation.targetId || '');
+			if ((!sourceId || !targetId) && key.includes('::')) {
+				const parts = key.split('::');
+				if (parts.length >= 3) {
+					sourceId = sourceId || parts[parts.length - 2];
+					targetId = targetId || parts[parts.length - 1];
+				}
+			}
+			const relKey = targetStoryId
+				? this.relationshipKey(targetStoryId, sourceId, targetId)
+				: key;
 			const normalized: DynamicRelationshipState = {
-				id: String(relation.id || deterministicId('relationship', String(relation.worldId || 'world'), String(relation.sourceId), String(relation.targetId))),
+				id: String(relation.id || deterministicId('relationship', String(relation.worldId || targetStoryId || 'world'), sourceId, targetId)),
 				worldId: String(relation.worldId || 'world'),
-				sourceId: String(relation.sourceId || ''),
-				targetId: String(relation.targetId || ''),
+				sourceId,
+				targetId,
 				trust: clampScore(Number(relation.trust)),
 				affection: clampScore(Number(relation.affection)),
 				respect: clampScore(Number(relation.respect)),
 				fear: clampScore(Number(relation.fear)),
 				hostility: clampScore(Number(relation.hostility)),
+				suspicion: clampScore(Number(relation.suspicion || 0)),
 				stance: normalizeStance(relation.stance) || 'NEUTRAL',
 				activeCause: relation.activeCause || 'OTHER',
 				lastChangedAtSeconds: Number.isFinite(relation.lastChangedAtSeconds) ? Number(relation.lastChangedAtSeconds) : 0,
 				history: Array.isArray(relation.history) ? clone(relation.history) : [],
 			};
-			relationships[key] = normalized;
+			relationships[relKey] = normalized;
 		}
 
 		const beliefs: Record<string, CharacterBelief[]> = {};
 		for (const [key, values] of Object.entries(incoming.beliefs || {})) {
 			if (!Array.isArray(values)) continue;
-			beliefs[key] = values
+			const mappedValues = values
 				.filter((belief) => belief && typeof belief === 'object')
 				.map((belief) => ({
 					beliefId: String(belief.beliefId),
@@ -896,12 +995,15 @@ export class DynamicCharacterAgencyEngine {
 					proposition: String(belief.proposition || ''),
 					believedValue: String(belief.believedValue || ''),
 					confidence: Math.max(0, Math.min(1, Number(belief.confidence))),
-					status: belief.status === 'CORRECTED' || belief.status === 'DISPROVEN' || belief.status === 'REPLACED' ? belief.status : 'HELD',
+					status: normalizeBeliefStatus(belief.status),
 					sourceEventIds: Array.isArray(belief.sourceEventIds) ? belief.sourceEventIds.map(String) : [],
 					formedAtSeconds: Number.isFinite(belief.formedAtSeconds) ? Number(belief.formedAtSeconds) : 0,
 					lastUpdatedSeconds: Number.isFinite(belief.lastUpdatedSeconds) ? Number(belief.lastUpdatedSeconds) : 0,
 					history: Array.isArray(belief.history) ? clone(belief.history) : [],
 				}));
+			const charId = mappedValues[0]?.characterId || (key.includes('::') ? key.split('::')[1] : key);
+			const beliefKey = targetStoryId && charId ? this.beliefKey(targetStoryId, charId) : key;
+			beliefs[beliefKey] = mappedValues;
 		}
 
 		this.state = {

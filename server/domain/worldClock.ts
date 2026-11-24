@@ -46,7 +46,14 @@ export class WorldClock {
   }
 
   public importState(state: WorldClockState): void {
-    if (!state || !state.timestamp) return;
+    if (
+      !state ||
+      !state.timestamp ||
+      typeof state.timestamp.totalElapsedSeconds !== 'number' ||
+      !Number.isFinite(state.timestamp.totalElapsedSeconds)
+    ) {
+      return;
+    }
     this.state = {
       calendarSystemId: state.calendarSystemId ?? 'astral_standard',
       timestamp: { ...state.timestamp },
@@ -87,7 +94,7 @@ export class WorldClock {
    * Pure deterministic arithmetic; does not invoke AI.
    */
   public advanceSeconds(seconds: number): WorldClockState {
-    if (seconds <= 0) return this.getState();
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return this.getState();
 
     let { year, month, day, hour, minute, second, totalElapsedSeconds } = this.state.timestamp;
 
@@ -113,12 +120,14 @@ export class WorldClock {
       day += extraDays;
     }
 
-    while (day > 30) {
-      day -= 30;
-      month += 1;
+    if (day > 30) {
+      const extraMonths = Math.floor((day - 1) / 30);
+      day = ((day - 1) % 30) + 1;
+      month += extraMonths;
       if (month > 12) {
-        month = 1;
-        year += 1;
+        const extraYears = Math.floor((month - 1) / 12);
+        month = ((month - 1) % 12) + 1;
+        year += extraYears;
       }
     }
 
@@ -143,14 +152,17 @@ export class WorldClock {
   }
 
   public advanceMinutes(minutes: number): WorldClockState {
+    if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) return this.getState();
     return this.advanceSeconds(minutes * 60);
   }
 
   public advanceHours(hours: number): WorldClockState {
+    if (typeof hours !== 'number' || !Number.isFinite(hours) || hours <= 0) return this.getState();
     return this.advanceSeconds(hours * 3600);
   }
 
   public advanceDays(days: number): WorldClockState {
+    if (typeof days !== 'number' || !Number.isFinite(days) || days <= 0) return this.getState();
     return this.advanceSeconds(days * 86400);
   }
 

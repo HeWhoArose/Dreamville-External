@@ -749,7 +749,7 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     memoryRefs: [],
     provenance: { source: 'canonical arena test fixture', createdBy: 'SYSTEM' },
     lifecycle: { status: 'ACTIVE' },
-    metadata: {},
+    metadata: { apparentIdentity: 'caste enforcers' },
   });
 
   // Verify the authored scene-object evidence survives the WorldTemplate ->

@@ -4,6 +4,11 @@ import type { EphemeralNarrativePlan } from './narrativeDirector';
 import type { StructuredTurnPackage } from './aiOrchestrator';
 import type { ActionResolution } from './actionResolution';
 import { NarrativeQualityContractEngine, type NarrativeQualityContract } from './narrativeQualityContract';
+import { extractEntityNameTokens } from './epistemicBoundary';
+import { AffordancePlausibilityEngine } from './affordancePlausibilityEngine';
+import { inferLocationArchetype, type LocationArchetype } from './locationArchetypes';
+import { CharacterCanonSteward } from './characterCanonSteward';
+import { analyzeKnownFactUse } from './knownFactUse';
 
 export type NarrativeReviewDecision = 'ACCEPT' | 'REWRITE' | 'REJECT';
 
@@ -38,6 +43,96 @@ function normalize(value: unknown): string {
 	return String(value ?? '').trim().toLowerCase();
 }
 
+export interface StructuredObservationEvaluation {
+	valid: boolean;
+	hasPerceptionBeat: boolean;
+	hasAnchorGrounding: boolean;
+	hasOutcomeOrLimitation: boolean;
+	reasons: string[];
+}
+
+export function evaluateObservationGrounding(
+	narration: string,
+	intent: PlayerIntent,
+	situation: CurrentSituation,
+	actionResolution?: ActionResolution,
+): StructuredObservationEvaluation {
+	const lower = normalize(narration);
+	const reasons: string[] = [];
+
+	// 1. Perception Signal: Active perceptual attending or sensory engagement
+	const PERCEPTION_VERBS = /\b(?:look|looks|looked|looking|gaze|gazes|gazed|gazing|peer|peers|peered|peering|glance|glances|glanced|glancing|watch|watches|watched|watching|observe|observes|observed|observing|inspect|inspects|inspected|inspecting|examine|examines|examined|examining|study|studies|studied|studying|scan|scans|scanned|scanning|survey|surveys|surveyed|surveying|check|checks|checked|checking|search|searches|searched|searching|listen|listens|listened|listening|hear|hears|heard|hearing|overhear|overhears|overheard|overhearing|detect|detects|detected|detecting|notice|notices|noticed|noticing|spot|spots|spotted|spotting|sense|senses|sensed|sensing|discern|discerns|discerned|discerning|perceive|perceives|perceived|perceiving|take in|takes in|took in|taking in|attend|attends|attended|attending|see|sees|saw|seeing|catch sight|catches sight|caught sight|glimpse|glimpses|glimpsed)\b/i;
+	const PERCEPTION_NOUNS = /\b(?:eyes|gaze|sight|vision|attention|ears|hearing|view|focus)\b/i;
+	const hasPerceptionBeat = PERCEPTION_VERBS.test(lower) || PERCEPTION_NOUNS.test(lower);
+
+	// 2. Anchor Grounding: Does the narration tie to the requested target or established scene?
+	let hasAnchorGrounding = false;
+	const targetWords = [
+		...(intent.explicitTargets || []).map((t) => t.name.toLowerCase()),
+		...(intent.impliedTargets || []).map((t) => t.name.toLowerCase()),
+		...(intent.target?.name ? [intent.target.name.toLowerCase()] : []),
+	].filter((w) => w.length >= 3);
+
+	const resolutionAnchors = [
+		actionResolution?.actualEffect?.toLowerCase(),
+		...(actionResolution?.playerVisibleConsequences || []).map((c) => c.toLowerCase()),
+	].filter(Boolean) as string[];
+
+	if (targetWords.length > 0) {
+		hasAnchorGrounding =
+			targetWords.some((t) => lower.includes(t)) ||
+			targetWords.some((t) =>
+				t.split(/\s+/).filter((tok) => tok.length >= 4).some((tok) => lower.includes(tok))
+			) ||
+			resolutionAnchors.some((anchor) =>
+				anchor.split(/[^a-z0-9]+/).filter((tok) => tok.length >= 4).some((tok) => lower.includes(tok))
+			);
+	} else {
+		// Broad observation: check location name, description, visible events, information goal, scene objects, or visible entities
+		const sceneAnchors = [
+			situation.location.name.toLowerCase(),
+			...(situation.location.description ? [situation.location.description.toLowerCase()] : []),
+			...(situation.location.ambientSensory ? [situation.location.ambientSensory.toLowerCase()] : []),
+			...(situation.sceneObjects || []).filter((o) => o.visibleToPlayer).map((o) => o.name.toLowerCase()),
+			...(situation.nearbyEntities || []).filter((e) => e.visibleToPlayer).map((e) => (e.displayName || e.name).toLowerCase()),
+			...(situation.visibleEvents || []).map((e) => e.summary.toLowerCase()),
+			...(intent.informationGoal ? [intent.informationGoal.toLowerCase()] : []),
+			...(situation.plot?.summary ? [situation.plot.summary.toLowerCase()] : []),
+			...resolutionAnchors,
+		];
+		hasAnchorGrounding = sceneAnchors.some((anchor) => {
+			const tokList = anchor.split(/[^a-z0-9]+/).filter((tok) => tok.length >= 4);
+			return tokList.length > 0 && tokList.some((tok) => lower.includes(tok));
+		});
+	}
+
+	// 3. Grounded Outcome or Honest Limitation
+	const OBSERVABLE_DISCOVERY = /\b(?:finds?|found|reveals?|revealed|uncovers?|uncovered|shows?|showed|contains?|contained|rests?|stands?|lies?|remains?|lingers?|hanging|placed|marked|written|inscribed|carved)\b/i;
+	const HONEST_LIMITATION = /\b(?:nothing|no sign|no one|nobody|not a single|not one|empty|deserted|unoccupied|silent|silence|quiet|stillness|still|faint|inconclusive|unclear|indistinct|unbroken|calm|without a trace|yields nothing)\b/i;
+	const hasOutcomeOrLimitation = OBSERVABLE_DISCOVERY.test(lower) || HONEST_LIMITATION.test(lower) ||
+		Boolean(actionResolution?.playerVisibleConsequences && actionResolution.playerVisibleConsequences.length > 0);
+
+	if (!hasPerceptionBeat && !hasOutcomeOrLimitation) {
+		reasons.push('The requested observation does not depict perceptual examination or an observable result.');
+	}
+	if (targetWords.length > 0 && !hasAnchorGrounding) {
+		reasons.push(`The observation omits the targeted subject (${targetWords.join(', ')}).`);
+	}
+	if (targetWords.length === 0 && !hasAnchorGrounding && !hasOutcomeOrLimitation) {
+		reasons.push('The broad observation lacks grounding in current scene anchors and does not describe an observable outcome or limitation.');
+	}
+
+	const isGrounded = targetWords.length > 0 ? hasAnchorGrounding : (hasAnchorGrounding || hasOutcomeOrLimitation);
+	const valid = (hasPerceptionBeat || hasOutcomeOrLimitation) && isGrounded;
+	return {
+		valid,
+		hasPerceptionBeat,
+		hasAnchorGrounding,
+		hasOutcomeOrLimitation,
+		reasons,
+	};
+}
+
 function tokens(value: unknown): string[] {
 	return Array.from(new Set(
 		normalize(value)
@@ -58,23 +153,28 @@ function containsAny(text: string, pattern: RegExp): boolean {
 }
 
 function buildForbiddenKnowledgeSet(situation: CurrentSituation): string[] {
-	const authorized = situation.playerKnowledge.knownFacts.map((fact) => normalize(JSON.stringify(fact)));
+	const authorized = (situation.playerKnowledge?.knownFacts || []).map((fact) => normalize(JSON.stringify(fact)));
 	const playerVisibleContext = [
-		situation.location.name,
-		situation.location.description,
-		situation.location.ambientSensory,
+		situation.location?.name || '',
+		situation.location?.description || '',
+		situation.location?.ambientSensory || '',
 		situation.activeDialogue?.text || '',
-		...situation.visibleEvents.map((event) => event.summary),
-		...situation.relevantLore.map((fact) => [fact.predicate, fact.objectValue].join(' ')),
-		...situation.openThreads.map((thread) => [thread.title, thread.summary].filter(Boolean).join(' ')),
-		situation.plot.summary,
+		...(situation.visibleEvents || []).map((event) => event.summary),
+		...(situation.relevantLore || []).map((fact) => [fact.predicate, fact.objectValue].join(' ')),
+		...(situation.openThreads || []).map((thread) => [thread.title, thread.summary].filter(Boolean).join(' ')),
+		situation.plot?.summary || '',
 	]
 		.map(normalize)
 		.filter(Boolean)
 		.join(' ');
 
+	const knownText = [
+		...authorized,
+		...(situation.nearbyEntities || []).filter((entity) => entity.identityKnown !== false).map((entity) => normalize(entity.name)),
+	].join(' ');
+
 	const forbidden: string[] = [];
-	for (const fact of situation.worldFacts) {
+	for (const fact of (situation.worldFacts || [])) {
 		if (authorized.includes(normalize(JSON.stringify(fact)))) continue;
 
 		const candidates = [
@@ -89,6 +189,9 @@ function buildForbiddenKnowledgeSet(situation: CurrentSituation): string[] {
 
 		for (const candidate of candidates) {
 			if (playerVisibleContext.includes(candidate)) continue;
+			// A name or place the player already knows ("Arthur Pendelton") is not secret just because a hidden
+			// fact also mentions it; only the hidden combination is.
+			if (knownText.includes(candidate)) continue;
 			forbidden.push(candidate);
 		}
 	}
@@ -238,6 +341,15 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 			);
 			if (matchedAll) return true;
 		}
+	}
+
+	// Affordance Engine Integration (F11):
+	// Allow archetype-plausible mundane environmental props to pass review
+	// without requiring pre-authored discrete scene objects.
+	const archetype = (situation.sceneEvidence?.environment?.archetype as LocationArchetype)
+		|| inferLocationArchetype(situation.location);
+	if (archetype && AffordancePlausibilityEngine.isPlausibleAffordance(normalizedClaim, archetype)) {
+		return true;
 	}
 
 	return false;
@@ -458,6 +570,40 @@ function findMissingVisibleConsequences(narration: string, actionResolution?: Ac
 	return missing;
 }
 
+const FORENSIC_SUBJECT = /\b(?:lab|laboratory|forensics?|autopsy|post-?mortem|coroner|medical examiner|fingerprints?|ballistics|toxicology|dna|crime scene (?:unit|techs?))\b/i;
+const FORENSIC_FORWARD = /\b(?:will|shall|should|expected|due|ready|arrive|come back|be back|report back|finish|complete[sd]?|promised?)\b/i;
+const FORENSIC_DEADLINE = /\b(?:by|within|in|before|until|no later than)\s+(?:\d+|an?|one|two|three|four|five|six|seven|eight|twelve|twenty[- ]four|forty[- ]eight|seventy[- ]two|tomorrow|tonight|dawn|dusk|noon|midnight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|the (?:morning|evening|end of|next))\b|\bdeadline\b|\btomorrow (?:morning|noon|night)\b/i;
+
+/** Sentences that promise forensic results on a timetable the committed state never established. */
+export function findInventedForensicDeadlines(narration: string, situation: unknown): string[] {
+	let groundedText = '';
+	try { groundedText = JSON.stringify(situation ?? '').toLowerCase(); } catch { groundedText = ''; }
+	return String(narration || '')
+		.split(/(?<=[.!?])\s+/)
+		.map((sentence) => sentence.trim())
+		.filter((sentence) =>
+			sentence.length > 0 &&
+			FORENSIC_SUBJECT.test(sentence) &&
+			FORENSIC_FORWARD.test(sentence) &&
+			FORENSIC_DEADLINE.test(sentence) &&
+			!groundedText.includes(sentence.toLowerCase().replace(/["“”]/g, '')),
+		);
+}
+
+/**
+ * Information-seeking turns where the player already holds an authorized fact that answers the question
+ * but the narration answers without using it (live: "Where was he found?" answered with an invented tunnel
+ * although the known fact said Pier 4). Bounded refusals/uncertainty are allowed.
+ */
+export function findIgnoredKnownFacts(narration: string, question: string, knownFacts: unknown[]): string[] {
+	if (!String(narration || '').trim() || !question.trim()) return [];
+	const use = analyzeKnownFactUse(narration, question, knownFacts);
+	// A visible refusal is allowed (the asked character may be guarded); a claim of ignorance is not, because the
+	// player already holds a fact that answers the question.
+	if (use.refusal || use.matched.length === 0 || use.used) return [];
+	return use.matched.slice(0, 2).map((fact: any) => String(fact.provenanceSummary || `${fact.subjectEntityId} ${fact.predicate} ${fact.objectValue}`).slice(0, 160));
+}
+
 export class SemanticNarrativeReview {
 	public static review(params: {
 		intent: PlayerIntent;
@@ -508,7 +654,7 @@ export class SemanticNarrativeReview {
 			}
 		}
 
-		if (intent.movementIntent && !containsAny(lower, /\b(?:move|moves|moved|approach|approaches|approached|step|steps|stepped|walk|walks|walked|head|heads|headed|travel|travels|traveled|enter|enters|entered|leave|leaves|left|closer|toward|towards|nearer|proceed|continued|continue|journey|way toward|way towards)\b/i)) {
+		if (intent.movementIntent && !containsAny(lower, /\b(?:move|moves|moved|moving|approach|approaches|approached|approaching|step|steps|stepped|stepping|walk|walks|walked|walking|head|heads|headed|heading|travel|travels|traveled|traveling|enter|enters|entered|entering|leave|leaves|left|leaving|rush|rushes|rushed|rushing|arrive|arrives|arrived|reach|reaches|reached|reaching|closer|toward|towards|nearer|proceed|proceeds|proceeded|continued|continue|journey|way toward|way towards)\b/i)) {
 			missingRequirements.push('The immediate physical movement/position change should be represented.');
 			violations.push({ code: 'MISSING_MOVEMENT', message: 'The player requested movement, but the narration does not depict a corresponding movement or position change.', severity: 'MEDIUM' });
 		}
@@ -517,9 +663,32 @@ export class SemanticNarrativeReview {
 			violations.push({ code: 'MISSING_MOVEMENT', message: 'The narration omits the player’s established movement destination: ' + intent.locationTarget.name + '.', severity: 'MEDIUM' });
 		}
 
-		if (intent.observationIntent && !containsAny(lower, /\b(?:hear|hears|heard|hearing|listen|listens|listened|listening|overhear|overhears|overheard|overhearing|notice|notices|noticed|noticing|observe|observes|observed|observing|watch|watches|watched|watching|see|sees|saw|seeing|look|looks|looked|looking|spot|spots|spotted|spotting|inspect|inspects|inspected|inspecting|examine|examines|examined|examining|sense|senses|sensed|sensing|detect|detects|detected|detecting|attend|attends|attended|attending|attention|attentive|focus|focuses|focused|focusing|scan|scans|scanned|scanning|study|studies|studied|studying|survey|surveys|surveyed|surveying|peer|peers|peered|peering|glance|glances|glanced|glancing|gaze|gazes|gazed|gazing|stare|stares|stared|staring|search|searches|searched|searching|check|checks|checked|checking|read|reads|reading|find|finds|found|finding|discover|discovers|discovered|discovering|reveal|reveals|revealed|revealing|perceive|perceives|perceived|perceiving|discern|discerns|discerned|discerning|make out|makes out|made out|take in|takes in|took in|catch sight|catches sight|caught sight|catch a glimpse|caught a glimpse|ear|ears|eye|eyes|view|sight|conversation|whisper|whispers|whispered|whispering|murmur|murmurs|murmured|murmuring|sound|sounds|voice|voices|rumou?r|rumou?rs|hearsay|silence|silent|quiet|stillness|echo|echoes|footsteps|visible|audible|unclear|indistinct|faint|distant|detail|details|trace|traces|clue|clues|sign|signs|nothing new|no sign|no one|nobody|empty|unoccupied)\b/i)) {
-			missingRequirements.push('The requested observation should produce an observable result or limitation.');
-			violations.push({ code: 'MISSING_OBSERVATION', message: 'The player requested observation/listening, but no observable result or grounded limitation was narrated.', severity: 'MEDIUM' });
+		const movementCommitted = Boolean(
+			actionResolution?.canonicalStateChanges?.some((c) =>
+				c.kind === 'LOCATION' || c.kind === 'MOVEMENT' || c.kind === 'TRAVEL'
+			)
+		);
+
+		if (intent.movementIntent && !movementCommitted) {
+			const ARRIVAL_CLAIM_PATTERN = /\b(?:arrive(?:s|d)?|reach(?:es|ed)?|step(?:s|ped)?\s+(?:in|into|inside)|enter(?:s|ed)?|now\s+(?:in|at|inside)|welcome\s+to|slip(?:s|ped)?\s+(?:in|into|inside)|find(?:s)?\s+(?:your|one|him|her|them)self\s+(?:in|at|inside|into)|ma(?:ke|kes|de)\s+it\s+(?:to|in|into|inside)|settle(?:s|d)?\s+(?:in|into|inside))\b/i;
+			const destination = intent.locationTarget?.name ? normalize(intent.locationTarget.name) : undefined;
+
+			if (destination && ARRIVAL_CLAIM_PATTERN.test(lower) && lower.includes(destination)) {
+				violations.push({
+					code: 'UNSUPPORTED_STATE_PROPOSAL',
+					message: `Narration claims arrival at "${intent.locationTarget?.name}" before canonical movement was committed by the engine. Depict only the departure, approach, or travel attempt from ${situation.location.name}.`,
+					severity: 'HIGH',
+				});
+			}
+		}
+
+		if (intent.observationIntent) {
+			const obsEval = evaluateObservationGrounding(narration, intent, situation, actionResolution);
+			if (!obsEval.valid) {
+				const reason = obsEval.reasons.join(' ') || 'The player requested observation/listening, but no observable result or grounded limitation was narrated.';
+				missingRequirements.push(reason);
+				violations.push({ code: 'MISSING_OBSERVATION', message: reason, severity: 'MEDIUM' });
+			}
 		}
 
 		if (intent.informationGoal && !intent.speechIntent) {
@@ -564,6 +733,148 @@ export class SemanticNarrativeReview {
 			violations.push({ code: 'UNSUPPORTED_CLAIM', message: 'Narration appears to expose canonical facts outside the viewer knowledge boundary.', severity: 'HIGH' });
 		}
 
+		// CharacterCanonSteward Epistemic Boundary Audit on NPC Dialogue (F18 / Mode 7)
+		if (turnPackage.dialogue && Array.isArray(turnPackage.dialogue)) {
+			for (const line of turnPackage.dialogue) {
+				const speakerName = String(line.speaker || '').trim();
+				if (!speakerName) continue;
+
+				// Resolve speaker entity ID
+				const entity = situation.nearbyEntities.find(
+					(e) =>
+						e.name.toLowerCase() === speakerName.toLowerCase() ||
+						(e.displayName && e.displayName.toLowerCase() === speakerName.toLowerCase())
+				);
+				const speakerId = entity?.id || `npc_${speakerName.toLowerCase().replace(/\s+/g, '_')}`;
+
+				// Skip player dialogue
+				if (speakerId === situation.player.actorId) continue;
+
+				const audit = CharacterCanonSteward.auditSpeakerDialogue({
+					storyId: situation.storyId,
+					speakerId,
+					speakerName,
+					dialogueText: line.text,
+					currentLocationId: situation.location.id,
+				});
+
+				if (!audit.valid) {
+					unsupportedClaims.push(...audit.leakedFacts);
+					violations.push({
+						code: 'UNSUPPORTED_CLAIM',
+						message: audit.violationMessage || `Speaker "${speakerName}" leaked unobserved facts outside their knowledge boundary.`,
+						severity: 'HIGH',
+					});
+				}
+			}
+		}
+
+		// Check for unintroduced NPC names (Epistemic Masking - F06)
+		const playerNames = new Set([
+			normalize(situation.player?.name),
+			normalize((situation.player as any)?.actorId),
+		].filter(Boolean));
+		const playerActionText = normalize(intent.originalText || '');
+		const explicitTargetNames = new Set(
+			(intent.explicitTargets || []).map((t) => normalize(t.name))
+		);
+		if (intent.target?.name) explicitTargetNames.add(normalize(intent.target.name));
+
+		const establishedContext = [
+			normalize((situation as any).startingSituation || ''),
+			normalize((situation as any).rawSituation?.summary || ''),
+			normalize((situation as any).rawSituation?.hook || ''),
+			...(situation.visibleEvents || []).map((e) => normalize(e.summary)),
+			...(situation.recentTurns || []).flatMap((t) => [normalize(t.playerAction), normalize(t.narration)]),
+		].join(' ');
+
+		const unknownEntities = (Array.isArray(situation.nearbyEntities) ? situation.nearbyEntities : [])
+			.filter((entity) => {
+				if (entity.identityKnown !== false) return false;
+				if (entity.kind === 'PLAYER') return false;
+				const normName = normalize(entity.name);
+				if (playerNames.has(normName) || playerNames.has(normalize(entity.id))) return false;
+				if (normName && (playerActionText.includes(normName) || explicitTargetNames.has(normName) || establishedContext.includes(normName))) return false;
+				return true;
+			});
+
+		for (const entity of unknownEntities) {
+			const displayName = entity.displayName || 'a stranger';
+			if (entity.name && entity.name.trim().toLowerCase() === displayName.trim().toLowerCase()) {
+				continue;
+			}
+			const { compositeNames, distinctiveTokens, dictionaryTokens } = extractEntityNameTokens(entity);
+			let leakedName: string | null = null;
+
+			// 1. Check composite names (full names, aliases) with lookaround boundaries
+			for (const name of compositeNames) {
+				const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+				const regex = new RegExp(`(?<![\\w])${escaped}(?![\\w])`, 'i');
+				if (regex.test(narration)) {
+					leakedName = name;
+					break;
+				}
+			}
+
+			// 2. Check distinctive name tokens (e.g. "Sylvia", "Crane", "Watson", "Percival")
+			if (!leakedName) {
+				for (const token of distinctiveTokens) {
+					const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+					const regex = new RegExp(`(?<![\\w])${escaped}(?![\\w])`, 'i');
+					if (regex.test(narration)) {
+						leakedName = token;
+						break;
+					}
+				}
+			}
+
+			// 3. Check common dictionary tokens (e.g. "Hope", "Faith", "North", "Gray", "Rose")
+			// To avoid false positives on ordinary English usage (e.g. "lost hope", "headed north", "a gray suit"),
+			// we require either:
+			//   (a) an honorific prefix (e.g. "Ms. Hope", "Mr. North", "Officer Gray")
+			//   (b) mid-sentence capitalization (proper noun usage, e.g. "I spoke with Hope", "next to North")
+			//   (c) sentence-initial capitalization followed by an animate interaction/verb (e.g. "Hope looked up...")
+			if (!leakedName) {
+				for (const token of dictionaryTokens) {
+					const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+					// Pattern (a): Honorific prefix + token
+					const honorificRegex = new RegExp(`(?<![\\w])(?:Mr|Mrs|Ms|Miss|Dr|Prof|Officer|Detective|Inspector|Agent|Lord|Lady|Sir)\\.?\\s+${escaped}(?![\\w])`, 'i');
+					if (honorificRegex.test(narration)) {
+						leakedName = token;
+						break;
+					}
+
+					// Pattern (b): Mid-sentence capitalized token
+					const capitalizedToken = token.charAt(0).toUpperCase() + token.slice(1);
+					const capEscaped = capitalizedToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+					const midSentenceRegex = new RegExp(`(?<=[a-zA-Z0-9,;—–-]\\s+)(?<![\\w])${capEscaped}(?![\\w])`);
+					if (midSentenceRegex.test(narration)) {
+						leakedName = token;
+						break;
+					}
+
+					// Pattern (c): Sentence-initial capitalized token followed by animate action verb
+					const sentenceInitialActionRegex = new RegExp(
+						`^(?:["'“‘]?)\\s*${capEscaped}\\b(?:\\s+(?:looks?|smil(?:es?|ed)|glanc(?:es?|ed)|nod(?:s?|ded)|sp(?:eaks?|oke)|said|ask(?:s?|ed)|turn(?:s?|ed)|step(?:s?|ped)|stand(?:s?)|stood|sit(?:s?)|sat|wait(?:s?|ed)|frown(?:s?|ed)|sigh(?:s?|ed)|whisper(?:s?|ed)|adjust(?:s?|ed)|tap(?:s?|ped)|reach(?:es?|ed)|hand(?:s?|ed)|walk(?:s?|ed)|mov(?:es?|ed)|gaz(?:es?|ed)|watch(?:es?|ed)|listen(?:s?|ed)|peer(?:s?|ed)|lean(?:s?|ed)|cross(?:es?|ed)|shrug(?:s?|ged)|clear(?:s?|ed)|pull(?:s?|ed)|push(?:es?|ed)|hurr(?:ies?|ied)|wav(?:es?|ed)|point(?:s?|ed)|signal(?:s?|ed)|paus(?:es?|ed)|clos(?:es?|ed)|open(?:s?|ed)|fell|drop(?:s?|ped)|took|takes?|gave|gives?|put(?:s?)|held|holds?)\\b|,)`,
+						'i'
+					);
+					if (sentenceInitialActionRegex.test(narration)) {
+						leakedName = token;
+						break;
+					}
+				}
+			}
+
+			if (leakedName) {
+				violations.push({
+					code: 'UNSUPPORTED_CLAIM',
+					message: `Narration revealed unintroduced NPC identity "${entity.name}" before formal introduction; refer to them as "${displayName}" until introduced.`,
+					severity: 'HIGH',
+				});
+				unsupportedClaims.push(entity.name);
+			}
+		}
+
 		if (hasMajorAgencyTakeover(narration) && !/\b(?:you must|you cannot|you can|you may|you are able)\b/i.test(lower)) {
 			violations.push({ code: 'PLAYER_AGENCY', message: 'Narration appears to decide a consequential player choice rather than present the consequence and leave the decision open.', severity: 'MEDIUM' });
 		}
@@ -573,9 +884,35 @@ export class SemanticNarrativeReview {
 			violations.push({ code: 'UNSUPPORTED_STATE_PROPOSAL', message: 'The generated package proposes a location mutation even though the player intent contains no movement.', severity: 'HIGH' });
 		}
 
-		for (const forbiddenAssumption of plan.forbiddenAssumptions) {
+		for (const forbiddenAssumption of (plan?.forbiddenAssumptions || [])) {
 			if (forbiddenAssumption && lower.includes(normalize(forbiddenAssumption))) {
 				violations.push({ code: 'UNSUPPORTED_CLAIM', message: 'Narration directly repeats a forbidden assumption from the one-turn narrative plan.', severity: 'HIGH' });
+			}
+		}
+
+		// Ren Takahashi mode: narration must not invent forensic results or lab/autopsy deadlines
+		// that no committed state supports.
+		for (const sentence of findInventedForensicDeadlines(narration, situation)) {
+			violations.push({
+				code: 'UNSUPPORTED_CLAIM',
+				message: `Narration invents a forensic result or deadline that no committed state supports: "${sentence.slice(0, 120)}".`,
+				severity: 'HIGH',
+			});
+			unsupportedClaims.push(sentence);
+		}
+
+		// An information-seeking answer must use the authorized fact that answers it (or bound its uncertainty).
+		const informationSeeking = Boolean(intent.informationGoal) || intent.interactionMode === 'INFORMATION_SEEKING' || intent.interactionMode === 'DIALOGUE' || Boolean(intent.speechIntent);
+		if (informationSeeking) {
+			const authorizedFacts = [...((situation as any).playerKnowledge?.knownFacts || []), ...((situation as any).relevantLore || [])];
+			const question = [intent.informationGoal, intent.originalText].filter(Boolean).join(' ');
+			for (const ignored of findIgnoredKnownFacts(narration, question, authorizedFacts)) {
+				violations.push({
+					code: 'UNSUPPORTED_CLAIM',
+					message: `Narration answers an information-seeking question without using the known fact that answers it: "${ignored}".`,
+					severity: 'HIGH',
+				});
+				unsupportedClaims.push(ignored);
 			}
 		}
 
@@ -592,7 +929,7 @@ export class SemanticNarrativeReview {
 		const high = violations.filter((violation) => violation.severity === 'HIGH').length;
 		const medium = violations.filter((violation) => violation.severity === 'MEDIUM').length;
 		const semanticMismatch = violations.some((violation) =>
-			['SEMANTIC_MISMATCH', 'MISSING_MOVEMENT', 'MISSING_OBSERVATION', 'MISSING_INFORMATION', 'MISSING_VISIBLE_CONSEQUENCE', 'UNAUTHORIZED_SPEECH'].includes(violation.code)
+			['SEMANTIC_MISMATCH', 'MISSING_MOVEMENT', 'MISSING_OBSERVATION', 'MISSING_INFORMATION', 'MISSING_VISIBLE_CONSEQUENCE', 'UNAUTHORIZED_SPEECH', 'UNSUPPORTED_STATE_PROPOSAL'].includes(violation.code)
 		);
 		const playerAgencyViolation = violations.some((violation) => violation.code === 'PLAYER_AGENCY');
 

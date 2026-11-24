@@ -671,10 +671,10 @@ export const INITIAL_LIVING_BIBLE_REQUIREMENTS: LivingBibleRequirement[] = [
     id: 'CH16.EMERGENT.NARRATIVE',
     area: 'Challenge 16 · Emergent Narrative',
     title: 'Emergent Causal Threads & Propagation',
-    requirementText: 'Emergent story director generating causal investigation threads and thread resolution.',
+    requirementText: 'Emergent causal investigation threads and thread resolution.',
     dreamBookRef: 'v10.9 §466-470',
     status: 'VERIFIED',
-    codeEvidence: 'server/services/emergentNarrativeEngine.ts; server/services/storyDirectorService.ts',
+    codeEvidence: 'server/services/emergentNarrativeEngine.ts',
     testEvidence: 'tests/ch16_behavioral_verification.test.ts',
     notes: 'Canonical player actions generate emergent threads.',
     evidences: [
@@ -800,7 +800,7 @@ export const INITIAL_LIVING_BIBLE_REQUIREMENTS: LivingBibleRequirement[] = [
     requirementText: 'Reusable WorldTemplate vs individual StoryRun separation, campaign discovery, versioning, PROTAGONIST / SIDE_CHARACTER / FREE_ROAM modes, emergent narrative threads, causal knowledge propagation, combat dice clash, active effects, D&D rules evaluation, and campaign archive restoration.',
     dreamBookRef: 'v10.9 §450-480',
     status: 'VERIFIED',
-    codeEvidence: 'server/services/worldSynthesisService.ts; server/services/emergentNarrativeEngine.ts; server/services/abilityService.ts; server/services/storyDirectorService.ts; server/domain/dndSpellRulesModel.ts; server/repositories/worldRepository.ts',
+    codeEvidence: 'server/services/worldSynthesisService.ts; server/services/emergentNarrativeEngine.ts; server/services/abilityService.ts; server/domain/dndSpellRulesModel.ts; server/repositories/worldRepository.ts',
     testEvidence: 'tests/ch16_behavioral_verification.test.ts',
     notes: 'World library, story mode selection, emergent thread creation, dice clash resolution, active effects, and archive restoration verified.',
     evidences: [

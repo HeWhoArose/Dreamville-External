@@ -485,6 +485,8 @@ export interface ActionLog {
   /** Canonical mechanics envelope projected to narration and reusable for presentation regeneration. */
   actionResolution?: ActionResolution;
   actionAdvice?: ActionAdvice;
+  /** Authoritative state adjudication record associated with this turn. */
+  stateAdjudication?: import('../server/domain/narrativeStateAdjudicator').StateAdjudicationResult;
 }
 
 export interface ProtagonistProfile {
@@ -719,6 +721,7 @@ export interface ActionResult {
   checkResult?: StoryCheckResult;
   actionAdvice?: ActionAdvice;
   combatTransition?: CombatTransitionState;
+  stateAdjudication?: import('../server/domain/narrativeStateAdjudicator').StateAdjudicationResult;
   viewState: ExternalViewState;
 }
 
@@ -3041,3 +3044,23 @@ export interface CombatAnimationPlan {
 	generatedBy?: 'SYSTEM' | 'AI';
 	provenance?: string;
 }
+
+export {
+	type EntityLifecycleStage,
+	EntityLifecycleStateMachine,
+} from '../server/domain/entityLifecycle';
+
+export {
+	type WorldSimulationProposal,
+	type SimulationPrecondition,
+	type SimulationStateTransition,
+	type SimulationProvenance,
+	type SimulationSafeFallback,
+	type AdjudicationResultCode,
+	type WorldSimulationCommitRecord,
+	type WorldSimulationAdjudicationResult,
+	type AdjudicationResult,
+	type SimulationWorldState,
+	WorldSimulatorAdjudicator,
+} from '../server/domain/worldSimulationProposal';
+

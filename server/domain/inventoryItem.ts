@@ -541,6 +541,10 @@ export class InventoryItemEngine {
     return Array.from(this.recipes.values()).map((r) => JSON.parse(JSON.stringify(r)));
   }
 
+  public getItemInstanceCount(): number {
+    return this.itemInstances.size;
+  }
+
   public getItemInstance(itemId: string): ItemInstance | undefined {
     const item = this.itemInstances.get(itemId);
     return item ? JSON.parse(JSON.stringify(item)) : undefined;

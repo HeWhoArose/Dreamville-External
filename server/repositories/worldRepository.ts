@@ -3,6 +3,7 @@ import {
   KnowledgeSourceType,
   TravelJourney,
   WorldTimestamp,
+  LocationSceneObject,
 } from '../domain/types';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { WorldClock } from '../domain/worldClock';
@@ -20,11 +21,19 @@ import { LivingWorldSimulation } from '../domain/livingWorldSimulation';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { CharacterAlignmentEngine } from '../domain/characterAlignment';
 import { DynamicCharacterAgencyEngine } from '../domain/dynamicCharacterAgency';
+import { CharacterCanonSteward } from '../domain/characterCanonSteward';
+import { WitnessFactAuthority, type WitnessFactInput, type WitnessFactResult } from '../domain/witnessFactAuthority';
 import { ConditionEngine } from '../domain/conditionEngine';
 import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
 import { Phase8SimulationEngine } from '../domain/phase8SimulationEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
+import { BackgroundProcessingQueue } from '../domain/backgroundProcessingQueue';
+import {
+  WorldSimulatorAdjudicator,
+  type SimulationStateTransition,
+  type WorldSimulationProposal,
+} from '../domain/worldSimulationProposal';
 import { captureCanonicalStateSnapshot } from '../domain/canonicalSnapshot';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
 import { bossPhaseEngine } from '../domain/bossPhaseEngine';
@@ -120,9 +129,51 @@ export interface WorldRepository {
   isEntityEpistemicallyKnown(storyId: string, viewerActorId: string, targetId: string): boolean;
   getMemoryEngine(storyId: string): MemoryOpportunityEngine;
   getLivingWorldSimulation(storyId: string): LivingWorldSimulation;
+  getBackgroundProcessingQueue(storyId: string): BackgroundProcessingQueue;
+  getBackgroundJobQueue(storyId: string): BackgroundProcessingQueue;
+  getWorldVersion(storyId: string): number;
+  incrementWorldVersion(storyId: string): number;
+  getCanonicalStateHash(storyId: string): string;
+  getSimulationStateSlice(storyId: string): Record<string, unknown>;
+  applySimulationStateTransition(storyId: string, transition: SimulationStateTransition): void;
+  applySimulationStateTransitionCAS?(
+    storyId: string,
+    transition: SimulationStateTransition,
+    expectedVersion: number,
+    baseStateHash: string
+  ): boolean;
+  canSafelyRebaseDisjointProposal?(
+    storyId: string,
+    proposal: WorldSimulationProposal,
+    targetDomain?: string
+  ): { ok: boolean; reason?: string };
+  scheduleBackgroundDrain?(storyId: string): void;
+  getLastTurnElapsedSeconds(storyId: string): number;
+  setLastTurnElapsedSeconds(storyId: string, seconds: number): void;
   getAiOrchestrator(): MultiModelOrchestrator;
   getCharacterAlignmentEngine(): CharacterAlignmentEngine;
   getDynamicCharacterAgencyEngine(storyId: string): DynamicCharacterAgencyEngine;
+  getPresentWitnesses(storyId: string, locationId: string, excludingActorId?: string): EntityCard[];
+  recordWitnessFact(storyId: string, input: WitnessFactInput): WitnessFactResult;
+  applyBidirectionalRelationshipDelta(
+    storyId: string,
+    params: {
+      partyAId: string;
+      partyBId: string;
+      eventId: string;
+      cause: import('../domain/dynamicCharacterAgency').RelationshipCause;
+      description: string;
+      symmetricDelta?: import('../domain/dynamicCharacterAgency').RelationshipDelta;
+      forwardDelta?: import('../domain/dynamicCharacterAgency').RelationshipDelta;
+      backwardDelta?: import('../domain/dynamicCharacterAgency').RelationshipDelta;
+      evidenceIds?: string[];
+    }
+  ): { forward: import('../domain/dynamicCharacterAgency').DynamicRelationshipState; backward: import('../domain/dynamicCharacterAgency').DynamicRelationshipState };
+  getBidirectionalRelationship(
+    storyId: string,
+    partyAId: string,
+    partyBId: string
+  ): { forward: import('../domain/dynamicCharacterAgency').DynamicRelationshipState | null; backward: import('../domain/dynamicCharacterAgency').DynamicRelationshipState | null };
   getSensoryEngine(): SensoryEngine;
   getReusableSkillRegistry(): ReusableSkillRegistry;
   getAdaptedStoryBible(storyId: string): AdaptedStoryBible | null;
@@ -291,6 +342,27 @@ export class InMemoryWorldRepository implements WorldRepository {
   private canonicalCommandScopeDepth = 0;
   private memoryEngines: Map<string, MemoryOpportunityEngine> = new Map();
   private livingSimulations: Map<string, LivingWorldSimulation> = new Map();
+  private backgroundProcessingQueues: Map<string, BackgroundProcessingQueue> = new Map();
+  private simulationStates: Map<string, Record<string, unknown>> = new Map();
+  private simulationVersionSnapshots: Map<
+    string,
+    Map<
+      string,
+      {
+        worldVersion: number;
+        customState: Record<string, unknown>;
+        coreState: { locationId: string; inventoryCount: number; elapsedSeconds: number };
+        transitionLogSeq: number;
+      }
+    >
+  > = new Map();
+  private simulationTransitionLog: Map<
+    string,
+    Array<{ seq: number; afterVersion: number; targetId?: string; keys: string[] }>
+  > = new Map();
+  private simulationTransitionSeq: Map<string, number> = new Map();
+  private drainingStories: Set<string> = new Set();
+  private lastTurnElapsedSeconds: Map<string, number> = new Map();
   private aiOrchestrator: MultiModelOrchestrator | null = null;
   private characterAlignmentEngine: CharacterAlignmentEngine = new CharacterAlignmentEngine();
   private dynamicCharacterAgencyEngines: Map<string, DynamicCharacterAgencyEngine> = new Map();
@@ -473,6 +545,12 @@ export class InMemoryWorldRepository implements WorldRepository {
       if (Array.isArray(persistedRuntime.activeEffects)) this.activeEffects.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.activeEffects)));
       if (Array.isArray(persistedRuntime.worldFacts)) this.worldFactsMap.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.worldFacts)));
       if (persistedRuntime.protagonistAgenda) this.protagonistAgendas.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.protagonistAgenda)));
+      if (persistedRuntime.simulationState && typeof persistedRuntime.simulationState === 'object') {
+        this.simulationStates.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.simulationState)));
+      }
+      if (typeof persistedRuntime.lastTurnElapsedSeconds === 'number' && Number.isFinite(persistedRuntime.lastTurnElapsedSeconds)) {
+        this.lastTurnElapsedSeconds.set(storyId, persistedRuntime.lastTurnElapsedSeconds);
+      }
     }
 
     for (const [universeId, universe] of this.universes.entries()) {
@@ -676,6 +754,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       }
     }
     this.seedDefaultStory(storyId);
+    this.lastTurnElapsedSeconds.set(storyId, this.getWorldClock(storyId).getTimestamp().totalElapsedSeconds);
   }
 
   public createStoryRunFromConfirmedCharacter(params: {
@@ -1540,6 +1619,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.worldClocks.set(storyId, new WorldClock());
     }
     const clock = this.worldClocks.get(storyId)!;
+    this.lastTurnElapsedSeconds.set(storyId, clock.getTimestamp().totalElapsedSeconds);
 
     if (!this.chronicleEngines.has(storyId)) {
       const chronicleEngine = new HistoricalChronicleEngine({ writeMode: 'TRANSACTIONAL' });
@@ -1673,7 +1753,9 @@ export class InMemoryWorldRepository implements WorldRepository {
 
     // Canonical opening rumor used by the narrative/research pipeline.
     const defaultFacts = this.knowledgeBases.get(storyId) || [];
-    if (!defaultFacts.some((fact) => fact.id === 'fact_starlight_fissure_rumor')) {
+    // The Orrery rumor, thread and Vael memories belong to the built-in demo story only; other stories must not
+    // inherit them (they leaked into prompts for every freeform story).
+    if (storyId === 'default_story' && !defaultFacts.some((fact) => fact.id === 'fact_starlight_fissure_rumor')) {
       defaultFacts.push({
         id: 'fact_starlight_fissure_rumor',
         subjectEntityId: 'loc_whispering_orrery',
@@ -1690,7 +1772,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
 
     const defaultThreads = this.storyThreads.get(storyId) || [];
-    if (!defaultThreads.some((thread: any) => thread.threadId === 'thread_fissures')) {
+    if (storyId === 'default_story' && !defaultThreads.some((thread: any) => thread.threadId === 'thread_fissures')) {
       this.storyThreads.set(storyId, [{
         storyId,
         threadId: 'thread_fissures',
@@ -1789,7 +1871,8 @@ export class InMemoryWorldRepository implements WorldRepository {
           provenanceSummary: 'Report from Maren the Archivist',
         },
       ];
-      this.knowledgeBases.set(storyId, initialFacts);
+      // The Orrery facts belong to the built-in demo story; other stories start with no inherited lore.
+      this.knowledgeBases.set(storyId, storyId === 'default_story' ? initialFacts : []);
     }
 
     // Seed canonical initial living world simulation (CH10)
@@ -1967,6 +2050,9 @@ export class InMemoryWorldRepository implements WorldRepository {
       return facts.filter((fact) => fact.secretLevel === 'public');
     }
 
+    const scope = CharacterCanonSteward.getScope(storyId, viewerActorId);
+    const scopeHasFacts = scope && scope.knownFactIds.size > 0;
+
     const phase8State = this.getPhase8SimulationEngine(storyId).load(this, storyId);
     const actorKnowledge = phase8State.knowledge[viewerActorId];
     const authorizedFactIds = new Set(
@@ -1978,7 +2064,10 @@ export class InMemoryWorldRepository implements WorldRepository {
     );
 
     return facts.filter(
-      (fact) => fact.secretLevel === 'public' || authorizedFactIds.has(fact.id)
+      (fact) =>
+        fact.secretLevel === 'public' ||
+        authorizedFactIds.has(fact.id) ||
+        (scopeHasFacts && scope.knownFactIds.has(fact.id))
     );
   }
 
@@ -2099,7 +2188,10 @@ export class InMemoryWorldRepository implements WorldRepository {
         engine.importState(persisted);
       } else if (run?.protagonist?.startingEquipment) {
         engine.seedFromGenesisEquipment(actorId, run.protagonist.startingEquipment);
-      } else {
+      } else if (storyId === 'default_story') {
+        // The Chancery kit (longsword, cuirass, astrolabe, veil) belongs to the built-in Scribe Vael demo only.
+        // Every other story without defined starting equipment starts empty rather than inheriting fantasy gear
+        // that its premise never granted.
         engine.seedStarterInventoryForActor(actorId);
       }
 
@@ -2226,6 +2318,73 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public setEntityLifecycleStatus(storyId: string, entityId: string, status: any): EntityCard {
     return this.getEntityRegistry(storyId).setLifecycleStatus(entityId, status);
+  }
+
+  public removeEntityCard(storyId: string, entityId: string): boolean {
+    const registry = this.getEntityRegistry(storyId);
+    const removed = registry.remove(entityId);
+    if (removed) {
+      const run = this.getStoryRun(storyId);
+      if (run?.runtimeState) {
+        run.runtimeState.entities = registry.exportState();
+      }
+    }
+    return removed;
+  }
+
+  public garbageCollectTemporaryEntities(storyId: string): { evictedSceneObjects: string[]; evictedEntityCards: string[] } {
+    const evictedSceneObjects: string[] = [];
+    const evictedEntityCards: string[] = [];
+    const run = this.getStoryRun(storyId);
+    const playerLoc = run?.runtimeState?.player?.locationId;
+    const graph = this.getGeographyGraph(storyId);
+    const registry = this.getEntityRegistry(storyId);
+
+    // 1. Scene objects in GeographyGraph
+    for (const node of graph.getAllNodes()) {
+      const remaining: LocationSceneObject[] = [];
+      for (const obj of [...(node.sceneObjects || [])]) {
+        const stage = obj.lifecycleStage || (obj.properties?.lifecycle as any);
+        if (stage === 'ACTIVE_TEMPORARY') {
+          const deps = obj.activeDependencies || (obj.properties?.activeDependencies as string[]) || [];
+          if (deps.length === 0) {
+            let ttl = typeof obj.ttlTurns === 'number' ? obj.ttlTurns : (typeof obj.properties?.ttlTurns === 'number' ? (obj.properties.ttlTurns as number) : 1);
+            ttl -= 1;
+            if (obj.properties) obj.properties.ttlTurns = ttl;
+            obj.ttlTurns = ttl;
+            if (ttl <= 0 || (playerLoc && playerLoc !== node.id)) {
+              evictedSceneObjects.push(obj.id);
+              graph.removeSceneObject(node.id, obj.id);
+              continue; // Evict
+            }
+          }
+        }
+        remaining.push(obj);
+      }
+      node.sceneObjects = remaining;
+    }
+
+    // 2. EntityCards in EntityRegistry
+    for (const card of registry.list()) {
+      if (card.lifecycle?.stage === 'ACTIVE_TEMPORARY') {
+        const deps = card.lifecycle.activeDependencies || [];
+        if (deps.length === 0) {
+          let ttl = typeof card.lifecycle.ttlTurns === 'number' ? card.lifecycle.ttlTurns : 1;
+          ttl -= 1;
+          card.lifecycle.ttlTurns = ttl;
+          if (ttl <= 0 || (playerLoc && card.worldState?.locationId && playerLoc !== card.worldState.locationId)) {
+            registry.remove(card.id);
+            evictedEntityCards.push(card.id);
+          }
+        }
+      }
+    }
+
+    if (run?.runtimeState) {
+      run.runtimeState.entities = registry.exportState();
+    }
+
+    return { evictedSceneObjects, evictedEntityCards };
   }
 
   public getCharacterProgressionEngine(storyId: string): CharacterProgressionEngine {
@@ -2455,8 +2614,9 @@ export class InMemoryWorldRepository implements WorldRepository {
       const clock = this.getWorldClock(storyId);
       const timestamp = clock.getTimestamp();
 
-      // Seed starter canonical memories (CH9)
-      engine.storeMemory({
+      // Seed starter canonical memories (CH9) for the built-in demo avatar only.
+      const seedDemoMemories = storyId === 'default_story';
+      if (seedDemoMemories) engine.storeMemory({
         id: `mem_origin_${storyId}`,
         storyId,
         memoryClass: 'PERSISTENT_IDENTITY',
@@ -2480,7 +2640,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         triggerConditionTags: ['origin', 'avatar', 'seal', 'primordial'],
       });
 
-      engine.storeMemory({
+      if (seedDemoMemories) engine.storeMemory({
         id: `mem_venom_${storyId}`,
         storyId,
         memoryClass: 'CAPABILITY',
@@ -2546,6 +2706,315 @@ export class InMemoryWorldRepository implements WorldRepository {
     return sim;
   }
 
+  public getBackgroundProcessingQueue(storyId: string): BackgroundProcessingQueue {
+    let queue = this.backgroundProcessingQueues.get(storyId);
+    if (!queue) {
+      queue = new BackgroundProcessingQueue({ maxQueueSize: 50 });
+      this.backgroundProcessingQueues.set(storyId, queue);
+    }
+    return queue;
+  }
+
+  public getBackgroundJobQueue(storyId: string): BackgroundProcessingQueue {
+    return this.getBackgroundProcessingQueue(storyId);
+  }
+
+  public getWorldVersion(storyId: string): number {
+    const run = this.getStoryRun(storyId);
+    if (!run) return 1;
+    return Number(run.worldVersion ?? run.pinnedWorldVersion ?? 1);
+  }
+
+  public incrementWorldVersion(storyId: string): number {
+    const run = this.getStoryRun(storyId);
+    if (!run) return 1;
+    const current = Number(run.worldVersion ?? run.pinnedWorldVersion ?? 1);
+    run.worldVersion = current + 1;
+    this.saveStoryRun(run);
+    return run.worldVersion;
+  }
+
+  private getCustomSimulationState(storyId: string): Record<string, unknown> {
+    if (this.simulationStates.has(storyId)) {
+      return this.simulationStates.get(storyId)!;
+    }
+    const persisted = this.getStoryRun(storyId)?.runtimeState?.simulationState;
+    if (persisted && typeof persisted === 'object') {
+      const cloned = JSON.parse(JSON.stringify(persisted));
+      this.simulationStates.set(storyId, cloned);
+      return cloned;
+    }
+    return {};
+  }
+
+  private recordSimulationTransition(storyId: string, keys: string[], targetId?: string): void {
+    const uniqueKeys = Array.from(new Set(keys.filter(Boolean)));
+    if (uniqueKeys.length === 0 && !targetId) return;
+    const nextSeq = (this.simulationTransitionSeq.get(storyId) || 0) + 1;
+    this.simulationTransitionSeq.set(storyId, nextSeq);
+    let log = this.simulationTransitionLog.get(storyId);
+    if (!log) {
+      log = [];
+      this.simulationTransitionLog.set(storyId, log);
+    }
+    log.push({
+      seq: nextSeq,
+      afterVersion: this.getWorldVersion(storyId),
+      targetId,
+      keys: uniqueKeys,
+    });
+    if (log.length > 200) {
+      log.splice(0, log.length - 200);
+    }
+  }
+
+  public getSimulationStateSlice(storyId: string): Record<string, unknown> {
+    const custom = this.getCustomSimulationState(storyId);
+    const run = this.getStoryRun(storyId);
+    const player = this.getPlayerLifecycle(storyId);
+    const clock = this.getWorldClock(storyId);
+    return {
+      worldVersion: this.getWorldVersion(storyId),
+      locationId: player?.locationId || run?.currentLocationId || 'loc_crimson_office',
+      inventoryCount: this.getInventoryEngine(storyId).getItemInstanceCount(),
+      elapsedSeconds: clock.getTimestamp().totalElapsedSeconds,
+      ...custom,
+    };
+  }
+
+  public setSimulationStateSlice(storyId: string, state: Record<string, unknown>): void {
+    const prev = this.getCustomSimulationState(storyId);
+    const next = { ...state };
+    const allKeys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+    const changedKeys: string[] = [];
+    for (const k of allKeys) {
+      if (JSON.stringify(prev[k]) !== JSON.stringify(next[k])) {
+        changedKeys.push(k);
+      }
+    }
+    this.simulationStates.set(storyId, next);
+    this.recordSimulationTransition(storyId, changedKeys);
+  }
+
+  public getCanonicalStateHash(storyId: string): string {
+    const slice = this.getSimulationStateSlice(storyId);
+    const hash = WorldSimulatorAdjudicator.calculateStateHash(slice);
+
+    let storySnaps = this.simulationVersionSnapshots.get(storyId);
+    if (!storySnaps) {
+      storySnaps = new Map();
+      this.simulationVersionSnapshots.set(storyId, storySnaps);
+    }
+    if (!storySnaps.has(hash) && storySnaps.size >= 100) {
+      const oldestHash = storySnaps.keys().next().value;
+      if (oldestHash !== undefined) storySnaps.delete(oldestHash);
+    }
+    storySnaps.set(hash, {
+      worldVersion: Number(slice.worldVersion ?? 1),
+      customState: JSON.parse(JSON.stringify(this.getCustomSimulationState(storyId))),
+      coreState: {
+        locationId: String(slice.locationId || ''),
+        inventoryCount: Number(slice.inventoryCount ?? 0),
+        elapsedSeconds: Number(slice.elapsedSeconds ?? 0),
+      },
+      transitionLogSeq: this.simulationTransitionSeq.get(storyId) || 0,
+    });
+
+    return hash;
+  }
+
+  public applySimulationStateTransition(storyId: string, transition: SimulationStateTransition): void {
+    const current = this.getCustomSimulationState(storyId);
+    const payload = transition.payload || {};
+    const updated = { ...current, ...payload };
+    this.simulationStates.set(storyId, updated);
+    this.recordSimulationTransition(storyId, Object.keys(payload), transition.targetId);
+
+    const run = this.getStoryRun(storyId);
+    if (run) {
+      run.runtimeState = run.runtimeState || {};
+      run.runtimeState.simulationState = updated;
+      this.saveStoryRun(run);
+    }
+  }
+
+  public applySimulationStateTransitionCAS(
+    storyId: string,
+    transition: SimulationStateTransition,
+    expectedVersion: number,
+    baseStateHash: string
+  ): boolean {
+    const currentVersion = this.getWorldVersion(storyId);
+    const currentHash = this.getCanonicalStateHash(storyId);
+    if (currentVersion !== expectedVersion || currentHash !== baseStateHash) {
+      return false;
+    }
+    this.applySimulationStateTransition(storyId, transition);
+    this.incrementWorldVersion(storyId);
+    return true;
+  }
+
+  public canSafelyRebaseDisjointProposal(
+    storyId: string,
+    proposal: WorldSimulationProposal,
+    _targetDomain?: string
+  ): { ok: boolean; reason?: string } {
+    const storySnaps = this.simulationVersionSnapshots.get(storyId);
+    const baseSnap = storySnaps?.get(proposal.baseStateHash);
+    if (!baseSnap || baseSnap.worldVersion !== proposal.worldVersion) {
+      return {
+        ok: false,
+        reason: 'Base snapshot missing or version/hash mismatch (ABA/forged protection).',
+      };
+    }
+
+    const payload = proposal.proposedStateTransition?.payload || {};
+    const keys = Object.keys(payload);
+    if (keys.length === 0) {
+      return {
+        ok: false,
+        reason: 'Empty transition payload cannot prove slice disjointness.',
+      };
+    }
+
+    const PROTECTED_CORE_KEYS = new Set(['worldVersion', 'locationId', 'inventoryCount', 'elapsedSeconds']);
+    const currentCustom = this.getCustomSimulationState(storyId);
+
+    for (const k of keys) {
+      if (PROTECTED_CORE_KEYS.has(k)) {
+        return {
+          ok: false,
+          reason: `Cannot rebase over protected canonical core key '${k}'.`,
+        };
+      }
+      if (JSON.stringify(baseSnap.customState[k]) !== JSON.stringify(currentCustom[k])) {
+        return {
+          ok: false,
+          reason: `Slice key '${k}' mutated since snapshot capture.`,
+        };
+      }
+    }
+
+    const log = this.simulationTransitionLog.get(storyId) || [];
+    const currentSeq = this.simulationTransitionSeq.get(storyId) || 0;
+    if (log.length > 0 && baseSnap.transitionLogSeq < log[0].seq - 1) {
+      return {
+        ok: false,
+        reason: 'Transition log window exceeded since snapshot capture.',
+      };
+    }
+    if (log.length === 0 && currentSeq > baseSnap.transitionLogSeq) {
+      return {
+        ok: false,
+        reason: 'Transition log missing entries since snapshot capture.',
+      };
+    }
+
+    const proposalTargetId = proposal.proposedStateTransition?.targetId;
+    for (const entry of log) {
+      if (entry.seq <= baseSnap.transitionLogSeq) continue;
+      if (proposalTargetId && entry.targetId === proposalTargetId) {
+        return {
+          ok: false,
+          reason: `Conflicting transition on targetId '${proposalTargetId}'.`,
+        };
+      }
+      if (entry.keys.some((ek) => keys.includes(ek))) {
+        return {
+          ok: false,
+          reason: 'Overlapping key transition recorded since snapshot.',
+        };
+      }
+    }
+
+    return { ok: true };
+  }
+
+  public scheduleBackgroundDrain(storyId: string): void {
+    if (!storyId || this.drainingStories.has(storyId)) return;
+    const queue = this.backgroundProcessingQueues.get(storyId);
+    if (!queue || queue.getPendingCount() === 0) return;
+
+    this.drainingStories.add(storyId);
+    setImmediate(async () => {
+      try {
+        if (!this.storyRuns.has(storyId)) return;
+        const activeQueue = this.backgroundProcessingQueues.get(storyId);
+        if (!activeQueue || activeQueue.getPendingCount() === 0) return;
+
+        const { canonicalCommandEngine } = await import('../domain/canonicalCommandEngine');
+        while (activeQueue.getPendingCount() > 0 && this.storyRuns.has(storyId)) {
+          await canonicalCommandEngine.runExclusive(storyId, async () =>
+            this.runWithPersistenceBatching(async () => {
+              if (!this.storyRuns.has(storyId)) return null;
+              return activeQueue.processNext(this, async (job) => {
+                if (job.type === 'MEMORY_CONSOLIDATION' || job.taskType === 'MEMORY_CONSOLIDATION') {
+                  const clock = this.getWorldClock(job.storyId);
+                  this.getMemoryEngine(job.storyId).decayMemories({
+                    storyId: job.storyId,
+                    currentTimestamp: clock.getTimestamp(),
+                    elapsedSeconds: job.snapshot?.worldElapsedSeconds ?? 0,
+                  });
+                  return {
+                    proposalId: `prop_${job.id}`,
+                    idempotencyKey: job.idempotencyKey,
+                    worldVersion: job.snapshot.worldVersion,
+                    baseStateHash: job.snapshot.baseStateHash,
+                    proposedStateTransition: {
+                      type: 'MEMORY_CONSOLIDATION',
+                      targetId: 'memory_slice',
+                      payload: {
+                        lastMemoryConsolidatedTurnId: (job.payload as any)?.turnId ?? job.id,
+                        lastMemoryConsolidatedVersion: job.snapshot.worldVersion,
+                      },
+                    },
+                    requiredPreconditions: [],
+                    provenance: {
+                      source: 'DETERMINISTIC_ARCHETYPE',
+                      timestamp: new Date().toISOString(),
+                    },
+                    safeFallback: {
+                      message: 'Memory consolidation deferred due to stale world state.',
+                    },
+                  };
+                }
+                if (job.proposal) return job.proposal;
+                return undefined as any;
+              });
+            })
+          );
+        }
+      } catch (err) {
+        console.warn('[BackgroundDrain] Scheduled background drain failed:', err);
+      } finally {
+        this.drainingStories.delete(storyId);
+      }
+    });
+  }
+
+  public getLastTurnElapsedSeconds(storyId: string): number {
+    if (this.lastTurnElapsedSeconds.has(storyId)) {
+      return this.lastTurnElapsedSeconds.get(storyId)!;
+    }
+    const persisted = this.getStoryRun(storyId)?.runtimeState?.lastTurnElapsedSeconds;
+    if (typeof persisted === 'number') {
+      this.lastTurnElapsedSeconds.set(storyId, persisted);
+      return persisted;
+    }
+    const initial = this.getWorldClock(storyId).getTimestamp().totalElapsedSeconds;
+    this.lastTurnElapsedSeconds.set(storyId, initial);
+    return initial;
+  }
+
+  public setLastTurnElapsedSeconds(storyId: string, seconds: number): void {
+    this.lastTurnElapsedSeconds.set(storyId, seconds);
+    const run = this.getStoryRun(storyId);
+    if (run) {
+      run.runtimeState = run.runtimeState || {};
+      run.runtimeState.lastTurnElapsedSeconds = seconds;
+    }
+  }
+
   public inspectPersistence(): import('../services/persistenceMigrationService').PersistenceInspection {
     return this.persistentStore.inspectPersistence();
   }
@@ -2586,7 +3055,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       const run = this.getStoryRun(storyId);
       const persisted = run?.runtimeState?.characterAgency;
       if (persisted) {
-        engine.importState(persisted);
+        engine.importState(persisted, storyId);
       }
 
       const worldId = run?.worldId || storyId;
@@ -2610,6 +3079,39 @@ export class InMemoryWorldRepository implements WorldRepository {
     };
     this.storyRuns.set(storyId, run);
     this.persistLibrary();
+  }
+
+  public getPresentWitnesses(storyId: string, locationId: string, excludingActorId?: string): EntityCard[] {
+    return WitnessFactAuthority.getPresentWitnesses(this, storyId, locationId, excludingActorId);
+  }
+
+  public recordWitnessFact(storyId: string, input: WitnessFactInput): WitnessFactResult {
+    return WitnessFactAuthority.recordWitnessFact(this, { ...input, storyId });
+  }
+
+  public applyBidirectionalRelationshipDelta(
+    storyId: string,
+    params: {
+      partyAId: string;
+      partyBId: string;
+      eventId: string;
+      cause: import('../domain/dynamicCharacterAgency').RelationshipCause;
+      description: string;
+      symmetricDelta?: import('../domain/dynamicCharacterAgency').RelationshipDelta;
+      forwardDelta?: import('../domain/dynamicCharacterAgency').RelationshipDelta;
+      backwardDelta?: import('../domain/dynamicCharacterAgency').RelationshipDelta;
+      evidenceIds?: string[];
+    }
+  ): { forward: import('../domain/dynamicCharacterAgency').DynamicRelationshipState; backward: import('../domain/dynamicCharacterAgency').DynamicRelationshipState } {
+    return WitnessFactAuthority.applyBidirectionalRelationshipDelta(this, { ...params, storyId });
+  }
+
+  public getBidirectionalRelationship(
+    storyId: string,
+    partyAId: string,
+    partyBId: string
+  ): { forward: import('../domain/dynamicCharacterAgency').DynamicRelationshipState | null; backward: import('../domain/dynamicCharacterAgency').DynamicRelationshipState | null } {
+    return WitnessFactAuthority.getBidirectionalRelationship(this, storyId, partyAId, partyBId);
   }
 
   public getReusableSkillRegistry(): ReusableSkillRegistry {
@@ -3384,7 +3886,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       String(run.storyId || run.id || 'unknown'),
       String(run.createdAt || ''),
       String(run.activeCharacterId || run.characterName || 'unknown-character'),
-      String(run.worldVersion || run.worldId || 'unknown-world'),
+      String(run.pinnedWorldVersion || run.worldId || 'unknown-world'),
     );
   }
 
@@ -3436,6 +3938,28 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.stagedStorySessionTurns.set(storyId, JSON.parse(JSON.stringify(turn)));
     } catch {
       // Recording is observability; staging must never affect gameplay.
+    }
+  }
+
+  /**
+   * Deferred-narration turns record their DIRECT_TURN interaction before narration runs
+   * (narration happens outside the write lock). Once narration has staged its forensic
+   * payload, attach it to that already-recorded interaction. Observability only; never throws.
+   */
+  public attachStagedStorySessionTurn(storyId: string): boolean {
+    const staged = this.stagedStorySessionTurns.get(storyId);
+    if (!staged) return false;
+    this.stagedStorySessionTurns.delete(storyId);
+    try {
+      const recording = this.getStorySessionRecording(storyId);
+      const interactions = recording?.interactions;
+      const last = interactions?.[interactions.length - 1];
+      if (!recording || !last || last.kind !== 'DIRECT_TURN' || last.turn) return false;
+      last.turn = staged;
+      storySessionRecordingStore.save(recording);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -3820,7 +4344,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.storyRuns.set(storyId, restoredRun);
       const existingAgencyEngine = this.dynamicCharacterAgencyEngines.get(storyId);
       if (existingAgencyEngine) {
-        existingAgencyEngine.importState(restoredRun.runtimeState?.characterAgency);
+        existingAgencyEngine.importState(restoredRun.runtimeState?.characterAgency, storyId);
       }
     } else {
       this.storyRuns.delete(storyId);
@@ -3847,6 +4371,17 @@ export class InMemoryWorldRepository implements WorldRepository {
 
     if (snapshot.narrativeHistory) {
       this.getAiOrchestrator().restoreNarrativeHistory(storyId, clone(snapshot.narrativeHistory));
+    }
+
+    this.simulationStates.delete(storyId);
+    this.simulationVersionSnapshots.delete(storyId);
+    this.simulationTransitionLog.delete(storyId);
+    this.simulationTransitionSeq.delete(storyId);
+    this.lastTurnElapsedSeconds.delete(storyId);
+    this.backgroundProcessingQueues.delete(storyId);
+    const restoredSimState = this.getStoryRun(storyId)?.runtimeState?.simulationState;
+    if (restoredSimState && typeof restoredSimState === 'object') {
+      this.simulationStates.set(storyId, JSON.parse(JSON.stringify(restoredSimState)));
     }
 
     if (options?.persist !== false) this.persistLibrary();
@@ -4055,6 +4590,13 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.characterDraftsMap.delete(storyId);
     this.confirmedCharactersMap.delete(storyId);
     this.dynamicCharacterAgencyEngines.delete(storyId);
+    this.simulationStates.delete(storyId);
+    this.simulationVersionSnapshots.delete(storyId);
+    this.simulationTransitionLog.delete(storyId);
+    this.simulationTransitionSeq.delete(storyId);
+    this.lastTurnElapsedSeconds.delete(storyId);
+    this.backgroundProcessingQueues.delete(storyId);
+    this.drainingStories.delete(storyId);
     this.persistLibrary();
   }
 

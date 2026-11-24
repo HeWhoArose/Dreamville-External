@@ -23,12 +23,68 @@ const DEFAULT_TASK_LIMITS: Record<string, number> = {
 	'utility.inspect': 1,
 };
 
+/**
+ * Real network attempts allowed per task in one turn (failover and retries included).
+ * The logical-call limits above cap *tasks*; these cap the provider requests a task may
+ * spend. Without them a configured fallback chain is walked end to end, so one weak
+ * chain can cost 8+ requests per task per turn (observed live, 2026-11-23).
+ */
+const DEFAULT_PROVIDER_ATTEMPT_LIMITS: Record<string, number> = {
+	'narrative.generate': 4,
+};
+const DEFAULT_PROVIDER_ATTEMPTS_PER_TASK = 3;
+const DEFAULT_PROVIDER_ATTEMPTS_PER_TURN = 10;
+
+export interface AiTurnProviderAttemptCaps {
+	perTask?: Record<string, number>;
+	defaultPerTask?: number;
+	perTurn?: number;
+}
+
 export class AiTurnCallBudget {
 	private readonly logicalCallsByTask = new Map<string, number>();
 	private readonly providerAttemptsByTask = new Map<string, number>();
 	private readonly blockedTasks: Array<{ task: string; reason: string }> = [];
 
-	public constructor(private readonly limitsByTask: Record<string, number> = DEFAULT_TASK_LIMITS) {}
+	private readonly attemptCaps: Required<AiTurnProviderAttemptCaps>;
+
+	public constructor(
+		private readonly limitsByTask: Record<string, number> = DEFAULT_TASK_LIMITS,
+		attemptCaps: AiTurnProviderAttemptCaps = {},
+	) {
+		this.attemptCaps = {
+			perTask: { ...DEFAULT_PROVIDER_ATTEMPT_LIMITS, ...(attemptCaps.perTask || {}) },
+			defaultPerTask: attemptCaps.defaultPerTask ?? DEFAULT_PROVIDER_ATTEMPTS_PER_TASK,
+			perTurn: attemptCaps.perTurn ?? DEFAULT_PROVIDER_ATTEMPTS_PER_TURN,
+		};
+	}
+
+	/** Maximum real provider requests (or, for retrying callers, distinct models) for a task this turn. */
+	public providerAttemptCap(task: TaskId | string): number {
+		return this.attemptCaps.perTask[String(task)] ?? this.attemptCaps.defaultPerTask;
+	}
+
+	/**
+	 * Whether one more real provider request may be made for this task this turn.
+	 * Callers must not apply this to the zero-cost deterministic emergency floor.
+	 */
+	public canAttemptProvider(task: TaskId | string): { allowed: boolean; reason?: string } {
+		const key = String(task);
+		const usedForTask = this.providerAttemptsByTask.get(key) || 0;
+		const taskCap = this.attemptCaps.perTask[key] ?? this.attemptCaps.defaultPerTask;
+		if (usedForTask >= taskCap) {
+			const reason = `Per-turn provider attempt cap reached for ${key}: ${usedForTask}/${taskCap} requests.`;
+			this.blockedTasks.push({ task: key, reason });
+			return { allowed: false, reason };
+		}
+		const usedForTurn = Array.from(this.providerAttemptsByTask.values()).reduce((sum, value) => sum + value, 0);
+		if (usedForTurn >= this.attemptCaps.perTurn) {
+			const reason = `Per-turn provider attempt cap reached: ${usedForTurn}/${this.attemptCaps.perTurn} requests across all tasks.`;
+			this.blockedTasks.push({ task: key, reason });
+			return { allowed: false, reason };
+		}
+		return { allowed: true };
+	}
 
 	public beginTask(task: TaskId | string): { allowed: boolean; reason?: string } {
 		const key = String(task);

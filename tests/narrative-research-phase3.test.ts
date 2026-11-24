@@ -60,7 +60,8 @@ function setupStory(storyId: string) {
 		status: 'OPEN',
 		priority: 'HIGH',
 	});
-	repository.addKnowledgeFact(storyId, publicFact('phase3_rumor_fissures', 'People report unstable starlight fissures in the lower sea.'));
+	// Explicit fixture: this test formerly relied on a demo rumor that every new story inherited.
+	repository.addKnowledgeFact(storyId, { ...publicFact('phase3_rumor_fissures', 'People report unstable starlight fissures in the lower sea.'), predicate: 'rumors', subjectEntityId: player!.locationId });
 	repository.addKnowledgeFact(storyId, publicFact('phase3_unrelated_trade', 'A trade caravan was delayed three valleys away.'));
 	repository.addKnowledgeFact(storyId, {
 		...publicFact('phase3_hidden_secret', 'The sealed vault contains the hidden star map.'),

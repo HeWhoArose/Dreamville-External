@@ -36,9 +36,9 @@ test('current free-model registry includes the configured Groq and OpenRouter an
     ['groq', 'qwen/qwen3.8-27b'],
     ['groq', 'openai/gpt-oss-120b'],
     ['groq', 'openai/gpt-oss-20b'],
-    ['openrouter', 'inclusionai/ling-3.0-flash:free'],
+    ['openrouter', 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'],
+    ['openrouter', 'dots-studio/dots-3-note-preview:free'],
     ['openrouter', 'google/gemma-4-31b-it:free'],
-    ['openrouter', 'qwen/qwen3.8-27b:free'],
   ]) {
     const model = orchestrator.getModel(providerId, modelId);
     assert.ok(model, 'Missing seeded model ' + providerId + '::' + modelId);
@@ -82,7 +82,7 @@ test('critical narrative and dialogue routes contain cross-provider continuity f
     assert.ok(Array.isArray(route));
 
     assert.ok(route.some((key: string) => key.startsWith('groq::')));
-    assert.ok(route.some((key: string) => key.startsWith('openrouter::inclusionai/ling-3.0-flash:free')));
+    assert.ok(route.some((key: string) => key.startsWith('openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free')));
     assert.ok(route.some((key: string) => key.startsWith('openrouter::google/gemma-4-31b-it:free')));
     assert.ok(route.some((key: string) => key.startsWith('google_gemini::gemini-3.5-flash')));
     assert.equal(route.at(-1), emergency);

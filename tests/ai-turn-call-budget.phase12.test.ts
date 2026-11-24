@@ -36,3 +36,31 @@ test('Phase 12 budget keeps independent task budgets independent', () => {
 	const snapshot = budget.snapshot();
 	assert.equal(snapshot.totalLogicalCalls, 3);
 });
+
+test('provider attempt caps: narrative.generate allows 4 real requests, other tasks 3, then blocks with a reason', () => {
+	const budget = new AiTurnCallBudget();
+	for (let i = 0; i < 4; i++) {
+		assert.equal(budget.canAttemptProvider('narrative.generate').allowed, true, `attempt ${i + 1} should be allowed`);
+		budget.recordProviderAttempt('narrative.generate');
+	}
+	const blocked = budget.canAttemptProvider('narrative.generate');
+	assert.equal(blocked.allowed, false);
+	assert.match(blocked.reason || '', /provider attempt cap reached for narrative\.generate: 4\/4/i);
+
+	for (let i = 0; i < 3; i++) {
+		assert.equal(budget.canAttemptProvider('memory.extract').allowed, true);
+		budget.recordProviderAttempt('memory.extract');
+	}
+	assert.equal(budget.canAttemptProvider('memory.extract').allowed, false);
+});
+
+test('provider attempt caps: a whole-turn ceiling applies across tasks and caps are configurable', () => {
+	const budget = new AiTurnCallBudget(undefined, { perTurn: 5, defaultPerTask: 10, perTask: { 'narrative.generate': 10 } });
+	for (let i = 0; i < 5; i++) {
+		assert.equal(budget.canAttemptProvider(i % 2 ? 'intent.interpret' : 'narrative.generate').allowed, true);
+		budget.recordProviderAttempt(i % 2 ? 'intent.interpret' : 'narrative.generate');
+	}
+	const decision = budget.canAttemptProvider('narrative.generate');
+	assert.equal(decision.allowed, false);
+	assert.match(decision.reason || '', /across all tasks/i);
+});

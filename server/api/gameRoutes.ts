@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { serverMockAuthority } from '../mockEngine/serverMockAuthority';
+import { serverMockAuthority, type PreparedCustomActionContext } from '../mockEngine/serverMockAuthority';
 import { ActionRequest } from '../mockEngine/serverTypes';
 import { worldRepository } from '../repositories/worldRepository';
 import { NpcTacticalDecisionPolicy } from '../domain/tacticalDecisionPolicy';
@@ -1027,6 +1027,7 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
       const history = Array.isArray(savedRun.runtimeState?.narrativeContextHistory) ? savedRun.runtimeState.narrativeContextHistory : [];
       savedRun.runtimeState = {
         ...(savedRun.runtimeState || {}),
+        actionHistory: JSON.parse(JSON.stringify(state.actionHistory || [])),
         narrativeContextHistory: [
           ...history,
           {
@@ -1375,11 +1376,6 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
  * Returns an ActionResult containing the updated ExternalViewState.
  */
 gameRouter.post('/action', async (req: Request, res: Response) => {
-  // A single player action mutates world state many times (canonical engine stages,
-  // rollback paths, continuity capture). Coalesce those writes into one durable
-  // store save per request; a failing scope still flushes via the finally block.
-  return canonicalCommandEngine.runExclusive(resolveStoryId(req, true), async () =>
-    worldRepository.runWithPersistenceBatching(async () => {
   try {
     const actionRequest = req.body as ActionRequest;
 
@@ -1401,353 +1397,474 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     }
 
     const storyId = (actionRequest as any).storyId as string;
-    // Lazily bind every active Story Run to a persistent Universe identity.
-    // This is idempotent and does not replace the Story Run's canonical world state.
-    const universe = UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
-    const universeBefore: UniverseRollbackCheckpoint | undefined = universe ? {
-      universeId: universe.universeId,
-      universeElapsedSeconds: Number(universe.universeElapsedSeconds || 0),
-      currentWorldId: String(universe.currentWorldId || ''),
-      currentStoryId: String(universe.currentStoryId || storyId),
-      updatedAt: String(universe.updatedAt || ''),
-      worldBindings: JSON.parse(JSON.stringify(universe.worldBindings || [])),
-    } : undefined;
 
-    // Explicit cross-world freeform actions ("fly to another planet", "leave this world for X")
-    // are promoted to the same canonical travel path as the structured world-travel request.
-    if (actionRequest.type === 'CUSTOM_ACTION') {
-      const travelText = String(
-        (actionRequest as any).customText ||
-        (actionRequest as any).description ||
-        (actionRequest as any).input ||
-        ''
-      ).trim();
-      const inferredTravel = UniverseRuntimeService.inferCrossWorldTravelIntent(
-        worldRepository,
-        storyId,
-        travelText,
-      );
-
-      if (inferredTravel) {
-        try {
-          const result = await UniverseRuntimeService.travel(worldRepository, {
-            storyId,
-            universeId: universe.universeId,
-            worldId: inferredTravel.worldId,
-            worldPremise: inferredTravel.worldPremise,
-            worldTitle: inferredTravel.worldTitle,
-            trigger: 'PLAYER',
-          });
-          serverMockAuthority.setActiveStoryId(result.storyId);
-          const viewState = serverMockAuthority.getSanitizedViewState(result.storyId);
-          return res.json({
-            success: true,
-            actionId: deterministicId('world_travel_action', universe.universeId, storyId, result.storyId, travelText),
-            requestType: actionRequest.type,
-            status: 'MOCK_ENGINE_COMMITTED',
-            message: result.createdWorld
-              ? 'The interworld journey created a new world and the player arrived there.'
-              : 'The player crossed into the requested world.',
-            authoritativeFeedback: 'Cross-world travel committed through the persistent Universe runtime.',
-            narrativeResponse: result.createdWorld
-              ? `Beyond the boundary of ${worldRepository.getWorldTemplate(String(worldRepository.getStoryRun(storyId)?.worldId || ''))?.title || 'the current world'}, a new world forms around the traveler: ${result.world?.title || 'an unknown world'}.`
-              : `The boundary between worlds gives way, and ${result.world?.title || 'the destination world'} receives the traveler.`,
-            viewState,
-            universe: result.universe,
-            world: result.world,
-            storyId: result.storyId,
-            createdWorld: result.createdWorld,
-            createdSession: result.createdSession,
-          });
-        } catch (error: any) {
-          return res.status(400).json({
-            success: false,
-            code: 'WORLD_TRAVEL_FAILED',
-            errorReason: error?.message || 'World travel failed.',
-          });
-        }
-      }
-    }
-
-    if (actionRequest.type === 'WORLD_TRAVEL_REQUEST') {
-      if (!actionRequest.worldId && !actionRequest.worldPremise) {
-        return res.status(400).json({
-          success: false,
-          code: 'WORLD_TRAVEL_TARGET_REQUIRED',
-          errorReason: 'Provide worldId for an existing world or worldPremise to generate a new world.',
-        });
-      }
-
-      try {
-        const result = await UniverseRuntimeService.travel(worldRepository, {
-          storyId,
+    // Phase 1 (Write-Locked + Persistence-Batched):
+    // Deterministic state resolution, canonical command execution, LivingWorldEngine.tickTurn,
+    // worldVersion bump, narrationSnapshot capture, and background job enqueueing.
+    const phase1 = await canonicalCommandEngine.runExclusive(storyId, async () =>
+      worldRepository.runWithPersistenceBatching(async () => {
+        // Lazily bind every active Story Run to a persistent Universe identity.
+        // This is idempotent and does not replace the Story Run's canonical world state.
+        const universe = UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+        const universeBefore: UniverseRollbackCheckpoint | undefined = universe ? {
           universeId: universe.universeId,
-          worldId: actionRequest.worldId,
-          worldPremise: actionRequest.worldPremise,
-          worldTitle: actionRequest.worldTitle,
-          travelDurationSeconds: actionRequest.travelDurationSeconds,
-          trigger: 'PLAYER',
-        });
-        serverMockAuthority.setActiveStoryId(result.storyId);
-        const viewState = serverMockAuthority.getSanitizedViewState(result.storyId);
-        return res.json({
-          success: true,
-          actionId: deterministicId('world_travel_action', universe.universeId, storyId, result.storyId),
-          requestType: actionRequest.type,
-          status: 'MOCK_ENGINE_COMMITTED',
-          message: result.createdWorld
-            ? 'A new world was generated and the player arrived there.'
-            : 'The player traveled to the requested world.',
-          authoritativeFeedback: 'Cross-world travel committed through the persistent Universe runtime.',
-          narrativeResponse: 'The universe carries you beyond the boundary of the current world.',
-          viewState,
-          universe: result.universe,
-          world: result.world,
-          storyId: result.storyId,
-          createdWorld: result.createdWorld,
-          createdSession: result.createdSession,
-        });
-      } catch (error: any) {
-        return res.status(400).json({
-          success: false,
-          code: 'WORLD_TRAVEL_FAILED',
-          errorReason: error?.message || 'World travel failed.',
-        });
-      }
-    }
+          universeElapsedSeconds: Number(universe.universeElapsedSeconds || 0),
+          currentWorldId: String(universe.currentWorldId || ''),
+          currentStoryId: String(universe.currentStoryId || storyId),
+          updatedAt: String(universe.updatedAt || ''),
+          worldBindings: JSON.parse(JSON.stringify(universe.worldBindings || [])),
+        } : undefined;
 
-    const beforeInventoryState = worldRepository.getInventoryEngine(storyId).exportState();
-    const beforeWorldElapsedSeconds = worldRepository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds;
-    let preflightAdvice: any = null;
-    if (actionRequest.type === 'CUSTOM_ACTION' && !(actionRequest as any).bypassCapabilityAdvisor) {
-      const actionText = String(
-        (actionRequest as any).actionText ||
-        (actionRequest as any).customText ||
-        (actionRequest as any).description ||
-        (actionRequest as any).input ||
-        ''
-      ).trim();
-
-      if (actionText) {
-        preflightAdvice = await storyActionAdvisor.advise(storyId, actionText);
-
-        if (
-          preflightAdvice.mode === 'SUGGEST_ALTERNATIVE' ||
-          preflightAdvice.mode === 'CAPABILITY_SIMULATION'
-        ) {
-          const blocked = preflightAdvice.mode === 'CAPABILITY_SIMULATION';
-          return res.status(409).json({
-            success: false,
-            code: blocked ? 'CAPABILITY_SIMULATION_BLOCKED' : 'ACTION_ADVICE_CONFIRMATION_REQUIRED',
-            errorReason: preflightAdvice.simulation?.explanation ||
-              'This action requires an explicit capability decision before execution.',
-            advice: preflightAdvice,
-          });
-        }
-
-        if (preflightAdvice.recognizedCapability?.id) {
-          (actionRequest as any).intendedCapabilityId = preflightAdvice.recognizedCapability.id;
-        }
-        if (preflightAdvice.aiPipeline?.narrationDirective) {
-          (actionRequest as any).__narrationDirective = preflightAdvice.aiPipeline.narrationDirective;
-        }
-
-        // The request has already been preflighted here. Skip repeating the
-        // advisor inside ServerMockAuthority while preserving capability execution.
-
-      }
-    }
-
-    const rawIdempotencyKey =
-      (req.headers['x-idempotency-key'] as string | undefined) ||
-      (req.body?.idempotencyKey as string | undefined);
-    const requestedCommandId =
-      (req.headers['x-command-id'] as string | undefined) ||
-      (req.body?.commandId as string | undefined) ||
-      (rawIdempotencyKey
-        ? deterministicId('cmd_route_idem', storyId, '/action', String(rawIdempotencyKey))
-        : deterministicId('cmd_route', storyId, "/action", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1));
-    const source = 'PLAYER' as const;
-    const serverPlayer = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = serverPlayer?.actorId || `player_actor_${storyId}`;
-    const canonicalActionType =
-      actionRequest.type === 'TRAVEL_REQUEST'
-        ? 'MOVE'
-        : actionRequest.type === 'EQUIP_REQUEST'
-          ? 'EQUIP'
-          : actionRequest.type === 'UNEQUIP_REQUEST'
-            ? 'UNEQUIP'
-            : actionRequest.type === 'ADVANCE_TIME'
-              ? 'ADVANCE_TIME'
-              : 'INTERACT';
-
-    const commandPayload: Record<string, unknown> = {
-      storyHistoryTurn: true,
-      ...(canonicalActionType === 'MOVE'
-        ? {
-            targetLocationId: (actionRequest as any).targetLocationId,
-            mode: (actionRequest as any).mode,
-          }
-        : canonicalActionType === 'EQUIP'
-          ? {
-              itemId: (actionRequest as any).itemId,
-              slot: (actionRequest as any).slot,
-            }
-          : canonicalActionType === 'UNEQUIP'
-            ? {
-                slot: (actionRequest as any).slot,
-              }
-            : canonicalActionType === 'ADVANCE_TIME'
-              ? {
-                  seconds: (actionRequest as any).seconds,
-                }
-              : {
-                  actionRequest,
-                }),
-    };
-
-    const preActionRun = worldRepository.getStoryRun(storyId);
-    const wasAlreadyCommitted = Boolean(
-      preActionRun?.canonicalEvents?.some((event: any) =>
-        event.commandId === requestedCommandId ||
-        (rawIdempotencyKey && event.idempotencyKey === String(rawIdempotencyKey))
-      ),
-    );
-
-    const mockStateBefore = serverMockAuthority.exportTransactionalState(storyId);
-    // A story may have been lazily initialized before its first player action.
-    // Persist that exact visible-history prefix before the canonical engine captures
-    // its pre-turn snapshot, so the first turn can be rolled back safely too.
-    if (preActionRun && !wasAlreadyCommitted) {
-      preActionRun.runtimeState = {
-        ...(preActionRun.runtimeState || {}),
-        actionHistory: JSON.parse(JSON.stringify(mockStateBefore.actionHistory || [])),
-      };
-      worldRepository.saveStoryRun(preActionRun);
-    }
-
-    const commandResult = await canonicalCommandEngine.execute(
-      worldRepository,
-      {
-        commandId: requestedCommandId,
-        storyId,
-        actorId,
-        type: canonicalActionType,
-        payload: commandPayload,
-        source,
-        idempotencyKey: rawIdempotencyKey,
-        transactionMode: 'ROLLBACK',
-      },
-      async () => {
-        const actionResult =
-          actionRequest.type === 'CUSTOM_ACTION'
-            ? await serverMockAuthority.processCustomAction(
-                actionRequest,
-                requestedCommandId,
-                {
-                  bypassCapabilityAdvisor: true,
-                  narrationDirective: (actionRequest as any).__narrationDirective,
-                } as any
-              )
-            : serverMockAuthority.processAction(actionRequest, requestedCommandId);
-        return {
-          success: true,
-          data: actionResult,
-          errorReason: actionResult.success === false ? actionResult.message : undefined,
-          summary: `Authoritative ${actionRequest.type} command resolved.`,
-        };
-      }
-    );
-
-    if (!commandResult.success) {
-      if (!wasAlreadyCommitted) {
-        serverMockAuthority.importTransactionalState(storyId, mockStateBefore);
-      }
-      return res.status(400).json({
-        ...commandResult,
-        error: commandResult.errorReason,
-      });
-    }
-
-    if (!wasAlreadyCommitted) {
-      // Link every recorded player turn to its canonical command. This makes safe
-      // rollback available for movement, dialogue, inspection, equipment and freeform turns.
-      try {
-        const actionData: any = commandResult.data;
-        const liveState = serverMockAuthority.getDynamicStoryState(storyId);
-        const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
-        if (actionLog) {
-          actionLog.canonicalCommandId = commandResult.commandId;
-          actionLog.canonicalEventId = commandResult.event?.eventId;
-        }
-        const committedRun = worldRepository.getStoryRun(storyId);
-        const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
-        if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
-          const committedEvent = committedRun.canonicalEvents[eventIndex];
-          committedRun.canonicalEvents[eventIndex] = {
-            ...committedEvent,
-            replay: {
-              ...committedEvent.replay,
-              ...(actionRequest.type === 'CUSTOM_ACTION' ? { mockStateBefore } : {}),
-              ...(universeBefore ? { universeBefore } : {}),
-            },
-          };
-          committedRun.runtimeState = {
-            ...(committedRun.runtimeState || {}),
-            actionHistory: JSON.parse(JSON.stringify(liveState.actionHistory || [])),
-          };
-          worldRepository.saveStoryRun(committedRun);
-          commandResult.event = committedRun.canonicalEvents[eventIndex];
-        }
-        if (actionLog) {
-          (commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId);
-        }
-      } catch (checkpointError) {
-        console.warn('[StoryHistory] Failed to attach rollback checkpoint metadata:', checkpointError);
-      }
-
-      // Automatically record durable cross-world memories from the authoritative outcome.
-      // The player never needs to tell the system to "save" an acquired item or important action.
-      try {
-        const actionData: any = commandResult.data;
-        UniverseRuntimeService.captureAction(worldRepository, {
-          storyId,
-          actionType: canonicalActionType,
-          actionText: String(
+        // Explicit cross-world freeform actions ("fly to another planet", "leave this world for X")
+        // are promoted to the same canonical travel path as the structured world-travel request.
+        if (actionRequest.type === 'CUSTOM_ACTION') {
+          const travelText = String(
             (actionRequest as any).actionText ||
             (actionRequest as any).customText ||
             (actionRequest as any).description ||
             (actionRequest as any).input ||
-            actionRequest.type
+            ''
+          ).trim();
+
+          const rawQueryIdempotencyKey =
+            (req.headers['x-idempotency-key'] as string | undefined) ||
+            (req.body?.idempotencyKey as string | undefined);
+          const requestedQueryCommandId =
+            (req.headers['x-command-id'] as string | undefined) ||
+            (req.body?.commandId as string | undefined) ||
+            (rawQueryIdempotencyKey
+              ? deterministicId('cmd_route_idem', storyId, '/action', String(rawQueryIdempotencyKey))
+              : deterministicId('cmd_route', storyId, '/action', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1));
+          const existingRunForQuery = worldRepository.getStoryRun(storyId);
+          const queryAlreadyCommitted = Boolean(
+            existingRunForQuery?.canonicalEvents?.some((event: any) =>
+              event.commandId === requestedQueryCommandId ||
+              (rawQueryIdempotencyKey && event.idempotencyKey === String(rawQueryIdempotencyKey))
+            ),
+          );
+          if (!queryAlreadyCommitted) {
+            const readOnlyQueryResult = serverMockAuthority.resolveReadOnlyPlayerStateQuery(
+              actionRequest,
+              requestedQueryCommandId,
+              rawQueryIdempotencyKey,
+            );
+            if (readOnlyQueryResult) {
+              res.json(readOnlyQueryResult);
+              return { done: true as const };
+            }
+          }
+
+          const inferredTravel = UniverseRuntimeService.inferCrossWorldTravelIntent(
+            worldRepository,
+            storyId,
+            travelText,
+          );
+
+          if (inferredTravel) {
+            try {
+              const result = await UniverseRuntimeService.travel(worldRepository, {
+                storyId,
+                universeId: universe.universeId,
+                worldId: inferredTravel.worldId,
+                worldPremise: inferredTravel.worldPremise,
+                worldTitle: inferredTravel.worldTitle,
+                trigger: 'PLAYER',
+              });
+              serverMockAuthority.setActiveStoryId(result.storyId);
+              const viewState = serverMockAuthority.getSanitizedViewState(result.storyId);
+              res.json({
+                success: true,
+                actionId: deterministicId('world_travel_action', universe.universeId, storyId, result.storyId, travelText),
+                requestType: actionRequest.type,
+                status: 'MOCK_ENGINE_COMMITTED',
+                message: result.createdWorld
+                  ? 'The interworld journey created a new world and the player arrived there.'
+                  : 'The player crossed into the requested world.',
+                authoritativeFeedback: 'Cross-world travel committed through the persistent Universe runtime.',
+                narrativeResponse: result.createdWorld
+                  ? `Beyond the boundary of ${worldRepository.getWorldTemplate(String(worldRepository.getStoryRun(storyId)?.worldId || ''))?.title || 'the current world'}, a new world forms around the traveler: ${result.world?.title || 'an unknown world'}.`
+                  : `The boundary between worlds gives way, and ${result.world?.title || 'the destination world'} receives the traveler.`,
+                viewState,
+                universe: result.universe,
+                world: result.world,
+                storyId: result.storyId,
+                createdWorld: result.createdWorld,
+                createdSession: result.createdSession,
+              });
+              return { done: true as const };
+            } catch (error: any) {
+              res.status(400).json({
+                success: false,
+                code: 'WORLD_TRAVEL_FAILED',
+                errorReason: error?.message || 'World travel failed.',
+              });
+              return { done: true as const };
+            }
+          }
+        }
+
+        if (actionRequest.type === 'WORLD_TRAVEL_REQUEST') {
+          if (!actionRequest.worldId && !actionRequest.worldPremise) {
+            res.status(400).json({
+              success: false,
+              code: 'WORLD_TRAVEL_TARGET_REQUIRED',
+              errorReason: 'Provide worldId for an existing world or worldPremise to generate a new world.',
+            });
+            return { done: true as const };
+          }
+
+          try {
+            const result = await UniverseRuntimeService.travel(worldRepository, {
+              storyId,
+              universeId: universe.universeId,
+              worldId: actionRequest.worldId,
+              worldPremise: actionRequest.worldPremise,
+              worldTitle: actionRequest.worldTitle,
+              travelDurationSeconds: actionRequest.travelDurationSeconds,
+              trigger: 'PLAYER',
+            });
+            serverMockAuthority.setActiveStoryId(result.storyId);
+            const viewState = serverMockAuthority.getSanitizedViewState(result.storyId);
+            res.json({
+              success: true,
+              actionId: deterministicId('world_travel_action', universe.universeId, storyId, result.storyId),
+              requestType: actionRequest.type,
+              status: 'MOCK_ENGINE_COMMITTED',
+              message: result.createdWorld
+                ? 'A new world was generated and the player arrived there.'
+                : 'The player traveled to the requested world.',
+              authoritativeFeedback: 'Cross-world travel committed through the persistent Universe runtime.',
+              narrativeResponse: 'The universe carries you beyond the boundary of the current world.',
+              viewState,
+              universe: result.universe,
+              world: result.world,
+              storyId: result.storyId,
+              createdWorld: result.createdWorld,
+              createdSession: result.createdSession,
+            });
+            return { done: true as const };
+          } catch (error: any) {
+            res.status(400).json({
+              success: false,
+              code: 'WORLD_TRAVEL_FAILED',
+              errorReason: error?.message || 'World travel failed.',
+            });
+            return { done: true as const };
+          }
+        }
+
+        const beforeInventoryState = worldRepository.getInventoryEngine(storyId).exportState();
+        const beforeWorldElapsedSeconds = worldRepository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds;
+        let preflightAdvice: any = null;
+        if (actionRequest.type === 'CUSTOM_ACTION' && !(actionRequest as any).bypassCapabilityAdvisor) {
+          const actionText = String(
+            (actionRequest as any).actionText ||
+            (actionRequest as any).customText ||
+            (actionRequest as any).description ||
+            (actionRequest as any).input ||
+            ''
+          ).trim();
+
+          if (actionText) {
+            preflightAdvice = await storyActionAdvisor.advise(storyId, actionText);
+
+            if (
+              preflightAdvice.mode === 'SUGGEST_ALTERNATIVE' ||
+              preflightAdvice.mode === 'CAPABILITY_SIMULATION'
+            ) {
+              const blocked = preflightAdvice.mode === 'CAPABILITY_SIMULATION';
+              res.status(409).json({
+                success: false,
+                code: blocked ? 'CAPABILITY_SIMULATION_BLOCKED' : 'ACTION_ADVICE_CONFIRMATION_REQUIRED',
+                errorReason: preflightAdvice.simulation?.explanation ||
+                  'This action requires an explicit capability decision before execution.',
+                advice: preflightAdvice,
+              });
+              return { done: true as const };
+            }
+
+            if (preflightAdvice.recognizedCapability?.id) {
+              (actionRequest as any).intendedCapabilityId = preflightAdvice.recognizedCapability.id;
+            }
+            if (preflightAdvice.aiPipeline?.narrationDirective) {
+              (actionRequest as any).__narrationDirective = preflightAdvice.aiPipeline.narrationDirective;
+            }
+          }
+        }
+
+        const rawIdempotencyKey =
+          (req.headers['x-idempotency-key'] as string | undefined) ||
+          (req.body?.idempotencyKey as string | undefined);
+        const requestedCommandId =
+          (req.headers['x-command-id'] as string | undefined) ||
+          (req.body?.commandId as string | undefined) ||
+          (rawIdempotencyKey
+            ? deterministicId('cmd_route_idem', storyId, '/action', String(rawIdempotencyKey))
+            : deterministicId('cmd_route', storyId, "/action", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1));
+        const source = 'PLAYER' as const;
+        const serverPlayer = worldRepository.getPlayerLifecycle(storyId);
+        const actorId = serverPlayer?.actorId || `player_actor_${storyId}`;
+        const canonicalActionType =
+          actionRequest.type === 'TRAVEL_REQUEST'
+            ? 'MOVE'
+            : actionRequest.type === 'EQUIP_REQUEST'
+              ? 'EQUIP'
+              : actionRequest.type === 'UNEQUIP_REQUEST'
+                ? 'UNEQUIP'
+                : actionRequest.type === 'ADVANCE_TIME'
+                  ? 'ADVANCE_TIME'
+                  : 'INTERACT';
+
+        const commandPayload: Record<string, unknown> = {
+          storyHistoryTurn: true,
+          ...(canonicalActionType === 'MOVE'
+            ? {
+                targetLocationId: (actionRequest as any).targetLocationId,
+                mode: (actionRequest as any).mode,
+              }
+            : canonicalActionType === 'EQUIP'
+              ? {
+                  itemId: (actionRequest as any).itemId,
+                  slot: (actionRequest as any).slot,
+                }
+              : canonicalActionType === 'UNEQUIP'
+                ? {
+                    slot: (actionRequest as any).slot,
+                  }
+                : canonicalActionType === 'ADVANCE_TIME'
+                  ? {
+                      seconds: (actionRequest as any).seconds,
+                    }
+                  : {
+                      actionRequest,
+                    }),
+        };
+
+        const preActionRun = worldRepository.getStoryRun(storyId);
+        const wasAlreadyCommitted = Boolean(
+          preActionRun?.canonicalEvents?.some((event: any) =>
+            event.commandId === requestedCommandId ||
+            (rawIdempotencyKey && event.idempotencyKey === String(rawIdempotencyKey))
           ),
-          commandId: commandResult.commandId,
-          authoritativeFeedback: actionData?.authoritativeFeedback || actionData?.message,
-          narrativeResponse: actionData?.narrativeResponse,
+        );
+
+        const mockStateBefore = serverMockAuthority.exportTransactionalState(storyId);
+        if (preActionRun && !wasAlreadyCommitted) {
+          preActionRun.runtimeState = {
+            ...(preActionRun.runtimeState || {}),
+            actionHistory: JSON.parse(JSON.stringify(mockStateBefore.actionHistory || [])),
+          };
+          worldRepository.saveStoryRun(preActionRun);
+        }
+
+        let preparedCustomAction: PreparedCustomActionContext | undefined;
+
+        const commandResult = await canonicalCommandEngine.execute(
+          worldRepository,
+          {
+            commandId: requestedCommandId,
+            storyId,
+            actorId,
+            type: canonicalActionType,
+            payload: commandPayload,
+            source,
+            idempotencyKey: rawIdempotencyKey,
+            transactionMode: 'ROLLBACK',
+          },
+          async () => {
+            const actionResult =
+              actionRequest.type === 'CUSTOM_ACTION'
+                ? await serverMockAuthority.processCustomAction(
+                    actionRequest,
+                    requestedCommandId,
+                    {
+                      bypassCapabilityAdvisor: true,
+                      narrationDirective: (actionRequest as any).__narrationDirective,
+                      deferNarration: true,
+                      onPrepared: (ctx: any) => {
+                        preparedCustomAction = ctx;
+                      },
+                    } as any
+                  )
+                : serverMockAuthority.processAction(actionRequest, requestedCommandId);
+            return {
+              success: true,
+              data: actionResult,
+              errorReason: actionResult.success === false ? actionResult.message : undefined,
+              summary: `Authoritative ${actionRequest.type} command resolved.`,
+            };
+          }
+        );
+
+        if (!commandResult.success) {
+          if (!wasAlreadyCommitted) {
+            serverMockAuthority.importTransactionalState(storyId, mockStateBefore);
+          }
+          res.status(400).json({
+            ...commandResult,
+            error: commandResult.errorReason,
+          });
+          return { done: true as const };
+        }
+
+        if (!wasAlreadyCommitted) {
+          try {
+            const actionData: any = commandResult.data;
+            const liveState = serverMockAuthority.getDynamicStoryState(storyId);
+            const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
+            if (actionLog) {
+              actionLog.canonicalCommandId = commandResult.commandId;
+              actionLog.canonicalEventId = commandResult.event?.eventId;
+            }
+            const committedRun = worldRepository.getStoryRun(storyId);
+            const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
+            if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
+              const committedEvent = committedRun.canonicalEvents[eventIndex];
+              committedRun.canonicalEvents[eventIndex] = {
+                ...committedEvent,
+                replay: {
+                  ...committedEvent.replay,
+                  ...(actionRequest.type === 'CUSTOM_ACTION' ? { mockStateBefore } : {}),
+                  ...(universeBefore ? { universeBefore } : {}),
+                },
+              };
+              committedRun.runtimeState = {
+                ...(committedRun.runtimeState || {}),
+                actionHistory: JSON.parse(JSON.stringify(liveState.actionHistory || [])),
+              };
+              worldRepository.saveStoryRun(committedRun);
+              commandResult.event = committedRun.canonicalEvents[eventIndex];
+            }
+            if (actionLog) {
+              (commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId);
+            }
+          } catch (checkpointError) {
+            console.warn('[StoryHistory] Failed to attach rollback checkpoint metadata:', checkpointError);
+          }
+        }
+
+        const needsDeferredNarration = Boolean(
+          !wasAlreadyCommitted &&
+          actionRequest.type === 'CUSTOM_ACTION' &&
+          preparedCustomAction?.requiresNarration
+        );
+
+        if (!needsDeferredNarration) {
+          if (!wasAlreadyCommitted) {
+            try {
+              const actionData: any = commandResult.data;
+              UniverseRuntimeService.captureAction(worldRepository, {
+                storyId,
+                actionType: canonicalActionType,
+                actionText: String(
+                  (actionRequest as any).actionText ||
+                  (actionRequest as any).customText ||
+                  (actionRequest as any).description ||
+                  (actionRequest as any).input ||
+                  actionRequest.type
+                ),
+                commandId: commandResult.commandId,
+                authoritativeFeedback: actionData?.authoritativeFeedback || actionData?.message,
+                narrativeResponse: actionData?.narrativeResponse,
+                beforeInventoryState,
+                beforeWorldElapsedSeconds,
+              });
+            } catch (memoryError) {
+              console.warn('[UniverseRuntime] Automatic continuity capture failed:', memoryError);
+            }
+          }
+          res.json(commandResult.data);
+          return { done: true as const };
+        }
+
+        return {
+          done: false as const,
+          prepared: preparedCustomAction!,
+          commandResult,
+          canonicalActionType,
           beforeInventoryState,
           beforeWorldElapsedSeconds,
-        });
-      } catch (memoryError) {
-        // Memory capture is a derived continuity layer. Never roll back a successful canonical action
-        // because a non-authoritative memory projection failed.
-        console.warn('[UniverseRuntime] Automatic continuity capture failed:', memoryError);
-      }
+        };
+      })
+    );
+
+    if (phase1.done) {
+      return;
     }
 
-    res.json(commandResult.data);
+    // Schedule asynchronous background queue drain after Phase 1 releases the write lock
+    worldRepository.scheduleBackgroundDrain(storyId);
+
+    // Phase 2 (Purely Unlocked — NO canonicalCommandEngine write lock, NO persistence batching):
+    // Async AI narration, live narrative quality review, and action tips.
+    const narrationOutput = await serverMockAuthority.generateCustomActionNarration(phase1.prepared);
+
+    // Phase 3 (Brief Micro-Lock):
+    // Attach narration & forensic records to committed actionLog, update idempotency cache,
+    // record continuity turn, capture Universe action, and return final response.
+    return await canonicalCommandEngine.runExclusive(storyId, async () =>
+      worldRepository.runWithPersistenceBatching(async () => {
+        const finalResult = serverMockAuthority.finalizeCustomActionNarration(
+          storyId,
+          phase1.prepared,
+          narrationOutput
+        );
+        worldRepository.attachStagedStorySessionTurn(storyId);
+
+        try {
+          const liveState = serverMockAuthority.getDynamicStoryState(storyId);
+          const committedRun = worldRepository.getStoryRun(storyId);
+          if (committedRun) {
+            committedRun.runtimeState = {
+              ...(committedRun.runtimeState || {}),
+              actionHistory: JSON.parse(JSON.stringify(liveState.actionHistory || [])),
+            };
+            worldRepository.saveStoryRun(committedRun);
+          }
+          canonicalCommandEngine.updateCompletedResult(
+            storyId,
+            phase1.commandResult.commandId,
+            finalResult
+          );
+        } catch (persistErr) {
+          console.warn('[StoryHistory] Failed to finalize narrated actionHistory:', persistErr);
+        }
+
+        try {
+          UniverseRuntimeService.captureAction(worldRepository, {
+            storyId,
+            actionType: phase1.canonicalActionType,
+            actionText: String(
+              (actionRequest as any).actionText ||
+              (actionRequest as any).customText ||
+              (actionRequest as any).description ||
+              (actionRequest as any).input ||
+              actionRequest.type
+            ),
+            commandId: phase1.commandResult.commandId,
+            authoritativeFeedback: finalResult?.authoritativeFeedback || finalResult?.message,
+            narrativeResponse: finalResult?.narrativeResponse,
+            beforeInventoryState: phase1.beforeInventoryState,
+            beforeWorldElapsedSeconds: phase1.beforeWorldElapsedSeconds,
+          });
+        } catch (memoryError) {
+          console.warn('[UniverseRuntime] Automatic continuity capture failed:', memoryError);
+        }
+
+        return res.json(finalResult);
+      })
+    );
   } catch (error: any) {
-    const message = error instanceof Error
-      ? error.message
-      : String(error || 'Unknown action-processing error');
     console.error('Error processing authoritative action request:', error);
-    res.status(500).json({
-      success: false,
-      code: 'ACTION_PROCESSING_FAILED',
-      error: 'The story action could not be resolved.',
-      errorReason: 'The server encountered an unexpected error while resolving this action. Open developer diagnostics for the detailed server error.',
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        code: 'ACTION_PROCESSING_FAILED',
+        error: 'The story action could not be resolved.',
+        errorReason: 'The server encountered an unexpected error while resolving this action. Open developer diagnostics for the detailed server error.',
+      });
+    }
   }
-    })
-  );
 });
 
 /**
@@ -10126,175 +10243,6 @@ gameRouter.get('/worlds/runs/:storyId', async (req: Request, res: Response) => {
     res.json(projectedRun);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve story run.' });
-  }
-});
-
-gameRouter.post('/worlds/runs/:storyId/story-director/step', async (req: Request, res: Response) => {
-  try {
-    const { storyDirectorService } = await import('../services/storyDirectorService');
-    const storyId = req.params.storyId as string;
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || `player_actor_${storyId}`;
-    const commandId =
-      (req.headers['x-command-id'] as string | undefined) ||
-      (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/step", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
-
-    const commandResult = await canonicalCommandEngine.execute(
-      worldRepository,
-      {
-        commandId,
-        storyId,
-        actorId,
-        type: 'INTERACT',
-        payload: { action: 'STORY_DIRECTOR_STEP' },
-        source: 'SYSTEM',
-        transactionMode: 'STAGED',
-      },
-      async (_command, context) => {
-        const result = storyDirectorService.stepDirector(storyId, context.repository);
-        return {
-          success: true,
-          data: result,
-          summary: 'Story Director advanced through the canonical command path.',
-        };
-      }
-    );
-
-    if (!commandResult.success) {
-      return res.status(400).json({
-        success: false,
-        errorReason: commandResult.errorReason,
-        rolledBack: commandResult.rolledBack,
-        commandId: commandResult.commandId,
-      });
-    }
-
-    res.json({
-      success: true,
-      ...(commandResult.data as any),
-      commandId: commandResult.commandId,
-      canonicalEvent: commandResult.event,
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to step story director.' });
-  }
-});
-
-gameRouter.post('/worlds/runs/:storyId/story-director/choice', async (req: Request, res: Response) => {
-  try {
-    const { beatId, optionId } = req.body;
-    if (!beatId || !optionId) {
-      return res.status(400).json({ error: 'beatId and optionId are required.' });
-    }
-    const { storyDirectorService } = await import('../services/storyDirectorService');
-    const storyId = req.params.storyId as string;
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || `player_actor_${storyId}`;
-    const commandId =
-      (req.headers['x-command-id'] as string | undefined) ||
-      (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/choice", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
-
-    const commandResult = await canonicalCommandEngine.execute(
-      worldRepository,
-      {
-        commandId,
-        storyId,
-        actorId,
-        type: 'INTERACT',
-        payload: { beatId, optionId },
-        source: 'PLAYER',
-        transactionMode: 'STAGED',
-      },
-      async (_command, context) => {
-        const result = storyDirectorService.recordChoice(
-          storyId,
-          beatId,
-          optionId,
-          context.repository
-        );
-        return {
-          success: result.success,
-          data: { ...result, recordedChoice: { beatId, optionId } },
-          errorReason: result.success ? undefined : (result.consequences?.join('; ') || 'Story choice rejected.'),
-          summary: `Story choice ${optionId} recorded for beat ${beatId}.`,
-        };
-      }
-    );
-
-    if (!commandResult.success) {
-      return res.status(400).json({
-        success: false,
-        errorReason: commandResult.errorReason,
-        rolledBack: commandResult.rolledBack,
-        commandId: commandResult.commandId,
-      });
-    }
-
-    res.json({
-      success: true,
-      ...(commandResult.data as any),
-      commandId: commandResult.commandId,
-      canonicalEvent: commandResult.event,
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to record story director choice.' });
-  }
-});
-
-gameRouter.post('/worlds/runs/:storyId/story-director/offscreen', async (req: Request, res: Response) => {
-  try {
-    const { storyDirectorService } = await import('../services/storyDirectorService');
-    const storyId = req.params.storyId as string;
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || `player_actor_${storyId}`;
-    const commandId =
-      (req.headers['x-command-id'] as string | undefined) ||
-      (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/offscreen", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
-
-    const commandResult = await canonicalCommandEngine.execute(
-      worldRepository,
-      {
-        commandId,
-        storyId,
-        actorId,
-        type: 'INTERACT',
-        payload: { action: 'ADVANCE_OFFSCREEN_WORLD_ACTOR' },
-        source: 'SYSTEM',
-        transactionMode: 'STAGED',
-      },
-      async (_command, context) => {
-        const result = storyDirectorService.advanceOffscreenProtagonist(
-          storyId,
-          context.repository
-        );
-        return {
-          success: result.success,
-          data: result,
-          errorReason: result.success ? undefined : result.actionTaken,
-          summary: 'Offscreen narrative activity resolved.',
-        };
-      }
-    );
-
-    if (!commandResult.success) {
-      return res.status(400).json({
-        success: false,
-        errorReason: commandResult.errorReason,
-        rolledBack: commandResult.rolledBack,
-        commandId: commandResult.commandId,
-      });
-    }
-
-    res.json({
-      ...(commandResult.data as any),
-      commandId: commandResult.commandId,
-      canonicalEvent: commandResult.event,
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to advance offscreen protagonist.' });
   }
 });
 

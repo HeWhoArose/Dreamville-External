@@ -55,6 +55,8 @@ export interface DurableMemory {
   lastRecalledTimestamp?: WorldTimestamp;
   triggerConditionTags: string[]; // e.g. ['food_transfer', 'bite', 'apple', 'consumption']
   structuredTriggers?: StructuredTriggerCondition[];
+  consolidatedIntoId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface OpportunityMatch {
@@ -165,6 +167,22 @@ export class MemoryOpportunityEngine {
       }
     }
     return list;
+  }
+
+  public getMemoriesForEntity(
+    storyId: string,
+    entityId: string,
+    options: { includeDormant?: boolean; includeArchived?: boolean } = {}
+  ): DurableMemory[] {
+    return this.getAllMemories(storyId).filter((mem) => {
+      if (mem.status === 'archived' && !options.includeArchived) return false;
+      if (mem.status === 'dormant' && !options.includeDormant && !mem.isPersistentCritical) return false;
+      return (
+        mem.subjectEntityId === entityId ||
+        (mem.relatedEntityIds && mem.relatedEntityIds.includes(entityId)) ||
+        (mem.accessibleToEntityIds && mem.accessibleToEntityIds.includes(entityId))
+      );
+    });
   }
 
   /**

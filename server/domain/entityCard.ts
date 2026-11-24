@@ -1,4 +1,5 @@
 import { deterministicId } from './deterministicRng';
+import type { EntityLifecycleStage } from './worldSimulationProposal';
 
 export type EntityKind =
 	| 'PLAYER'
@@ -26,6 +27,8 @@ export interface EntityRelationshipState {
 	affection?: number;
 	respect?: number;
 	fear?: number;
+	hostility?: number;
+	suspicion?: number;
 }
 
 export interface EntityCard {
@@ -130,11 +133,14 @@ export interface EntityCard {
 		confidence?: number;
 	};
 	lifecycle: {
+		stage?: EntityLifecycleStage;
 		status: EntityLifecycleStatus;
 		lastActiveAt?: string;
 		lastSeenAt?: string;
 		archivedAt?: string;
 		deadAt?: string;
+		ttlTurns?: number;
+		activeDependencies?: string[];
 	};
 	metadata: Record<string, unknown>;
 	createdAt: string;
@@ -153,6 +159,8 @@ export interface EntityCardInput extends Partial<Omit<EntityCard, 'id' | 'storyI
 export interface EntityQuery {
 	status?: EntityLifecycleStatus | EntityLifecycleStatus[];
 	kind?: EntityKind | EntityKind[];
+	locationId?: string;
+	locationIdOrTemporary?: string;
 	query?: string;
 	includeTemplates?: boolean;
 }
@@ -308,11 +316,14 @@ export class EntityRegistry {
 				confidence: input.provenance?.confidence,
 			},
 			lifecycle: {
+				stage: input.lifecycle?.stage || existing?.lifecycle?.stage,
 				status: normalizeStatus(input.lifecycle?.status, isTemplate),
 				lastActiveAt: input.lifecycle?.lastActiveAt,
 				lastSeenAt: input.lifecycle?.lastSeenAt,
 				archivedAt: input.lifecycle?.archivedAt,
 				deadAt: input.lifecycle?.deadAt,
+				ttlTurns: input.lifecycle?.ttlTurns ?? existing?.lifecycle?.ttlTurns,
+				activeDependencies: normalizeArray(input.lifecycle?.activeDependencies || existing?.lifecycle?.activeDependencies),
 			},
 			metadata: clone(input.metadata || {}),
 			createdAt: existing?.createdAt || input.createdAt || now,
@@ -350,16 +361,50 @@ export class EntityRegistry {
 		return card ? clone(card) : undefined;
 	}
 
+	public remove(id: string): boolean {
+		return this.cards.delete(id);
+	}
+
 	public list(query: EntityQuery = {}): EntityCard[] {
+		return this.filterCards(query).map(clone);
+	}
+
+	/**
+	 * Read-only, zero-clone listing for hot simulation read paths.
+	 * Callers must NEVER mutate returned objects directly; clone or call upsert() on change.
+	 */
+	public listReadOnly(query: EntityQuery = {}): ReadonlyArray<Readonly<EntityCard>> {
+		return this.filterCards(query);
+	}
+
+	private filterCards(query: EntityQuery = {}): EntityCard[] {
 		const kinds = Array.isArray(query.kind) ? query.kind.map((value) => normalizeKind(value)) : query.kind ? [normalizeKind(query.kind)] : [];
 		const statuses = Array.isArray(query.status) ? query.status : query.status ? [query.status] : [];
 		const text = String(query.query || '').trim().toLowerCase();
-		return Array.from(this.cards.values())
-			.filter((card) => query.includeTemplates || !card.isTemplate)
-			.filter((card) => kinds.length === 0 || kinds.includes(card.kind))
-			.filter((card) => statuses.length === 0 || statuses.includes(card.lifecycle.status))
-			.filter((card) => !text || [card.name, card.kind, card.identity.species, card.classification.profession, card.classification.role, ...card.classification.tags, ...card.traits].filter(Boolean).some((value) => String(value).toLowerCase().includes(text)))
-			.map(clone);
+		const results: EntityCard[] = [];
+		for (const card of this.cards.values()) {
+			if (!query.includeTemplates && card.isTemplate) continue;
+			if (kinds.length > 0 && !kinds.includes(card.kind)) continue;
+			if (statuses.length > 0 && !statuses.includes(card.lifecycle.status)) continue;
+			if (query.locationId !== undefined && card.worldState.locationId !== query.locationId) continue;
+			if (
+				query.locationIdOrTemporary !== undefined &&
+				card.worldState.locationId !== query.locationIdOrTemporary &&
+				card.lifecycle?.stage !== 'ACTIVE_TEMPORARY'
+			) {
+				continue;
+			}
+			if (
+				text &&
+				![card.name, card.kind, card.identity.species, card.classification.profession, card.classification.role, ...card.classification.tags, ...card.traits]
+					.filter(Boolean)
+					.some((value) => String(value).toLowerCase().includes(text))
+			) {
+				continue;
+			}
+			results.push(card);
+		}
+		return results;
 	}
 
 	public setLifecycleStatus(id: string, status: EntityLifecycleStatus): EntityCard {

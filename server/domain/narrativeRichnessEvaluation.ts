@@ -2,6 +2,7 @@ import type { CurrentSituation } from './currentSituation';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { EphemeralNarrativePlan } from './narrativeDirector';
 import type { StructuredTurnPackage } from './aiOrchestrator';
+import { analyzeKnownFactUse } from './knownFactUse';
 
 export type NarrativeRichnessDecision = 'PASS' | 'IMPROVE';
 export type NarrativeRichnessSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
@@ -169,6 +170,7 @@ function scoreActionSubstance(
 	intent: PlayerIntent,
 	plan: EphemeralNarrativePlan,
 	hasStructuredDialogue: boolean,
+	situation?: CurrentSituation,
 ): NarrativeRichnessDimensionResult {
 	const sentenceCount = sentences(text).length;
 	const actionText = String(intent.action || '') + ' ' + String(intent.originalText || '');
@@ -179,7 +181,21 @@ function scoreActionSubstance(
 		/\b(?:ask|asked|question|questioned|inquire|inquired|find out|learn|what happened|who|why|where|how|rumou?rs?|gossip)\b/i.test(actionText);
 	const actionSignals = (text.match(ACTION_SUBSTANCE_ACTION_PATTERN) || []).length;
 	const reactionSignals = (text.match(ACTION_SUBSTANCE_REACTION_PATTERN) || []).length;
-	const informationSignals = (text.match(ACTION_SUBSTANCE_INFORMATION_PATTERN) || []).length;
+	// A plain statement of the known fact that answers the question is an information response even without a
+	// speech verb ("Silas Okafor found the body shortly after midnight").
+	const knownUse = isInformationTurn && situation
+		? analyzeKnownFactUse(
+			text,
+			[intent.informationGoal, intent.originalText].filter(Boolean).join(' '),
+			[...((situation as any).playerKnowledge?.knownFacts || []), ...((situation as any).relevantLore || [])],
+		)
+		: undefined;
+	const lexicalInformationSignals = (text.match(ACTION_SUBSTANCE_INFORMATION_PATTERN) || []).length;
+	// When the player already holds a fact that answers the question, only using it (or a visible refusal) is an
+	// answer; speech verbs and "nothing/unknown" wording no longer count (they accepted evasions and false ignorance).
+	const informationSignals = knownUse && knownUse.matched.length > 0
+		? (knownUse.used || knownUse.refusal ? 1 : 0)
+		: lexicalInformationSignals;
 	const sensorySignals = (text.match(ACTION_SUBSTANCE_SENSORY_PATTERN) || []).length;
 
 	// Focused one- or two-sentence observations should not be forced into a longer
@@ -453,6 +469,7 @@ export class NarrativeRichnessEvaluator {
 			params.intent,
 			params.plan,
 			Array.isArray(params.turnPackage.dialogue) && params.turnPackage.dialogue.some((entry) => String(entry?.text || '').trim().length > 0),
+			params.situation,
 		);
 		const dimensions = [
 			actionSubstance,

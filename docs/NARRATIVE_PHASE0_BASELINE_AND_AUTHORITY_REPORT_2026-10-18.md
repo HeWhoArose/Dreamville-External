@@ -33,7 +33,7 @@
 ### 2.1 CI and branches (P0.9)
 
 - Earlier in this review the GitHub API returned **three workflow runs, all successful**, for the `main` merge commit `ce3d3cb8`. The API rate limit has since been exhausted, so run names and links were not captured. Confirm in the Actions tab before treating that as recorded evidence.
-- Pull requests #68–#75 are **not ancestors of `main`**. A patch-id comparison finds no commit from them present in equivalent form on `main`. That is expected: `docs/DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16.md` records that their content was consolidated into #76 by re-application, which changes patch IDs. Spot checks confirm the consolidated tests and behaviour exist on `main`. **No PR was closed or ported.** Closing them is the owner's call.
+- Pull requests #68–#75 are **not ancestors of `main`**. A patch-id comparison finds no commit from them present in equivalent form on `main`. That is expected: `docs/outdated/historical-audits/DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16_HISTORICAL.md` records that their content was consolidated into #76 by re-application, which changes patch IDs. Spot checks confirm the consolidated tests and behaviour exist on `main`. **No PR was closed or ported.** Closing them is the owner's call.
 
 ### 2.2 Live turn path and candidate validation
 

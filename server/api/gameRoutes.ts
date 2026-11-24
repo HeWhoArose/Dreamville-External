@@ -7568,6 +7568,20 @@ gameRouter.post('/orchestrator/providers/:providerId/key', async (req: Request, 
 });
 
 /**
+ * GET /api/game/narration-quality/:storyId
+ * Per-turn narration quality records (guard outcome, findings, repair use) and the derived rates.
+ */
+gameRouter.get('/narration-quality/:storyId', async (req: Request, res: Response) => {
+  try {
+    const { getNarrationQuality, buildNarrationQualityReport } = await import('../domain/narrationQualityLedger');
+    const records = getNarrationQuality(String(req.params.storyId));
+    res.json({ success: true, storyId: String(req.params.storyId), records, report: buildNarrationQualityReport(records) });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to read narration quality.' });
+  }
+});
+
+/**
  * GET /api/game/orchestrator/custom-providers
  * Returns all custom configured providers.
  */

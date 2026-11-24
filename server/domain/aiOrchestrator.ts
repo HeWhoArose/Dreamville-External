@@ -22,6 +22,7 @@ import { CurrentSituationBuilder, type CurrentSituation } from './currentSituati
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
+import { classifyNarrationFailure, cutOffendingSentences, isReadableNarration, type GuardNote, type GuardOutcome } from './narrationGuardPolicy';
 import { buildAnswerBearingFactsBlock, narrationRecentTurnWindow, buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
@@ -8116,7 +8117,7 @@ export class MultiModelOrchestrator {
     noveltyState?: NarrativeNoveltyState;
     previousNarrations?: string[];
     enforceActionFidelity?: boolean;
-  }): { valid: boolean; errorReason?: string } {
+  }): { valid: boolean; errorReason?: string; offendingClaims?: string[] } {
     const narration = (params.turnPackage.narrative || []).join(' ').trim();
     if (!narration) {
       return { valid: false, errorReason: 'Final narrative candidate is empty.' };
@@ -8170,6 +8171,7 @@ export class MultiModelOrchestrator {
       return {
         valid: false,
         errorReason: 'Final narrative candidate failed semantic review' + (details ? ': ' + details : '.'),
+        offendingClaims: [...semanticReview.unsupportedClaims],
       };
     }
 
@@ -8246,6 +8248,8 @@ export class MultiModelOrchestrator {
     modelId?: string;
     providerId?: string;
     error?: string;
+    /** Guard policy record for this turn: outcome, findings by severity, and whether a repair (reserved or not) was used. */
+    guard?: { outcome: GuardOutcome; findings: GuardNote[]; repairUsed: boolean; reservedRepairUsed: boolean };
     source?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
     fallbackReason?: string;
     attemptsTrail?: Array<{
@@ -8663,6 +8667,42 @@ export class MultiModelOrchestrator {
       assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
     };
 
+    // Guard policy (reference study: Open Game Master narration guard). Soft findings get one corrective attempt and are then
+    // kept and recorded; hard findings still reject.
+    const guardState: { outcome: GuardOutcome; findings: GuardNote[]; repairUsed: boolean; reservedRepairUsed: boolean } = {
+      outcome: 'quiet', findings: [], repairUsed: false, reservedRepairUsed: false,
+    };
+    let softHeld = null as { text: string; reason: string } | null;
+    let softFailures = 0;
+    const guardNarrationValidation = (text: string, strict: (candidate: string) => TaskResponseValidationResult): TaskResponseValidationResult => {
+      const result = strict(text);
+      if (result.valid) return result;
+      const reason = String(result.errorReason || '');
+      const severity = classifyNarrationFailure(reason);
+      guardState.findings.push({ severity, reason });
+      if (severity === 'HARD' || !softNarrationGatesEnabled()) return result;
+      const heldProse = this.validateTurnPackage(text, { allowPlainTextNarration: true });
+      if (!heldProse.valid || !heldProse.turnPackage || !isReadableNarration(heldProse.turnPackage.narrative.join(' '))) return result;
+      softHeld = { text, reason };
+      softFailures += 1;
+      if (softFailures >= 2) {
+        guardState.outcome = 'kept_soft';
+        return { valid: true };
+      }
+      return result;
+    };
+    // The same continuity checks run again after generation. A soft finding the guard already weighed is tolerated there
+    // too (recorded, never silently dropped); hard and unrecognised findings still reject.
+    const tolerateSoftFinalFinding = (reason?: string): boolean => {
+      if (!softNarrationGatesEnabled()) return false;
+      const text = String(reason || '');
+      if (classifyNarrationFailure(text) !== 'SOFT') return false;
+      if (!isReadableNarration(finalNarrationText)) return false;
+      guardState.findings.push({ severity: 'SOFT', reason: text });
+      if (guardState.outcome === 'quiet') guardState.outcome = 'kept_soft';
+      return true;
+    };
+
     let generated: Awaited<ReturnType<MultiModelOrchestrator['executeTaskGeneration']>>;
     try {
       generated = await this.executeTaskGeneration(
@@ -8681,7 +8721,7 @@ export class MultiModelOrchestrator {
         canonicalLocationName: currentSituation.location.name,
         playerAction,
         narrativeHandoff: narrativeProviderHandoff,
-        validateResponse: (text) => {
+        validateResponse: (rawText) => guardNarrationValidation(rawText, (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
           if (!validation.valid || !validation.turnPackage) {
             return { valid: false, errorReason: validation.errorReason };
@@ -8730,10 +8770,25 @@ export class MultiModelOrchestrator {
           return temporalContinuity.valid
             ? { valid: true }
             : { valid: false, errorReason: temporalContinuity.errorReason };
-        },
+        }),
       },
     );
     } catch (generationError: any) {
+      if (softHeld && softNarrationGatesEnabled()) {
+        // The best candidate had only soft findings and the repair attempt could not be completed: keep it.
+        const heldTrail = Array.isArray(generationError?.attemptsTrail) ? generationError.attemptsTrail : [];
+        const heldAttempt = heldTrail.find((attempt: any) => String(attempt?.error || '').includes('Task response schema validation failed'));
+        generated = {
+          text: softHeld.text,
+          source: 'AI_FALLBACK',
+          providerId: heldAttempt?.providerId || 'unknown',
+          modelId: heldAttempt?.modelId || 'unknown',
+          fallbackReason: 'Kept the best candidate after soft findings: ' + softHeld.reason,
+          attempts: heldTrail.length,
+          attemptsTrail: heldTrail,
+        } as any;
+        guardState.outcome = 'kept_soft';
+      } else {
       const errorMessage = String(generationError?.message || generationError || 'Narration generation failed.');
       const attemptsTrail = Array.isArray(generationError?.attemptsTrail) ? generationError.attemptsTrail : [];
       const lastFailedAttempt = [...attemptsTrail].reverse().find((attempt: any) => attempt.status === 'FAILED');
@@ -8749,7 +8804,9 @@ export class MultiModelOrchestrator {
         storyBeat,
         researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
+        guard: { ...guardState, outcome: 'unavailable' as GuardOutcome },
       };
+      }
     }
 
     // Narrative generation has a deterministic emergency floor. When all configured
@@ -8788,7 +8845,7 @@ export class MultiModelOrchestrator {
 
     let finalNarrationText = validation.turnPackage.narrative.join(' ');
     const finalSceneContinuity = this.validateNarrativeSceneContinuity(finalNarrationText, worldRepo, storyId);
-    if (!finalSceneContinuity.valid) {
+    if (!finalSceneContinuity.valid && !tolerateSoftFinalFinding(finalSceneContinuity.errorReason)) {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8804,7 +8861,7 @@ export class MultiModelOrchestrator {
       };
     }
     const finalActionContinuity = this.validateNarrativeActionContinuity(finalNarrationText, playerAction, playerIntent);
-    if (!finalActionContinuity.valid) {
+    if (!finalActionContinuity.valid && !tolerateSoftFinalFinding(finalActionContinuity.errorReason)) {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8820,7 +8877,7 @@ export class MultiModelOrchestrator {
       };
     }
     const finalInformationContinuity = this.validateNarrativeInformationContinuity(finalNarrationText, playerAction, playerIntent);
-    if (!finalInformationContinuity.valid) {
+    if (!finalInformationContinuity.valid && !tolerateSoftFinalFinding(finalInformationContinuity.errorReason)) {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8912,10 +8969,12 @@ export class MultiModelOrchestrator {
       (params.actionResolution !== undefined && !initialStoryBeatContinuity.valid) ||
       (params.actionResolution !== undefined && !initialActionFidelity.valid);
     if (qualityGateTriggersRewrite && effectiveMaxRetries >= 1) {
-      const rewriteBudget = turnAiCallBudget.beginTask('narrative.review');
+      const rewriteBudget = turnAiCallBudget.beginCorrection('narrative.review');
       if (rewriteBudget.allowed) {
         turnAiCallBudget.recordProviderAttempt('narrative.review');
         narrativeQualityAudit.rewriteAttempted = true;
+        guardState.repairUsed = true;
+        guardState.reservedRepairUsed = Boolean((rewriteBudget as any).reserved);
       try {
         const styleDirective = (params.styleInstruction || '').trim();
         const rewritePromptText = [
@@ -9095,6 +9154,7 @@ export class MultiModelOrchestrator {
             ) {
               validation.turnPackage = rewriteValidation.turnPackage;
               finalNarrationText = rewriteNarration;
+              guardState.outcome = 'rewritten';
               finalNarrativeRichnessEvaluation = postRewriteEvaluation;
               narrativeQualityAudit.rewriteSucceeded = true;
               narrativeQualityAudit.finalDecision = postRewriteEvaluation.decision;
@@ -9159,6 +9219,8 @@ export class MultiModelOrchestrator {
       currentSituation.player.name,
     ) && !openingTurn && !finalAnswerIsGrounded;
     if (finalEnvironmentExcess) {
+      // Content-free scenery (no action, no answer) is a HARD finding in the guard policy: it stays rejected after the repair.
+      guardState.outcome = 'rejected_hard';
       const environmentFailure =
         'N18 environment/substance gate rejected final narration: environment-only description remained after the available rewrite budget was skipped or exhausted.';
       narrativeQualityAudit.finalDecision = 'IMPROVE';
@@ -9185,6 +9247,7 @@ export class MultiModelOrchestrator {
         contextAudit,
         narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
         narrativeQualityAudit,
+        guard: { ...guardState },
         error: environmentFailure,
       };
     }
@@ -9326,7 +9389,7 @@ export class MultiModelOrchestrator {
     (narrativeQualityAudit as any).semanticReview = finalSemanticReview;
     (narrativeQualityAudit as any).actionFidelity = finalActionFidelity;
 
-    const finalCandidateValidation = this.validateNarrativeCandidate({
+    let finalCandidateValidation: { valid: boolean; errorReason?: string; offendingClaims?: string[] } = this.validateNarrativeCandidate({
       storyId,
       playerAction,
       intent: playerIntent,
@@ -9342,10 +9405,53 @@ export class MultiModelOrchestrator {
       previousNarrations: previousNarrationsForReview,
       enforceActionFidelity: Boolean(params.actionResolution),
     });
+    if (!finalCandidateValidation.valid && softNarrationGatesEnabled()) {
+      const finalFailure = String(finalCandidateValidation.errorReason || '');
+      const finalSeverity = classifyNarrationFailure(finalFailure);      guardState.findings.push({ severity: finalSeverity, reason: finalFailure });
+      const offending = finalCandidateValidation.offendingClaims || [];
+      if (offending.length > 0) {
+        // Reference guard: cut just the contradicting sentences when enough of the story is left to read.
+        const cut = cutOffendingSentences(finalNarrationText, offending);
+        if (cut.removed.length > 0) {
+          const cutPackage = { ...validation.turnPackage!, narrative: [cut.text], stateChanges: [] };
+          const recheck = this.validateNarrativeCandidate({
+            storyId,
+            playerAction,
+            intent: playerIntent,
+            situation: currentSituation,
+            plan: richnessEvaluationPlan,
+            storyBeat,
+            actionResolution: params.actionResolution,
+            turnPackage: cutPackage,
+            repository: worldRepo,
+            pacingContract: narrativePacingContract,
+            voice: narratorVoiceState,
+            noveltyState: narrativeNoveltyState,
+            previousNarrations: previousNarrationsForReview,
+            enforceActionFidelity: Boolean(params.actionResolution),
+          });
+          if (recheck.valid || classifyNarrationFailure(recheck.errorReason) === 'SOFT') {
+            validation.turnPackage = cutPackage;
+            finalNarrationText = cut.text;
+            guardState.outcome = 'cut';
+            guardState.findings.push({ severity: 'SOFT', reason: `Removed ${cut.removed.length} unsupported sentence(s).` });
+            finalCandidateValidation = { valid: true };
+          }
+        }
+      }
+      // Scenery that still carries some action or answer is kept; content-free scenery (a very low action-substance score) is not.
+      const actionSubstanceScore = (finalNarrativeRichnessEvaluation as any)?.dimensions?.find((entry: any) => entry.dimension === 'ACTION_SUBSTANCE')?.score ?? 1;
+      if (!finalCandidateValidation.valid && finalSeverity === 'SOFT' && isReadableNarration(finalNarrationText) && actionSubstanceScore >= 0.3) {
+        guardState.outcome = 'kept_soft';
+        finalCandidateValidation = { valid: true };
+      }
+    }
     if (!finalCandidateValidation.valid) {
+      guardState.outcome = 'rejected_hard';
       return {
         success: false,
         validationRejected: true,
+        guard: { ...guardState },
         providerId: generated.providerId,
         modelId: generated.modelId,
         source: generated.source,
@@ -9388,6 +9494,7 @@ export class MultiModelOrchestrator {
       actionFidelity: finalActionFidelity,
       narrativeQualityAudit,
       storyBeat,
+      guard: { ...guardState, outcome: guardState.outcome === 'quiet' && guardState.repairUsed ? ('rewritten' as GuardOutcome) : guardState.outcome },
     };
   }
 
@@ -10628,6 +10735,8 @@ export class MultiModelOrchestrator {
       playerAction?: string;
       narrativeHandoff?: NarrativeProviderHandoffContract;
       turnBudget?: AiTurnCallBudget;
+      /** Marks a correction/repair call that may spend the turn's reserved correction attempt. */
+      reservedCall?: boolean;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
        * When true, a configured task route may be expanded with additional eligible AI models
@@ -11032,7 +11141,7 @@ export class MultiModelOrchestrator {
       }
       // Hard per-turn cap on real provider requests (configured chains are otherwise unbounded).
       if (!candidateChain[cIdx].isEmergencyFloor && options?.turnBudget) {
-        const attemptDecision = options.turnBudget.canAttemptProvider(task);
+        const attemptDecision = options.turnBudget.canAttemptProvider(task, { reserved: options.reservedCall });
         if (!attemptDecision.allowed) {
           lastError = attemptDecision.reason || lastError;
           break;

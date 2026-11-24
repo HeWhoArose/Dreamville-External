@@ -34,11 +34,19 @@ const DEFAULT_PROVIDER_ATTEMPT_LIMITS: Record<string, number> = {
 };
 const DEFAULT_PROVIDER_ATTEMPTS_PER_TASK = 3;
 const DEFAULT_PROVIDER_ATTEMPTS_PER_TURN = 10;
+/**
+ * One correction call per turn is held outside every cap above. The turns most likely to need repair are the busy ones, which
+ * are also the turns that end with their budget spent (reference study: Open Game Master's narration guard holds its rewrite
+ * outside the turn's four-call budget for the same reason).
+ */
+const DEFAULT_RESERVED_CORRECTIONS = 1;
 
 export interface AiTurnProviderAttemptCaps {
 	perTask?: Record<string, number>;
 	defaultPerTask?: number;
 	perTurn?: number;
+	/** Correction calls held in reserve outside the caps above (default 1). */
+	reservedCorrections?: number;
 }
 
 export class AiTurnCallBudget {
@@ -47,6 +55,9 @@ export class AiTurnCallBudget {
 	private readonly blockedTasks: Array<{ task: string; reason: string }> = [];
 
 	private readonly attemptCaps: Required<AiTurnProviderAttemptCaps>;
+	private reservedCorrectionsLeft: number;
+	private reserveActive = false;
+	private reserveAttemptUsed = false;
 
 	public constructor(
 		private readonly limitsByTask: Record<string, number> = DEFAULT_TASK_LIMITS,
@@ -56,7 +67,9 @@ export class AiTurnCallBudget {
 			perTask: { ...DEFAULT_PROVIDER_ATTEMPT_LIMITS, ...(attemptCaps.perTask || {}) },
 			defaultPerTask: attemptCaps.defaultPerTask ?? DEFAULT_PROVIDER_ATTEMPTS_PER_TASK,
 			perTurn: attemptCaps.perTurn ?? DEFAULT_PROVIDER_ATTEMPTS_PER_TURN,
+			reservedCorrections: attemptCaps.reservedCorrections ?? DEFAULT_RESERVED_CORRECTIONS,
 		};
+		this.reservedCorrectionsLeft = this.attemptCaps.reservedCorrections;
 	}
 
 	/** Maximum real provider requests (or, for retrying callers, distinct models) for a task this turn. */
@@ -68,7 +81,17 @@ export class AiTurnCallBudget {
 	 * Whether one more real provider request may be made for this task this turn.
 	 * Callers must not apply this to the zero-cost deterministic emergency floor.
 	 */
-	public canAttemptProvider(task: TaskId | string): { allowed: boolean; reason?: string } {
+	public canAttemptProvider(task: TaskId | string, options: { reserved?: boolean } = {}): { allowed: boolean; reason?: string; usedReserve?: boolean } {
+		const normal = this.canAttemptProviderWithinCaps(task);
+		if (normal.allowed) return normal;
+		if (options.reserved && this.reserveActive && !this.reserveAttemptUsed) {
+			this.reserveAttemptUsed = true;
+			return { allowed: true, usedReserve: true };
+		}
+		return normal;
+	}
+
+	private canAttemptProviderWithinCaps(task: TaskId | string): { allowed: boolean; reason?: string } {
 		const key = String(task);
 		const usedForTask = this.providerAttemptsByTask.get(key) || 0;
 		const taskCap = this.attemptCaps.perTask[key] ?? this.attemptCaps.defaultPerTask;
@@ -84,6 +107,26 @@ export class AiTurnCallBudget {
 			return { allowed: false, reason };
 		}
 		return { allowed: true };
+	}
+
+	/**
+	 * Starts a correction (repair/rewrite) task: normally counted against its own task limit, but it may spend the reserved
+	 * correction once when that limit is already used.
+	 */
+	public beginCorrection(task: TaskId | string): { allowed: boolean; reason?: string; reserved: boolean } {
+		const normal = this.beginTask(task);
+		if (normal.allowed) return { ...normal, reserved: false };
+		if (this.reservedCorrectionsLeft > 0) {
+			this.reservedCorrectionsLeft -= 1;
+			this.reserveActive = true;
+			this.reserveAttemptUsed = false;
+			return { allowed: true, reserved: true };
+		}
+		return { ...normal, reserved: false };
+	}
+
+	public reservedCorrectionsRemaining(): number {
+		return this.reservedCorrectionsLeft;
 	}
 
 	public beginTask(task: TaskId | string): { allowed: boolean; reason?: string } {

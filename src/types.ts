@@ -717,6 +717,20 @@ export interface ActionResult {
   authoritativeFeedback: string;
   narrativeResponse?: string;
   narrativeError?: ActionLog['narrativeError'];
+  /** Guard outcome, findings and repair use for this turn. */
+  narrativeQuality?: {
+    actionId?: string;
+    at: string;
+    accepted: boolean;
+    outcome: 'quiet' | 'rewritten' | 'cut' | 'kept_soft' | 'rejected_hard' | 'unavailable' | 'none';
+    findings: Array<{ severity: 'HARD' | 'SOFT'; reason: string }>;
+    providerId?: string;
+    modelId?: string;
+    providerAttempts: number;
+    repairUsed: boolean;
+    reservedRepairUsed: boolean;
+    errorCode?: string;
+  };
   narrativeGeneration?: ActionLog['narrativeGeneration'];
   checkResult?: StoryCheckResult;
   actionAdvice?: ActionAdvice;

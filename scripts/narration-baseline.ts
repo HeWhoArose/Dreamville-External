@@ -56,6 +56,8 @@ export interface BaselineTurnResult {
 	route?: string;
 	factsInPrompt: Array<{ fact: string; inPrompt: boolean }>;
 	narration: string;
+	/** Guard policy outcome for the turn: quiet, rewritten, cut, kept_soft, rejected_hard, unavailable, none. */
+	guardOutcome?: string;
 	/** Replay only: the turn had at least one recorded narration reply, so its outcome says something about the gates. */
 	scorable?: boolean;
 	recordedAccepted?: boolean;
@@ -228,6 +230,7 @@ export async function runNarrationBaseline(options: BaselineOptions): Promise<Ba
 				route: body.narrativeGeneration ? `${body.narrativeGeneration.providerId}/${body.narrativeGeneration.modelId}` : undefined,
 				factsInPrompt: (turn.expectFacts || []).map((fact) => ({ fact, inPrompt: prompts.some((prompt) => prompt.includes(fact)) })),
 				narration: String(body.narrativeResponse || '').slice(0, 600),
+				guardOutcome: body.narrativeQuality?.outcome,
 				scorable: replay ? (recordedTurn?.replies || []).some((reply) => reply.kind === 'narrate') : undefined,
 				recordedAccepted: recordedTurn?.recordedAccepted,
 			});
@@ -238,6 +241,9 @@ export async function runNarrationBaseline(options: BaselineOptions): Promise<Ba
 		const withFacts = report.filter((entry) => entry.factsInPrompt.length > 0);
 		const factsDelivered = withFacts.filter((entry) => entry.factsInPrompt.every((f) => f.inPrompt)).length;
 		const summary: Record<string, unknown> = { mode, models, turns: report.length, accepted, informationTurnsWithFactInPrompt: `${factsDelivered}/${withFacts.length}`, providerCalls: mode === 'live' ? providerCalls : 0 };
+		const guardOutcomes: Record<string, number> = {};
+		for (const entry of report) guardOutcomes[entry.guardOutcome || 'unknown'] = (guardOutcomes[entry.guardOutcome || 'unknown'] || 0) + 1;
+		summary.guardOutcomes = guardOutcomes;
 		if (replay) {
 			const scorable = report.filter((entry) => entry.scorable);
 			summary.scorableTurns = scorable.length;
@@ -266,7 +272,7 @@ export async function runNarrationBaseline(options: BaselineOptions): Promise<Ba
 			for (const [index, entry] of report.entries()) {
 				const facts = entry.factsInPrompt.length ? ` facts-in-prompt=${entry.factsInPrompt.map((f) => (f.inPrompt ? 'yes' : 'NO')).join(',')}` : '';
 				const scored = entry.scorable === false ? ' (no recorded reply)' : '';
-				console.log(`${String(index + 1).padStart(2)}. ${entry.accepted ? 'ACCEPT' : 'reject'}${facts}${scored}  ${entry.action.slice(0, 52)}${entry.reason ? '  <- ' + entry.reason.slice(0, 90) : ''}`);
+				console.log(`${String(index + 1).padStart(2)}. ${entry.accepted ? 'ACCEPT' : 'reject'}[${entry.guardOutcome || '-'}]${facts}${scored}  ${entry.action.slice(0, 52)}${entry.reason ? '  <- ' + entry.reason.slice(0, 90) : ''}`);
 			}
 			console.log('\n' + JSON.stringify(summary));
 		}

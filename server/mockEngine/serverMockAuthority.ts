@@ -52,6 +52,8 @@ import {
   isConsequenceCovered as sharedNarrativeConsequenceCovered,
 } from '../domain/narrativeConsequenceCoverage';
 import { analyzeKnownFactUse } from '../domain/knownFactUse';
+import type { GuardNote, GuardOutcome } from '../domain/narrationGuardPolicy';
+import { recordNarrationQuality, type NarrationQualityRecord } from '../domain/narrationQualityLedger';
 
 /** Token budget for the live narration prompt's context sections (situation, lore, research). */
 export const LIVE_NARRATION_PROMPT_TOKEN_BUDGET = 4500;
@@ -141,6 +143,8 @@ export interface GeneratedCustomActionNarration {
   narrativeResponse: string;
   narrativeTurnPackage?: import('../domain/aiOrchestrator').StructuredTurnPackage;
   narrativeError?: import('../../src/types').ActionLog['narrativeError'];
+  /** Guard outcome, findings and repair use for this turn (see narrationQualityLedger). */
+  narrativeQuality?: import('../domain/narrationQualityLedger').NarrationQualityRecord;
   narrativeGeneration?: import('../../src/types').ActionLog['narrativeGeneration'];
   narrativeVisualCues?: string[];
   narrativePlanForFinalReview?: EphemeralNarrativePlan;
@@ -862,7 +866,8 @@ export class ServerMockAuthority {
       : missingConsequences.length
         ? 'Narration omits required canonical consequence(s): ' + missingConsequences.join(' | ')
         : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
-    const hardAccepted = pacing.valid && (observationLike || missingConsequences.length === 0);
+    // A reply that does not respond to the action at all (no anchor, no consequence, no answer) is a hard failure, not style.
+    const hardAccepted = pacing.valid && (observationLike || (missingConsequences.length === 0 && actionFidelityValid));
     const softIssues = [
       richness.decision !== 'PASS' ? `Narrative richness ${richness.decision} (${richness.overallScore.toFixed(2)})` : '',
       !actionFidelityValid && missingConsequences.length === 0 ? actionFidelityReason || '' : '',
@@ -2032,6 +2037,8 @@ export class ServerMockAuthority {
       });
     }
 
+    let liveGateSoftKept = false;
+    const liveGateSoftIssues: string[] = [];
     // N18/N8 continuation-turn gate.
     if (narrativeResponse && narrativeTurnPackage && narrativeGeneration?.source !== 'DETERMINISTIC_FALLBACK') {
       const previousNarrations = snap.previousNarrations;
@@ -2065,6 +2072,8 @@ export class ServerMockAuthority {
           // The unified pipeline already ran its own repair. Quality-only findings must not discard
           // otherwise grounded prose: keep it and surface the warnings (hard/soft split, 2026-11-24).
           console.warn('[NarrationQualityGate] Kept narration despite soft quality findings.', { storyId: targetStoryId, softIssues: firstReview.softIssues });
+          liveGateSoftKept = true;
+          liveGateSoftIssues.push(...firstReview.softIssues);
         } else if (unifiedPipelineAlreadyRan) {
           const failureReason = [
             firstReview.actionFidelity.reason,
@@ -2198,6 +2207,33 @@ export class ServerMockAuthority {
       }
     }
 
+    // Per-turn narration quality record (reference study: Open Game Master narrator-quality rows).
+    const pipelineGuard = (generatedResult as any)?.guard as { outcome: GuardOutcome; findings: GuardNote[]; repairUsed: boolean; reservedRepairUsed: boolean } | undefined;
+    let guardOutcome: GuardOutcome = pipelineGuard?.outcome ?? 'none';
+    if (!narrativeResponse && narrativeError) {
+      guardOutcome = narrativeError.code === 'NARRATION_AI_UNAVAILABLE' ? 'unavailable' : 'rejected_hard';
+    } else if (liveGateSoftKept && guardOutcome === 'quiet') {
+      guardOutcome = 'kept_soft';
+    }
+    const narrativeQuality: NarrationQualityRecord = {
+      actionId: baseResult?.actionId,
+      at: new Date().toISOString(),
+      accepted: Boolean(narrativeResponse) && !narrativeError,
+      outcome: guardOutcome,
+      findings: [
+        ...(pipelineGuard?.findings || []),
+        ...liveGateSoftIssues.map((reason) => ({ severity: 'SOFT' as const, reason })),
+        ...(narrativeError && !narrativeResponse ? [{ severity: (guardOutcome === 'unavailable' ? 'HARD' : 'HARD') as 'HARD', reason: String(narrativeError.fallbackReason || narrativeError.message || narrativeError.code || '').slice(0, 220) }] : []),
+      ],
+      providerId: narrativeGeneration?.providerId ?? narrativeError?.providerId,
+      modelId: narrativeGeneration?.modelId ?? narrativeError?.modelId,
+      providerAttempts: Array.isArray(narrativeError?.attemptsTrail) ? narrativeError.attemptsTrail.length : (Array.isArray((generatedResult as any)?.attemptsTrail) ? (generatedResult as any).attemptsTrail.length : 0),
+      repairUsed: Boolean(pipelineGuard?.repairUsed),
+      reservedRepairUsed: Boolean(pipelineGuard?.reservedRepairUsed),
+      errorCode: narrativeError?.code,
+    };
+    recordNarrationQuality(targetStoryId, narrativeQuality);
+
     const deterministicOutcomeParts = Array.from(new Set(
       [
         actionResolution.actualEffect,
@@ -2226,6 +2262,7 @@ export class ServerMockAuthority {
       narrativeResponse,
       narrativeTurnPackage,
       narrativeError,
+      narrativeQuality,
       narrativeGeneration,
       narrativeVisualCues,
       narrativePlanForFinalReview,
@@ -2259,6 +2296,7 @@ export class ServerMockAuthority {
       narrativeResponse,
       narrativeTurnPackage,
       narrativeError,
+      narrativeQuality,
       narrativeGeneration,
       narrativeVisualCues,
       narrativePlanForFinalReview,
@@ -2280,6 +2318,7 @@ export class ServerMockAuthority {
         message: narrativeResponse || deterministicFallbackMessage || baseResult.message || 'Action resolved; narration is currently unavailable.',
         narrativeResponse: narrativeResponse || undefined,
         narrativeError,
+        narrativeQuality,
         narrativeGeneration,
         checkResult: storyCheck || undefined,
         stateAdjudication,
@@ -2408,6 +2447,7 @@ export class ServerMockAuthority {
       message: narrativeResponse || deterministicFallbackMessage || baseResult.message || 'Action resolved; narration is currently unavailable.',
       narrativeResponse: narrativeResponse || undefined,
       narrativeError,
+      narrativeQuality,
       narrativeGeneration,
       checkResult: storyCheck || undefined,
       stateAdjudication,

@@ -2,6 +2,7 @@ import type { CombatEffectDefinition, DynamicHazardZone } from '../../src/types'
 import { TacticalCombatEngine } from './combatEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { combatEnvironmentEngine } from './combatEnvironmentEngine';
+import { combatEffectEngine } from './combatEffectEngine';
 
 export interface BossPhaseDefinition {
   id: string;
@@ -12,6 +13,12 @@ export interface BossPhaseDefinition {
   targetPriority?: string;
   environmentEffects?: Array<string | DynamicHazardZone>;
   modifiers?: Record<string, number>;
+  /** Full effect definitions this phase unlocks. Without one, an ability id is only a name the narrator may mention. */
+  abilityDefinitions?: CombatEffectDefinition[];
+  /** Reinforcements that join the fight when the phase begins (participant blueprints). */
+  summons?: Array<Record<string, unknown>>;
+  /** Special resources (rage, legendary charges, shield points) the boss holds, set fresh on entering the phase. */
+  resources?: Record<string, number>;
 }
 
 export interface BossPhaseState {
@@ -58,6 +65,13 @@ export class BossPhaseEngine {
               } as DynamicHazardZone;
             }).filter(Boolean)
           : [],
+        abilityDefinitions: Array.isArray(phase.abilityDefinitions)
+          ? phase.abilityDefinitions.slice(0, 20).map((raw: any) => combatEffectEngine.validateDefinition(raw)).filter((checked: any) => checked.success && checked.normalized).map((checked: any) => checked.normalized as CombatEffectDefinition)
+          : [],
+        summons: Array.isArray(phase.summons) ? phase.summons.filter((entry: any) => entry && typeof entry === 'object').slice(0, 10).map((entry: any) => ({ ...entry })) : [],
+        resources: phase.resources && typeof phase.resources === 'object'
+          ? (Object.fromEntries(Object.entries(phase.resources).filter(([name, value]) => name.trim() && typeof value === 'number' && Number.isFinite(value) && value >= 0)) as Record<string, number>)
+          : {},
         modifiers:
           phase.modifiers && typeof phase.modifiers === 'object'
             ? (Object.fromEntries(
@@ -172,6 +186,27 @@ export class BossPhaseEngine {
       }
     }
 
+    // The transition itself is canonical: reinforcements arrive and the boss resource pools are reset by the engine, not the narrator.
+    const summonedIds: string[] = [];
+    (phase.summons || []).forEach((blueprint, index) => {
+      const outcome = combat.applySemanticOutcome(
+        params.bossId,
+        'SUMMONED',
+        { participant: { ...blueprint, id: `${String(blueprint.id || 'reinforcement')}_${phase.id}_${index + 1}` } },
+        params.bossId,
+      );
+      const id = (outcome.metadata as any)?.summonedId;
+      if (outcome.success && typeof id === 'string') summonedIds.push(id);
+    });
+    for (const [name, amount] of Object.entries(phase.resources || {})) combat.setSpecialResource(params.bossId, name, amount);
+    combat.recordStageEvent('BOSS_PHASE_TRANSITION', params.bossId, params.bossId, `${boss.name} enters ${phase.name}.`, {
+      fromPhaseId: currentPhaseId || null,
+      toPhaseId: phase.id,
+      summonedIds,
+      resources: phase.resources || {},
+      environmentEffects: resolvedHazards.map((effect) => effect.id),
+    });
+
     const combatPhase = combat.setBossPhaseState(params.bossId, {
       phaseId: phase.id,
       modifiers: phase.modifiers,
@@ -206,13 +241,17 @@ export class BossPhaseEngine {
   }
 
   public buildPhaseEffect(phase: BossPhaseDefinition): CombatEffectDefinition[] {
-    return (phase.abilities || []).map((abilityId) => ({
+    const defined = new Map((phase.abilityDefinitions || []).map((definition) => [definition.id, definition]));
+    const listed = (phase.abilities || []).map((abilityId): CombatEffectDefinition => defined.get(abilityId) || {
       id: abilityId,
       name: abilityId,
       resolutionMode: 'SINGLE_ATTACK',
       scale: 'PERSON',
       actionCost: 'ACTION',
-    }));
+      provenance: 'boss_phase_stub',
+    });
+    const extra = (phase.abilityDefinitions || []).filter((definition) => !(phase.abilities || []).includes(definition.id));
+    return [...listed, ...extra.map((definition) => JSON.parse(JSON.stringify(definition)) as CombatEffectDefinition)];
   }
 }
 

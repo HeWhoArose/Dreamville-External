@@ -10,6 +10,9 @@ import {
 } from '../types';
 import { apiClient } from '../services/apiClient';
 import { CombatAnimationLayer } from './combat/CombatAnimationLayer';
+import { CombatInspector } from './combat/CombatInspector';
+import { BossPhasePanel } from './combat/BossPhasePanel';
+import { WorldEffectPreview } from './combat/WorldEffectPreview';
 import { DiceRollAnimation } from './common/DiceRollAnimation';
 import {
   Swords,
@@ -966,6 +969,8 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               Tactical Actions (Canonical Authority)
             </h4>
 
+            <BossPhasePanel participants={combatState?.participants || []} />
+
             {/* Target Selector */}
             <div className="space-y-1">
               <label className="text-[11px] text-stone-400 block font-medium">Designated Target</label>
@@ -1330,16 +1335,32 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                     <button type="button" onClick={handleSimulateStructuredEffect} disabled={actionLoading || (((effectTargetingMode === 'ONE_TARGET' || effectTargetingMode === 'PER_INSTANCE') && !selectedTargetId)) || (!simulationDraftMode && !selectedCapabilityId)} className="py-2 px-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-[11px] font-semibold disabled:opacity-50">Simulate</button>
                   </div>
                   {effectResult && (
-                    <div className="p-2 rounded bg-stone-900 border border-stone-800 text-[10px] text-stone-300 space-y-1">
-                      <div className="text-violet-300 font-semibold">Last Effect</div>
-                      <div>Instances: {effectResult.instances?.length ?? 0} • Damage: {effectResult.totalDamage ?? 0}</div>
-                      {effectResult.animationPlan && <div>Animation: <span className="text-stone-400">{effectResult.animationPlan.composition}</span></div>}
+                    <div className="space-y-1.5">
+                      <CombatInspector
+                        result={effectResult}
+                        names={Object.fromEntries((combatState?.participants || []).map((participant) => [participant.id, participant.name]))}
+                      />
+                      {effectResult.animationPlan && (
+                        <div className="text-[10px] text-stone-500">
+                          Animation: <span className="text-stone-400">{String(effectResult.animationPlan.composition).replace(/_/g, ' ').toLowerCase()}</span>
+                          {Array.isArray(effectResult.animationPlan.primitives) && effectResult.animationPlan.primitives.length > 0
+                            ? <span className="text-stone-600"> ({effectResult.animationPlan.primitives.join(', ').toLowerCase()})</span>
+                            : null}
+                        </div>
+                      )}
+                      <WorldEffectPreview preview={effectResult.worldEffectPreview} simulated={false} />
                     </div>
                   )}
                   {effectSimulation?.summary && (
                     <div className="p-2 rounded bg-stone-900 border border-stone-800 text-[10px] text-stone-400">
                       Simulation — avg {Number(effectSimulation.summary.averageDamage || 0).toFixed(1)} • min {effectSimulation.summary.minDamage} • max {effectSimulation.summary.maxDamage}
                     </div>
+                  )}
+                  {(effectSimulation?.presentation || effectSimulation?.result?.worldEffectPreview || effectSimulation?.runs?.[0]?.result?.worldEffectPreview) && (
+                    <WorldEffectPreview
+                      preview={effectSimulation?.result?.worldEffectPreview || effectSimulation?.runs?.[0]?.result?.worldEffectPreview}
+                      simulated
+                    />
                   )}
                 </div>
               )}

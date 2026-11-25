@@ -2,6 +2,7 @@ import type { CombatEffectDefinition, CombatEffectResult } from '../../src/types
 import { TacticalCombatEngine } from './combatEngine';
 import { combatEffectEngine } from './combatEffectEngine';
 import { combatTargetingEngine } from './combatTargetingEngine';
+import { combatReplayEngine } from './combatReplayEngine';
 
 export interface CombatSimulationAuthorityDiagnostics {
   structurallyValid: boolean;
@@ -23,7 +24,54 @@ export interface CombatSimulationResult {
   presentation?: { abstraction: 'TACTICAL' | 'MACRO'; summary: string };
 }
 
+/** The four named sandbox modes of the combat design. */
+export type CombatSandboxMode = 'SINGLE_RUN' | 'REPLAY' | 'BATCH_SIMULATION' | 'SCENARIO_MATRIX';
+
+export type CombatSandboxRequest = {
+  engine: TacticalCombatEngine;
+  actorId: string;
+  targetIds: string[];
+  mode: CombatSandboxMode;
+  definition?: CombatEffectDefinition;
+  definitions?: CombatEffectDefinition[];
+  seed?: number;
+  seeds?: number[];
+  /** REPLAY: the action id of a recorded combat effect. */
+  replayActionId?: string;
+};
+
+export type CombatSandboxResult =
+  | { mode: 'SINGLE_RUN'; result: CombatSimulationResult }
+  | { mode: 'REPLAY'; success: boolean; errorReason?: string; replay?: ReturnType<typeof combatReplayEngine.replay> }
+  | { mode: 'BATCH_SIMULATION'; result: ReturnType<CombatSimulationEngine['batchSimulate']> }
+  | { mode: 'SCENARIO_MATRIX'; results: ReturnType<CombatSimulationEngine['scenarioMatrix']> }
+  | { mode: string; success: false; errorReason: string };
+
 export class CombatSimulationEngine {
+  /** One entry point for the four sandbox modes. Every mode runs on a copy and never mutates the live combat. */
+  public run(request: CombatSandboxRequest): CombatSandboxResult {
+    const { engine, actorId, targetIds } = request;
+    switch (request.mode) {
+      case 'SINGLE_RUN':
+        if (!request.definition) return { mode: 'SINGLE_RUN', success: false, errorReason: 'SINGLE_RUN needs a definition.' };
+        return { mode: 'SINGLE_RUN', result: this.simulate({ engine, actorId, targetIds, definition: request.definition, seed: request.seed }) };
+      case 'BATCH_SIMULATION':
+        if (!request.definition || !request.seeds?.length) return { mode: 'BATCH_SIMULATION', success: false, errorReason: 'BATCH_SIMULATION needs a definition and at least one seed.' };
+        return { mode: 'BATCH_SIMULATION', result: this.batchSimulate({ engine, actorId, targetIds, definition: request.definition, seeds: request.seeds }) };
+      case 'SCENARIO_MATRIX':
+        if (!request.definitions?.length) return { mode: 'SCENARIO_MATRIX', success: false, errorReason: 'SCENARIO_MATRIX needs at least one definition.' };
+        return { mode: 'SCENARIO_MATRIX', results: this.scenarioMatrix({ engine, actorId, targetIds, definitions: request.definitions, seeds: request.seeds }) };
+      case 'REPLAY': {
+        const record = engine.getCombatReplayRecords().find((entry) => entry.actionId === request.replayActionId);
+        if (!record) return { mode: 'REPLAY', success: false, errorReason: 'No recorded combat effect has that action id.' };
+        const replay = combatReplayEngine.replay(record);
+        return { mode: 'REPLAY', success: true, replay };
+      }
+      default:
+        return { mode: String((request as { mode?: string }).mode), success: false, errorReason: 'Unknown sandbox mode.' };
+    }
+  }
+
   public diagnose(params: {
     engine: TacticalCombatEngine;
     actorId: string;

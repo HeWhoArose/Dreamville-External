@@ -44,6 +44,23 @@
     {
       "id": "loc_arena_sand", "name": "The Sand", "region": "reg_cinder_arena", "archetype": "GENERIC", "discovered": false,
       "tags": ["arena", "combat"],
+      "terrain": {
+        "bounds": { "minX": 0, "maxX": 11, "minY": 0, "maxY": 7 },
+        "obstacles": [
+          { "x": 2, "y": 2, "cover": "HALF", "label": "rubble from the broken colonnade" },
+          { "x": 2, "y": 3, "cover": "THREE_QUARTERS", "label": "a toppled column" },
+          { "x": 3, "y": 5, "cover": "HALF", "label": "splintered timber" },
+          { "x": 6, "y": 2, "cover": "HALF", "label": "the low barrier wall" },
+          { "x": 6, "y": 3, "cover": "HALF", "label": "the low barrier wall" },
+          { "x": 6, "y": 4, "cover": "HALF", "label": "the low barrier wall" },
+          { "x": 4, "y": 6, "isImpassable": true, "label": "a fallen pillar" }
+        ],
+        "hazards": [
+          { "id": "weapon_pit", "type": "pit", "x": 8, "y": 6, "radiusCells": 0, "durationTurns": 9999, "damagePerTurn": 0, "fallFeet": 10 },
+          { "id": "spike_plate", "type": "trap", "x": 9, "y": 3, "radiusCells": 0, "durationTurns": 9999, "damagePerTurn": 8, "damageType": "piercing" }
+        ],
+        "startPositions": { "player": { "x": 1, "y": 3 }, "enemy": { "x": 10, "y": 3 } }
+      },
       "description": "The open floor of the Cinder Arena: pale packed sand ringed by a high stone wall and tiered stands. The east half is churned and soft from flooding. Weapons from earlier rounds lie where they fell.",
       "ambient": "A wall of noise, hot sun on sand, the smell of dust and blood."
     },
@@ -119,7 +136,20 @@
         { "name": "Champion's Cuirass", "category": "Armor", "slot": "body", "armorBonus": 4, "maxDurability": 100 }
       ],
       "knows": ["fact_prize", "fact_your_bout"],
-      "sharing": "GUARDED", "secrets": ["He is afraid of losing his place as champion."], "refuses": ["Telling you how he fights."]
+      "sharing": "GUARDED", "secrets": ["He is afraid of losing his place as champion."], "refuses": ["Telling you how he fights."],
+      "combat": {
+        "level": 5, "hp": 70, "armorClass": 11, "speed": 30, "attackBonus": 3, "damageFormula": "1d10+4", "damageType": "slashing",
+        "phases": [
+          { "id": "unhurried", "name": "The Unhurried Champion", "minHpPercent": 0.5, "maxHpPercent": 1, "resources": { "fury": 0 } },
+          {
+            "id": "desperate", "name": "The Desperate Champion", "minHpPercent": 0, "maxHpPercent": 0.5, "targetPriority": "LOWEST_HP",
+            "modifiers": { "combat.attackBonus": 2 }, "resources": { "fury": 2 }, "abilities": ["crushing_blow"],
+            "abilityDefinitions": [
+              { "id": "crushing_blow", "name": "Crushing Blow", "resolutionMode": "SINGLE_ATTACK", "scale": "PERSON", "actionCost": "ACTION", "targetingMode": "ONE_TARGET", "damageFormula": "2d10+4", "damageType": "bludgeoning", "resourceCost": { "name": "fury", "amount": 1 } }
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "npc_marek_ironhand", "name": "Marek Ironhand", "role": "Veteran gladiator", "locationId": "loc_fighters_hold",
@@ -131,7 +161,8 @@
         { "name": "Marek's Wineskin", "category": "Miscellaneous" }
       ],
       "knows": ["fact_pit_weapons", "fact_gravus_overhead", "fact_prize"],
-      "sharing": "GUARDED", "secrets": ["Marek has watched Gravus's last three Cups closely."], "refuses": ["Naming the wager he placed on your bout."]
+      "sharing": "GUARDED", "secrets": ["Marek has watched Gravus's last three Cups closely."], "refuses": ["Naming the wager he placed on your bout."],
+      "combat": { "level": 3, "hp": 38, "armorClass": 14, "speed": 30, "attackBonus": 3, "damageFormula": "1d8+2", "damageType": "slashing" }
     },
     {
       "id": "npc_sela_quickwater", "name": "Sela Quickwater", "role": "Young net-fighter", "locationId": "loc_fighters_hold",
@@ -143,7 +174,8 @@
         { "name": "Sela's Dagger", "category": "Weapon", "attackBonus": 1, "maxDurability": 40 }
       ],
       "knows": ["fact_colonnade_shafts", "fact_gravus_strap", "fact_medic_help"],
-      "sharing": "GUARDED", "secrets": ["Sela saw Gravus's shield strap fray in his last bout."], "refuses": ["Saying who she bet on."]
+      "sharing": "GUARDED", "secrets": ["Sela saw Gravus's shield strap fray in his last bout."], "refuses": ["Saying who she bet on."],
+      "combat": { "level": 3, "hp": 22, "armorClass": 13, "speed": 30, "attackBonus": 4, "damageFormula": "1d6+2", "damageType": "piercing" }
     },
     {
       "id": "npc_bruno_stonejaw", "name": "Bruno Stonejaw", "role": "Brawler", "locationId": "loc_fighters_hold",
@@ -155,7 +187,8 @@
         { "name": "Bruno's Hide Vest", "category": "Armor", "slot": "body", "armorBonus": 1, "maxDurability": 40 }
       ],
       "knows": ["fact_bruno_loss"],
-      "sharing": "SECRET", "secrets": ["Gravus beat Bruno last year and Bruno has never forgiven it."], "refuses": ["Talking about last year."]
+      "sharing": "SECRET", "secrets": ["Gravus beat Bruno last year and Bruno has never forgiven it."], "refuses": ["Talking about last year."],
+      "combat": { "level": 3, "hp": 45, "armorClass": 13, "speed": 30, "attackBonus": 2, "damageFormula": "1d10+3", "damageType": "bludgeoning" }
     },
     {
       "id": "npc_doctor_pell", "name": "Dr Pell", "role": "Arena medic", "locationId": "loc_medic_alcove",

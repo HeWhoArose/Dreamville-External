@@ -2,6 +2,7 @@ import { WorldTimestamp } from './types';
 import { deterministicId } from './deterministicRng';
 import {
   resolveSpatialLineOfSight,
+  resolveSpatialCoverBetweenPoints,
   resolveSpatialGridMovementPath,
   calculateSpatialGridMovementCost,
   getSpatialGridMovementFailureReason,
@@ -9,6 +10,7 @@ import {
 } from './spatialAuthority';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
+import { rulesProfileEngine } from './rulesProfileEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
@@ -407,16 +409,71 @@ export interface BattlefieldParticipant {
   bossTargetPriority?: string;
   bossEnvironmentEffects?: string[];
   moraleState?: any;
+  /** Attacks made when taking the Attack action (Extra Attack). Default 1. */
+  attacksPerAction?: number;
+  /** Off-hand weapon damage formula (two-weapon fighting). The off-hand attack does not add the ability modifier. */
+  offhandDamageFormula?: string;
+  /** Raging (barbarian): adds the rage damage bonus to melee attacks while the rule and the feature allow it. */
+  raging?: boolean;
+  /** Delivery wards: effect tags or damage types this combatant cannot be reached by (e.g. 'MAGIC', 'fire'). */
+  wardedAgainst?: string[];
+  /** Underwater combat: set while the combatant is submerged. */
+  underwater?: boolean;
+  hasSwimSpeed?: boolean;
+  weaponName?: string;
 }
 
 export interface DynamicHazardZone {
   id: string;
-  type: 'fire_zone' | 'ice_patch' | 'poison_cloud' | 'barricade';
+  type: 'fire_zone' | 'ice_patch' | 'poison_cloud' | 'barricade' | 'pit' | 'bridge' | 'trap';
   x: number;
   y: number;
   radiusCells: number;
   durationTurns: number;
   damagePerTurn: number;
+  fallFeet?: number;
+  oneShot?: boolean;
+  damageType?: string;
+}
+
+/** A battlefield obstacle. Impassable ones block movement; `cover` gives cover to targets behind it (low walls, crates). */
+export interface CombatObstacle {
+  x: number;
+  y: number;
+  isImpassable?: boolean;
+  blocksSight?: boolean;
+  cover?: 'HALF' | 'THREE_QUARTERS' | 'TOTAL';
+}
+
+export type CombatTriggerEvent =
+  | 'ON_ACTION' | 'ON_ATTACK' | 'ON_HIT' | 'ON_MISS' | 'ON_DAMAGE' | 'ON_SAVE' | 'ON_MOVE' | 'ON_KILL' | 'ON_DEATH' | 'ON_REACTION'
+  | 'ON_TURN_START' | 'ON_TURN_END' | 'ON_ROUND_START' | 'ON_ROUND_END';
+
+/** A capability or ability that reacts to a combat event by resolving an effect through the unified effect pipeline. */
+export interface TriggeredEffectSubscription {
+  id: string;
+  ownerId: string;
+  event: CombatTriggerEvent;
+  /** OWNER: only the owner's own events. ANY: any actor's events. */
+  subject: 'OWNER' | 'ANY';
+  /** SELF: the effect targets its owner. EVENT_ACTOR: it targets whoever caused the event. */
+  targeting: 'SELF' | 'EVENT_ACTOR';
+  definition: CombatEffectDefinition;
+  maxFirings?: number;
+  firedCount: number;
+}
+
+export type CombatInterruptStage = 'AFTER_EXECUTION' | 'BEFORE_DELIVERY' | 'BEFORE_DAMAGE';
+
+/** A reaction prepared by an actor that interrupts an effect at a stage (Counterspell, Shield). Costs the actor's reaction. */
+export interface PreparedInterrupt {
+  id: string;
+  actorId: string;
+  stage: CombatInterruptStage;
+  action: 'CANCEL_EFFECT' | 'REDUCE_DAMAGE';
+  amount?: number;
+  /** Who the interrupt protects. Defaults to the actor. */
+  guardTargetId?: string;
 }
 
 export interface BattleEvent {
@@ -433,7 +490,7 @@ export interface BattleEvent {
 export interface TacticalCombatStateExport {
   participants: BattlefieldParticipant[];
   hazards: DynamicHazardZone[];
-  obstacles?: { x: number; y: number; isImpassable?: boolean }[];
+  obstacles?: CombatObstacle[];
   mapBounds?: { minX: number; maxX: number; minY: number; maxY: number };
   turnQueue: string[];
   currentTurnIndex: number;
@@ -447,6 +504,8 @@ export interface TacticalCombatStateExport {
   spellRuntimeState?: ReturnType<SpellRuntime['exportState']>;
   combatEffectEvents?: CombatEventRecord[];
   combatActionSequence?: number;
+  triggeredEffects?: TriggeredEffectSubscription[];
+  stageInterrupts?: PreparedInterrupt[];
   destructibleObjects?: DestructibleEnvironmentObject[];
   combatReplayRecords?: CombatReplayRecord[];
   moraleStates?: unknown;
@@ -484,7 +543,7 @@ export interface ProjectedCombatState {
   participants: BattlefieldParticipant[];
   currentActor: BattlefieldParticipant | undefined;
   hazards: DynamicHazardZone[];
-  obstacles?: { x: number; y: number; isImpassable?: boolean }[];
+  obstacles?: CombatObstacle[];
   mapBounds?: { minX: number; maxX: number; minY: number; maxY: number };
   turnQueue: string[];
   currentTurnIndex: number;
@@ -511,7 +570,7 @@ export class TacticalCombatEngine {
   private participants: Map<string, BattlefieldParticipant> = new Map();
   private hazards: DynamicHazardZone[] = [];
   private destructibleObjects = new Map<string, DestructibleEnvironmentObject>();
-  private obstacles: { x: number; y: number; isImpassable?: boolean }[] = [];
+  private obstacles: CombatObstacle[] = [];
   private mapBounds?: { minX: number; maxX: number; minY: number; maxY: number };
   private ruleset: IRulesetAdapter = new Dnd521RulesetAdapter();
   private diceEngine: LocalDiceEngine;
@@ -536,6 +595,20 @@ export class TacticalCombatEngine {
   private combatPhase: CombatPhase = 'INACTIVE';
   private initiativeRolls: CombatInitiativeRoll[] = [];
   private surprisedActorIds = new Set<string>();
+  private triggeredEffects = new Map<string, TriggeredEffectSubscription>();
+  private stageInterrupts = new Map<string, PreparedInterrupt>();
+  private triggerDepth = 0;
+  /** Set by the effect engine so the combat engine can resolve effects without importing it (avoids a cycle). */
+  private static effectResolver?: (engine: TacticalCombatEngine, actorId: string, targetIds: string[], definition: CombatEffectDefinition, options?: { consumeAction?: boolean; recordReplay?: boolean }) => CombatEffectResult;
+
+  private static fallEffectBuilder?: (actorId: string, feet: number) => CombatEffectDefinition | undefined;
+
+  public static setEffectResolver(resolver: typeof TacticalCombatEngine.effectResolver, fallBuilder?: typeof TacticalCombatEngine.fallEffectBuilder): void {
+    TacticalCombatEngine.effectResolver = resolver;
+    if (fallBuilder) TacticalCombatEngine.fallEffectBuilder = fallBuilder;
+  }
+  /** Per-turn attack bookkeeping: whether the Attack action was taken and how many Extra Attack attacks remain. */
+  private attackTurnState = new Map<string, { attacked: boolean; extraRemaining: number; sneakUsed?: boolean }>();
   private combatBanner = '';
   private lastResolution?: CombatNarrativeResolution;
   private encounterId?: string;
@@ -644,11 +717,11 @@ export class TacticalCombatEngine {
     return this.mapBounds ? { ...this.mapBounds } : undefined;
   }
 
-  public addObstacle(obstacle: { x: number; y: number; isImpassable?: boolean }): void {
+  public addObstacle(obstacle: CombatObstacle): void {
     this.obstacles.push({ isImpassable: true, ...obstacle });
   }
 
-  public getObstacles(): { x: number; y: number; isImpassable?: boolean }[] {
+  public getObstacles(): CombatObstacle[] {
     return this.obstacles.map((o) => ({ ...o }));
   }
 
@@ -668,6 +741,8 @@ export class TacticalCombatEngine {
     this.moraleEngine.importState([]);
     this.combatActionSequence = 0;
     this.tacticalPlans.clear();
+    this.triggeredEffects.clear();
+    this.stageInterrupts.clear();
     this.combatPhase = 'INACTIVE';
     this.initiativeRolls = [];
     this.surprisedActorIds.clear();
@@ -758,6 +833,7 @@ export class TacticalCombatEngine {
 
   public addParticipant(p: BattlefieldParticipant): void {
     const participant = p;
+    if (participant.usesDeathSaves && !this.ruleIsOn('combat.death_saves')) participant.usesDeathSaves = false;
     if (participant.usesDeathSaves && !participant.deathSaveState) {
       participant.deathSaveState = deathSaveEngine.createState();
     }
@@ -913,6 +989,7 @@ export class TacticalCombatEngine {
     if (currentActor) {
       this.processConditionCombatEvent(currentActor.id, 'ON_ROUND_START', 'round_start');
       this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
+      this.attackTurnState.delete(currentActor.id);
     }
     return this.getInitiativeRolls();
   }
@@ -937,7 +1014,139 @@ export class TacticalCombatEngine {
   }
 
   public getTurnResources(actorId: string): CombatTurnResourceSnapshot | undefined {
-    return this.actionEconomy.get(actorId);
+    const snapshot = this.actionEconomy.get(actorId);
+    if (!snapshot) return snapshot;
+    const special = this.participants.get(actorId)?.combatResources;
+    return special && Object.keys(special).length > 0 ? { ...snapshot, specialResources: { ...special } } : snapshot;
+  }
+
+  /** Spends a special resource from the actor's ledger (rage, ki, energy, legendary charges). */
+  public spendSpecialResource(actorId: string, name: string, amount: number): { success: boolean; errorReason?: string; remaining?: number } {
+    const actor = this.participants.get(actorId);
+    if (!actor) return { success: false, errorReason: 'Combatant not found.' };
+    const cost = Math.max(0, Number(amount) || 0);
+    const held = actor.combatResources?.[name] ?? 0;
+    if (held < cost) return { success: false, errorReason: `Not enough ${name}: ${held} of ${cost} needed.`, remaining: held };
+    actor.combatResources = { ...(actor.combatResources || {}), [name]: held - cost };
+    return { success: true, remaining: held - cost };
+  }
+
+  /** Sets a special resource to an exact value (a boss entering a phase starts with a fresh pool). */
+  public setSpecialResource(actorId: string, name: string, amount: number): { success: boolean; errorReason?: string } {
+    const actor = this.participants.get(actorId);
+    if (!actor) return { success: false, errorReason: 'Combatant not found.' };
+    actor.combatResources = { ...(actor.combatResources || {}), [name]: Math.max(0, Number(amount) || 0) };
+    return { success: true };
+  }
+
+  public grantSpecialResource(actorId: string, name: string, amount: number): { success: boolean; errorReason?: string; total?: number } {
+    const actor = this.participants.get(actorId);
+    if (!actor) return { success: false, errorReason: 'Combatant not found.' };
+    const total = (actor.combatResources?.[name] ?? 0) + Math.max(0, Number(amount) || 0);
+    actor.combatResources = { ...(actor.combatResources || {}), [name]: total };
+    return { success: true, total };
+  }
+
+  // ---- Triggered effects: abilities and capabilities that react to combat events through the effect pipeline ----
+
+  /** Records a stage event (delivery blocked, interrupt, terrain) in the canonical combat event stream. */
+  public recordStageEvent(eventType: string, actorId: string, targetId: string | undefined, headline: string, metadata: Record<string, unknown> = {}): string {
+    this.combatActionSequence += 1;
+    const eventId = `combat_evt_${this.currentRound}_${this.combatActionSequence}`;
+    this.combatEffectEvents.push({ eventId, actionId: `${eventType.toLowerCase()}_${this.currentRound}_${this.combatActionSequence}`, eventType, turnNumber: this.currentRound, actorId, targetId, headline, metadata });
+    return eventId;
+  }
+
+  public registerTriggeredEffect(subscription: Omit<TriggeredEffectSubscription, 'firedCount'>): { success: boolean; errorReason?: string } {
+    if (!subscription.id || !subscription.ownerId || !subscription.definition) return { success: false, errorReason: 'A triggered effect needs an id, an owner and a definition.' };
+    if (!this.participants.has(subscription.ownerId)) return { success: false, errorReason: 'The owner is not in this combat.' };
+    if (!TacticalCombatEngine.effectResolver) return { success: false, errorReason: 'The effect pipeline is not available.' };
+    this.triggeredEffects.set(subscription.id, { ...JSON.parse(JSON.stringify(subscription)), firedCount: 0 });
+    return { success: true };
+  }
+
+  public unregisterTriggeredEffect(id: string): boolean {
+    return this.triggeredEffects.delete(id);
+  }
+
+  public getTriggeredEffects(): TriggeredEffectSubscription[] {
+    return Array.from(this.triggeredEffects.values()).map((entry) => JSON.parse(JSON.stringify(entry)));
+  }
+
+  private fireTriggeredEffects(event: CombatTriggerEvent, subjectId: string): void {
+    const resolver = TacticalCombatEngine.effectResolver;
+    if (!resolver || this.triggeredEffects.size === 0 || this.triggerDepth >= 2) return;
+    this.triggerDepth += 1;
+    try {
+      const subscriptions = Array.from(this.triggeredEffects.values()).sort((a, b) => a.id.localeCompare(b.id));
+      for (const subscription of subscriptions) {
+        if (subscription.event !== event) continue;
+        if (subscription.subject === 'OWNER' && subscription.ownerId !== subjectId) continue;
+        if (subscription.maxFirings !== undefined && subscription.firedCount >= subscription.maxFirings) continue;
+        const owner = this.participants.get(subscription.ownerId);
+        if (!owner || owner.isDead || owner.hpCurrent <= 0) continue;
+        const targetIds = subscription.targeting === 'SELF' ? [subscription.ownerId] : [subjectId];
+        subscription.firedCount += 1;
+        const result = resolver(this, subscription.ownerId, targetIds, subscription.definition, { consumeAction: false, recordReplay: false });
+        this.combatActionSequence += 1;
+        this.combatEffectEvents.push({
+          eventId: `combat_evt_${this.currentRound}_${this.combatActionSequence}`,
+          actionId: `triggered_${subscription.id}_${this.currentRound}`,
+          eventType: 'TRIGGERED_EFFECT_RESOLVED',
+          turnNumber: this.currentRound,
+          actorId: subscription.ownerId,
+          targetId: targetIds[0],
+          headline: result.success ? `${owner.name}'s ${subscription.definition.name} triggered on ${event}.` : `${owner.name}'s ${subscription.definition.name} could not trigger: ${result.errorReason || 'failed'}.`,
+          damage: result.totalDamage || 0,
+          metadata: { triggerEvent: event, subscriptionId: subscription.id, success: result.success },
+        });
+      }
+    } finally {
+      this.triggerDepth -= 1;
+    }
+  }
+
+  // ---- Stage interrupts: reactions that stop or soften an effect between its stages ----
+
+  public prepareInterrupt(interrupt: PreparedInterrupt): { success: boolean; errorReason?: string } {
+    const actor = this.participants.get(interrupt.actorId);
+    if (!actor || actor.isDead || actor.hpCurrent <= 0) return { success: false, errorReason: 'Only a living combatant can prepare an interrupt.' };
+    if (!this.ruleIsOn('combat.reactions')) return { success: false, errorReason: "Reactions are switched off in this story's rules." };
+    if (!this.actionEconomy.canConsume(interrupt.actorId, 'REACTION')) return { success: false, errorReason: 'No reaction is available to prepare an interrupt.' };
+    this.stageInterrupts.set(interrupt.id, JSON.parse(JSON.stringify(interrupt)));
+    return { success: true };
+  }
+
+  public getPreparedInterrupts(): PreparedInterrupt[] {
+    return Array.from(this.stageInterrupts.values()).map((entry) => JSON.parse(JSON.stringify(entry)));
+  }
+
+  /**
+   * Called at an effect stage. The first matching prepared interrupt whose owner can still spend a reaction fires: it costs the
+   * reaction and is used up. Returns what it did.
+   */
+  public consumeStageInterrupt(stage: CombatInterruptStage, params: { sourceActorId?: string; targetIds: string[] }): { fired: boolean; action?: PreparedInterrupt['action']; amount?: number; interruptId?: string; actorId?: string } {
+    for (const interrupt of Array.from(this.stageInterrupts.values()).sort((a, b) => a.id.localeCompare(b.id))) {
+      if (interrupt.stage !== stage) continue;
+      const guarded = interrupt.guardTargetId ?? interrupt.actorId;
+      if (!params.targetIds.includes(guarded)) continue;
+      const spent = this.actionEconomy.consume(interrupt.actorId, 'REACTION');
+      if (!spent.success) continue;
+      this.stageInterrupts.delete(interrupt.id);
+      this.combatActionSequence += 1;
+      this.combatEffectEvents.push({
+        eventId: `combat_evt_${this.currentRound}_${this.combatActionSequence}`,
+        actionId: `interrupt_${interrupt.id}`,
+        eventType: 'INTERRUPT_TRIGGERED',
+        turnNumber: this.currentRound,
+        actorId: interrupt.actorId,
+        targetId: guarded,
+        headline: `${this.participants.get(interrupt.actorId)?.name || interrupt.actorId} interrupted the effect (${interrupt.action}) at ${stage}.`,
+        metadata: { stage, action: interrupt.action, amount: interrupt.amount },
+      });
+      return { fired: true, action: interrupt.action, amount: interrupt.amount, interruptId: interrupt.id, actorId: interrupt.actorId };
+    }
+    return { fired: false };
   }
 
   public getActionEconomy(): CombatActionEconomy {
@@ -1018,7 +1227,7 @@ export class TacticalCombatEngine {
   }
 
   public setSurprisedActors(actorIds: Iterable<string>): void {
-    this.surprisedActorIds = new Set(Array.from(actorIds).filter((id) => this.participants.has(id)));
+    this.surprisedActorIds = new Set(Array.from(actorIds).filter((id) => this.participants.has(id) && this.ruleIsOn('combat.surprise')));
   }
 
   public getCombatBanner(): string {
@@ -1055,7 +1264,7 @@ export class TacticalCombatEngine {
     this.currentTurnIndex = 0;
     this.initiativeRolls = [];
     this.surprisedActorIds = new Set(
-      Array.from(options?.surprisedActorIds || []).filter((id) => this.participants.has(id))
+      Array.from(options?.surprisedActorIds || []).filter((id) => this.participants.has(id) && this.ruleIsOn('combat.surprise'))
     );
     this.combatBanner = options?.banner || 'Combat initiated. Roll for initiative.';
     this.lastResolution = undefined;
@@ -1290,7 +1499,12 @@ export class TacticalCombatEngine {
     const totalEnemies = projectedParticipants.filter((p) => p.team === 'enemies');
 
     const victory = totalEnemies.length > 0 && aliveEnemies.length === 0;
-    const defeat = aliveAllies.length === 0 && projectedParticipants.some((p) => p.team === 'player_allies');
+    const hasAllies = projectedParticipants.some((p) => p.team === 'player_allies');
+    // Defeat is the party being out of the fight: every ally dead, or every ally down at 0 hit points while an enemy still stands.
+    // A downed ally who is stable (or still rolling death saves) cannot act, and nobody is left to act for them, so the fight is over.
+    // Without this a stable, unconscious fighter and an enemy that spares them would stall the encounter forever.
+    const ableAllies = aliveAllies.filter((p) => p.hpCurrent > 0);
+    const defeat = hasAllies && !victory && (aliveAllies.length === 0 || (ableAllies.length === 0 && aliveEnemies.some((p) => p.hpCurrent > 0)));
     const isEncounterActive = !victory && !defeat && projectedParticipants.length > 0;
     const isPlayerTurn = this.combatPhase === 'ACTIVE' && canonicalCurrentActor?.id === viewerActorId && !canonicalCurrentActor.isDead;
     const viewerTurnResources = this.actionEconomy.get(viewerActorId);
@@ -1675,7 +1889,7 @@ export class TacticalCombatEngine {
     }
     const movementCost = calculateSpatialGridMovementCost(path, this.hazards);
 
-    const opportunityThreats = !this.actionEconomy.get(actorId)?.disengaging
+    const opportunityThreats = !this.actionEconomy.get(actorId)?.disengaging && this.ruleIsOn('combat.opportunity_attacks')
       ? Array.from(this.participants.values())
           .filter((other) => {
             if (other.id === actorId || other.isDead || other.team === actor.team || other.team === 'neutral') return false;
@@ -1731,6 +1945,7 @@ export class TacticalCombatEngine {
 
 
     this.releaseInvalidGrapples();
+    this.resolveTerrainAfterMove(actor);
 
     this.resolveReadyTriggers({
       type: 'ACTOR_MOVED',
@@ -1754,6 +1969,38 @@ export class TacticalCombatEngine {
     }
 
     return { success: true };
+  }
+
+  /** Pits drop the creature; a bridge over a pit makes it safe; a trap springs once. */
+  private resolveTerrainAfterMove(actor: BattlefieldParticipant): void {
+    if (actor.isDead || this.hazards.length === 0) return;
+    const inside = (hazard: DynamicHazardZone) => Math.hypot(actor.x - hazard.x, actor.y - hazard.y) <= Math.max(0, hazard.radiusCells);
+    const bridged = this.hazards.some((hazard) => hazard.type === 'bridge' && inside(hazard));
+    for (const hazard of [...this.hazards].sort((a, b) => a.id.localeCompare(b.id))) {
+      if (!inside(hazard)) continue;
+      if (hazard.type === 'pit' && !bridged) {
+        const fall = this.applyFallDamage(actor.id, hazard.fallFeet ?? 10);
+        this.eventLog.push({
+          turnNumber: this.currentRound,
+          actorId: actor.id,
+          actionType: 'CONDITION_TICK',
+          headline: fall.success ? `${actor.name} fell into a pit and took ${fall.damage} damage.` : `${actor.name} stepped into a pit.`,
+          damageInflicted: fall.damage,
+          metadata: { terrain: 'pit', fallFeet: hazard.fallFeet ?? 10 },
+        });
+      } else if (hazard.type === 'trap') {
+        const result = this.applyCombatDamage(actor, hazard.damagePerTurn, hazard.damageType || 'force', false);
+        this.eventLog.push({
+          turnNumber: this.currentRound,
+          actorId: actor.id,
+          actionType: 'CONDITION_TICK',
+          headline: `${actor.name} triggered a trap for ${result.damage} damage.`,
+          damageInflicted: result.damage,
+          metadata: { terrain: 'trap', damageType: hazard.damageType || 'force' },
+        });
+        if (hazard.oneShot !== false) this.hazards = this.hazards.filter((entry) => entry.id !== hazard.id);
+      }
+    }
   }
 
   private isPathCellBlocked(x: number, y: number): boolean {
@@ -1954,7 +2201,7 @@ export class TacticalCombatEngine {
     let damage = 0;
     let targetDied = false;
     if (attackResult.hits) {
-      const damageResult = this.ruleset.resolveDamage(attacker.damageFormula, attackResult.isCritical, this.diceEngine);
+      const damageResult = this.ruleset.resolveDamage(attacker.damageFormula, this.critDice(attackResult.isCritical), this.diceEngine);
       const resolved = this.applyCombatDamage(target, damageResult.totalDamage, attacker.damageType || 'slashing', attackResult.isCritical);
       damage = resolved.damage;
       targetDied = resolved.targetDied;
@@ -1962,13 +2209,240 @@ export class TacticalCombatEngine {
     return { hits: attackResult.hits, damage, targetDied, roll: attackResult.roll, isCritical: attackResult.isCritical };
   }
 
-  private getCoverBonus(target: BattlefieldParticipant): number {
-    switch (target.cover) {
-      case 'HALF': return 2;
-      case 'THREE_QUARTERS': return 5;
-      case 'TOTAL': return 0;
-      default: return 0;
+  private turnOrderEnforced(): boolean {
+    return this.turnQueue.length > 0 && this.ruleIsOn('combat.initiative');
+  }
+
+  /** Critical hits double damage dice only while the critical-extras rule is on. */
+  private critDice(isCritical: boolean): boolean {
+    return isCritical && this.ruleIsOn('combat.critical_extras');
+  }
+
+  /** Spends the free object interaction (draw, stow or pick up an item). */
+  public consumeObjectInteraction(actorId: string): { success: boolean; errorReason?: string } {
+    return this.actionEconomy.consumeObjectInteraction(actorId);
+  }
+
+  /** Updates what a combatant fights with after their gear changed mid-fight. */
+  public setCombatLoadout(actorId: string, loadout: { attackBonus?: number; damageFormula?: string; damageType?: string; armorClass?: number; weaponName?: string | null }): boolean {
+    const participant = this.participants.get(actorId);
+    if (!participant) return false;
+    if (loadout.attackBonus !== undefined) participant.attackBonus = loadout.attackBonus;
+    if (loadout.damageFormula !== undefined) participant.damageFormula = loadout.damageFormula;
+    if (loadout.damageType !== undefined) participant.damageType = loadout.damageType;
+    if (loadout.armorClass !== undefined) participant.armorClass = loadout.armorClass;
+    if (loadout.weaponName !== undefined) participant.weaponName = loadout.weaponName || undefined;
+    return true;
+  }
+
+  /**
+   * Throwing a weapon: a ranged attack with the thrown item. Normal range 4 squares (20 feet), long range 12 (60 feet) at disadvantage;
+   * a hostile within reach also imposes disadvantage. An improvised throw does 1d4. The item itself is handled by the caller.
+   */
+  public executeThrownAttack(
+    attackerId: string,
+    targetId: string,
+    weapon: { name: string; damageFormula: string; damageType?: string; normalRangeCells?: number; longRangeCells?: number; attackBonusOverride?: number },
+  ): ReturnType<TacticalCombatEngine['executeAttack']> & { rangeBand?: 'NORMAL' | 'LONG'; disadvantage?: boolean } {
+    const refuse = (errorReason: string) => ({ success: false, errorReason, hits: false, damage: 0, targetDied: false, isCritical: false });
+    const attacker = this.participants.get(attackerId);
+    const target = this.participants.get(targetId);
+    if (!attacker || !target) return refuse('Attacker or target not found.');
+    const normal = weapon.normalRangeCells ?? 4;
+    const long = weapon.longRangeCells ?? 12;
+    const distance = Math.hypot(target.x - attacker.x, target.y - attacker.y);
+    if (distance > long) return refuse(`${target.name} is out of range for a throw (${distance.toFixed(1)} squares; the limit is ${long}).`);
+    const hostileInReach = Array.from(this.participants.values()).some((other) => other.team !== attacker.team && other.team !== 'neutral' && !other.isDead && other.hpCurrent > 0 && Math.hypot(other.x - attacker.x, other.y - attacker.y) <= (other.reachCells ?? 1.5));
+    const beyondNormal = distance > normal;
+    const disadvantage = beyondNormal || hostileInReach;
+    const result = this.executeAttack(attackerId, targetId, {
+      overrideFormula: weapon.damageFormula,
+      damageType: weapon.damageType,
+      disadvantage,
+      attackBonusOverride: weapon.attackBonusOverride,
+    });
+    if (result.success) this.recordStageEvent('THROWN_WEAPON', attackerId, targetId, `${attacker.name} threw ${weapon.name} at ${target.name}: ${result.hits ? 'hit' : 'miss'}.`, { weapon: weapon.name, distance, disadvantage, hits: result.hits, damage: result.damage });
+    return { ...result, rangeBand: beyondNormal ? 'LONG' : 'NORMAL', disadvantage };
+  }
+
+  /** Puts a combatant on a square (used when authored terrain sets the start positions). */
+  public placeParticipant(id: string, x: number, y: number): boolean {
+    const participant = this.participants.get(id);
+    if (!participant) return false;
+    participant.x = x;
+    participant.y = y;
+    return true;
+  }
+
+  /** Whether a rules-catalogue rule applies to this fight. No profile means every standard rule applies. */
+  private ruleIsOn(ruleId: string): boolean {
+    return rulesProfileEngine.rulePermits(this.rulesProfile, ruleId);
+  }
+
+  /**
+   * Flanking (optional rule): a melee attacker has advantage when an able ally of the attacker stands on the opposite side of
+   * the target, both within reach.
+   */
+  private isFlanking(attacker: BattlefieldParticipant, target: BattlefieldParticipant, distanceToTarget: number): boolean {
+    if (attacker.team === target.team || attacker.team === 'neutral') return false;
+    if (distanceToTarget > (attacker.reachCells ?? 1.5) || distanceToTarget === 0) return false;
+    const ax = attacker.x - target.x;
+    const ay = attacker.y - target.y;
+    const unable = ['incapacitated', 'unconscious', 'stunned', 'paralyzed', 'petrified'];
+    for (const ally of this.participants.values()) {
+      if (ally.id === attacker.id || ally.team !== attacker.team || ally.isDead || ally.hpCurrent <= 0) continue;
+      if (ally.conditions.some((condition) => unable.includes(condition.toLowerCase()))) continue;
+      const bx = ally.x - target.x;
+      const by = ally.y - target.y;
+      const distance = Math.hypot(bx, by);
+      if (distance === 0 || distance > (ally.reachCells ?? 1.5)) continue;
+      const cosine = (ax * bx + ay * by) / (Math.hypot(ax, ay) * distance);
+      if (cosine <= -0.9) return true;
     }
+    return false;
+  }
+
+  private static readonly UNDERWATER_WEAPONS = new Set(['dagger', 'javelin', 'shortsword', 'short sword', 'spear', 'trident', 'crossbow', 'net', 'dart']);
+
+  /** Underwater: attacks by a submerged attacker without a swim speed are at disadvantage unless the weapon is one the rules allow. */
+  private hasUnderwaterPenalty(attacker: BattlefieldParticipant, distanceToTarget: number): boolean {
+    if (!attacker.underwater || attacker.hasSwimSpeed) return false;
+    const weapon = String(attacker.weaponName || '').toLowerCase();
+    if (weapon && TacticalCombatEngine.UNDERWATER_WEAPONS.has(weapon)) return false;
+    void distanceToTarget;
+    return true;
+  }
+
+  /**
+   * Falling damage: 1d6 per 10 feet fallen (at most 20d6), bludgeoning, and the creature lands prone.
+   * Returns a refusal when the falling-damage rule is off.
+   */
+  public applyFallDamage(actorId: string, feet: number): { success: boolean; errorReason?: string; damage: number; targetDied: boolean; viaEffect?: boolean } {
+    if (!this.ruleIsOn('combat.falling_damage')) return { success: false, errorReason: "Falling damage is switched off in this story's rules.", damage: 0, targetDied: false };
+    const target = this.participants.get(actorId);
+    if (!target) return { success: false, errorReason: 'Combatant not found.', damage: 0, targetDied: false };
+    const dice = Math.min(20, Math.floor(Math.max(0, feet) / 10));
+    if (dice <= 0) return { success: true, damage: 0, targetDied: target.isDead };
+    // The unified path: a fall is an automatic effect resolved by the effect pipeline (defences, events, replay).
+    const resolver = TacticalCombatEngine.effectResolver;
+    const definition = TacticalCombatEngine.fallEffectBuilder?.(actorId, feet);
+    if (resolver && definition) {
+      const resolved = resolver(this, actorId, [actorId], definition, { consumeAction: false, recordReplay: false });
+      if (resolved.success) return { success: true, damage: resolved.totalDamage || 0, targetDied: Boolean(this.participants.get(actorId)?.isDead), viaEffect: true };
+    }
+    const roll = this.ruleset.resolveDamage(`${dice}d6`, false, this.diceEngine);
+    const resolved = this.applyCombatDamage(target, roll.totalDamage, 'bludgeoning', false);
+    if (!resolved.targetDied && !target.conditions.includes('Prone')) target.conditions = [...target.conditions, 'Prone'];
+    return { success: true, damage: resolved.damage, targetDied: resolved.targetDied };
+  }
+
+  /**
+   * Two-weapon fighting: after taking the Attack action, a bonus-action attack with the off-hand weapon. The off-hand
+   * attack does not add the ability modifier to damage.
+   */
+  public executeOffhandAttack(attackerId: string, targetId: string): { success: boolean; errorReason?: string; hits: boolean; damage: number; targetDied: boolean; isCritical: boolean } {
+    const refuse = (errorReason: string) => ({ success: false, errorReason, hits: false, damage: 0, targetDied: false, isCritical: false });
+    if (!this.tacticalCombatEnabled()) return refuse('Tactical combat is disabled by the active rules profile.');
+    if (!this.ruleIsOn('combat.two_weapon_fighting')) return refuse("Two-weapon fighting is switched off in this story's rules.");
+    const attacker = this.participants.get(attackerId);
+    const target = this.participants.get(targetId);
+    if (!attacker || !target) return refuse('Attacker or target not found.');
+    if (!attacker.offhandDamageFormula) return refuse('The attacker has no off-hand weapon.');
+    if (!this.attackTurnState.get(attackerId)?.attacked) return refuse('Take the Attack action with a light weapon before the off-hand attack.');
+    const bonus = this.consumeCombatAction(attackerId, 'BONUS_ACTION');
+    if (!bonus.success) return refuse(bonus.errorReason || 'Bonus action unavailable.');
+    const formula = attacker.offhandDamageFormula.replace(/\s*[+-]\s*\d+(?!d)/g, '');
+    const result = this.resolveAttackInstanceInternal(attackerId, targetId, { overrideFormula: formula });
+    if (!result.success) return refuse(result.errorReason || 'Off-hand attack failed.');
+    return { success: true, hits: result.hits, damage: result.damage, targetDied: result.targetDied, isCritical: result.isCritical };
+  }
+
+  /** Whether an able ally of the attacker stands next to the target (one of the two ways Sneak Attack qualifies). */
+  private allyBesideTarget(attacker: BattlefieldParticipant, target: BattlefieldParticipant): boolean {
+    const unable = ['incapacitated', 'unconscious', 'stunned', 'paralyzed', 'petrified'];
+    return Array.from(this.participants.values()).some((ally) =>
+      ally.id !== attacker.id && ally.team === attacker.team && !ally.isDead && ally.hpCurrent > 0
+      && !ally.conditions.some((condition) => unable.includes(condition.toLowerCase()))
+      && Math.hypot(ally.x - target.x, ally.y - target.y) <= (ally.reachCells ?? 1.5));
+  }
+
+  /**
+   * Damage added by class features, rolled by the engine: Sneak Attack (once per turn, with advantage or an ally beside the
+   * target and no disadvantage) and the Rage bonus (melee attacks while raging). Both come from progression modifiers and are
+   * gated by their rules, so a story without the rule, or a character without the feature, adds nothing.
+   */
+  private damageRiders(attacker: BattlefieldParticipant, target: BattlefieldParticipant, distanceToTarget: number, critical: boolean, notes?: { advantage: string[]; disadvantage: string[] }): Array<{ id: string; label: string; amount: number }> {
+    const riders: Array<{ id: string; label: string; amount: number }> = [];
+    const sneakDice = Math.max(0, Math.floor(this.progressionModifier(attacker.id, 'combat.sneakAttackDice')));
+    const turnState = this.attackTurnState.get(attacker.id) || { attacked: false, extraRemaining: 0 };
+    if (sneakDice > 0 && this.ruleIsOn('class.sneak_attack') && !turnState.sneakUsed) {
+      const hasAdvantage = Boolean(notes?.advantage.length) && !notes?.disadvantage.length;
+      const qualifies = hasAdvantage || (!notes?.disadvantage.length && this.allyBesideTarget(attacker, target));
+      if (qualifies) {
+        const roll = this.ruleset.resolveDamage(`${sneakDice}d6`, this.critDice(critical), this.diceEngine);
+        riders.push({ id: 'sneak_attack', label: `Sneak Attack (${sneakDice}d6)`, amount: roll.totalDamage });
+        this.attackTurnState.set(attacker.id, { ...turnState, sneakUsed: true });
+      }
+    }
+    const rageBonus = Math.floor(this.progressionModifier(attacker.id, 'combat.rageDamage'));
+    if (rageBonus > 0 && attacker.raging && this.ruleIsOn('class.rage') && distanceToTarget <= (attacker.reachCells ?? 1.5)) {
+      riders.push({ id: 'rage', label: 'Rage', amount: rageBonus });
+    }
+    return riders;
+  }
+
+  /** Starts or ends a rage. Needs the rage rule on; the feature itself (charges, level) is the progression engine's to spend. */
+  public setRaging(actorId: string, raging: boolean): { success: boolean; errorReason?: string } {
+    const participant = this.participants.get(actorId);
+    if (!participant) return { success: false, errorReason: 'Combatant not found.' };
+    if (raging && !this.ruleIsOn('class.rage')) return { success: false, errorReason: "Rage is switched off in this story's rules." };
+    participant.raging = raging;
+    if (raging) this.recordStageEvent('RAGE_STARTED', actorId, undefined, `${participant.name} flies into a rage.`);
+    return { success: true };
+  }
+
+  /** What the combat inspector shows: how the attack total and the target armor class were made up. */
+  private explainAttack(attacker: BattlefieldParticipant, target: BattlefieldParticipant): { attackBreakdown: Array<{ label: string; value: number }>; defenseBreakdown: Array<{ label: string; value: number }> } {
+    const attack = [{ label: 'Attack bonus', value: attacker.attackBonus }];
+    const feature = this.progressionModifier(attacker.id, 'combat.attackBonus');
+    if (feature) attack.push({ label: 'Class and feature bonuses', value: feature });
+    const boss = this.bossPhaseModifier(attacker.id, 'combat.attackBonus');
+    if (boss) attack.push({ label: 'Boss phase', value: boss });
+    const exhaustion = this.conditionEngine?.getExhaustionModifiers(attacker.id).d20Penalty || 0;
+    if (exhaustion) attack.push({ label: 'Exhaustion', value: exhaustion });
+    const defense = [{ label: 'Armor class', value: target.armorClass }];
+    const armorFeature = this.progressionModifier(target.id, 'coreStats.armorClass');
+    if (armorFeature) defense.push({ label: 'Class and feature bonuses', value: armorFeature });
+    const armorBoss = this.bossPhaseModifier(target.id, 'coreStats.armorClass');
+    if (armorBoss) defense.push({ label: 'Boss phase', value: armorBoss });
+    const cover = this.getCoverBonus(target, attacker);
+    if (cover) defense.push({ label: 'Cover', value: cover });
+    return { attackBreakdown: attack, defenseBreakdown: defense };
+  }
+
+  private getCoverBonus(target: BattlefieldParticipant, attacker?: BattlefieldParticipant): number {
+    if (!this.ruleIsOn('combat.cover')) return 0;
+    const bonus = (level?: string) => (level === 'HALF' ? 2 : level === 'THREE_QUARTERS' ? 5 : 0);
+    return Math.max(bonus(target.cover), attacker ? bonus(this.terrainCoverBetween(attacker, target)) : 0);
+  }
+
+  /** Cover given by low obstacles standing on the line between attacker and target (low walls, crates, rubble). */
+  private terrainCoverBetween(attacker: BattlefieldParticipant, target: BattlefieldParticipant): 'NONE' | 'HALF' | 'THREE_QUARTERS' | 'TOTAL' {
+    const providers = this.obstacles
+      .filter((obstacle) => obstacle.cover && obstacle.isImpassable === false)
+      .filter((obstacle) => !(obstacle.x === attacker.x && obstacle.y === attacker.y) && !(obstacle.x === target.x && obstacle.y === target.y))
+      .map((obstacle, index) => ({
+        id: `cover_${index}_${obstacle.x}_${obstacle.y}`,
+        minX: obstacle.x - 0.5,
+        maxX: obstacle.x + 0.5,
+        minY: obstacle.y - 0.5,
+        maxY: obstacle.y + 0.5,
+        blocksMovement: false,
+        blocksSight: false,
+        cover: obstacle.cover,
+      }));
+    if (providers.length === 0) return 'NONE';
+    return resolveSpatialCoverBetweenPoints({ x: attacker.x, y: attacker.y }, { x: target.x, y: target.y }, providers as any).level;
   }
 
   public getCoverLevel(targetId: string): CoverLevel {
@@ -1995,7 +2469,7 @@ export class TacticalCombatEngine {
     if (!this.tacticalCombatEnabled()) {
       return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
     }
-    if (this.turnQueue.length > 0 && this.getCurrentActor()?.id !== actorId) {
+    if (this.turnOrderEnforced() && this.getCurrentActor()?.id !== actorId) {
       return { success: false, errorReason: "It is not this actor's turn." };
     }
     const legality = this.canActorPerformCombatAction(actorId, 'ACTION');
@@ -2079,10 +2553,11 @@ export class TacticalCombatEngine {
 
   private executeControlAction(attackerId: string, targetId: string, action: 'GRAPPLE' | 'SHOVE'): { success: boolean; errorReason?: string; applied?: boolean } {
     if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
+    if (!this.ruleIsOn('combat.grapple_shove')) return { success: false, errorReason: "Grapple and shove are switched off in this story's rules." };
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);
     if (!attacker || !target) return { success: false, errorReason: 'Attacker or target not found.' };
-    if (this.turnQueue.length > 0 && this.getCurrentActor()?.id !== attackerId) return { success: false, errorReason: "It is not this actor's turn." };
+    if (this.turnOrderEnforced() && this.getCurrentActor()?.id !== attackerId) return { success: false, errorReason: "It is not this actor's turn." };
     if (attacker.isDead || target.isDead || attacker.hpCurrent <= 0 || target.hpCurrent <= 0) {
       return { success: false, errorReason: 'Dead or incapacitated combatants cannot resolve this action.' };
     }
@@ -2134,7 +2609,7 @@ export class TacticalCombatEngine {
     attacker: BattlefieldParticipant,
     target: BattlefieldParticipant,
     options?: { advantage?: boolean; disadvantage?: boolean; attackFormula?: string }
-  ): { blocked: boolean; roll?: { roll: RollRecord; hits: boolean; isCritical: boolean } } {
+  ): { blocked: boolean; roll?: { roll: RollRecord; hits: boolean; isCritical: boolean }; advantageNotes?: { advantage: string[]; disadvantage: string[] } } {
     if (target.cover === 'TOTAL') return { blocked: true };
 
     const spatialObstacles: SpatialObstacle[] = this.obstacles.map((obstacle, index) => ({
@@ -2179,9 +2654,29 @@ export class TacticalCombatEngine {
     const targetProneAdvantage = targetIsProne && distanceToTarget <= (attacker.reachCells ?? 1.5);
     const targetProneDisadvantage = targetIsProne && distanceToTarget > (attacker.reachCells ?? 1.5);
     const exhaustionPenalty = this.conditionEngine?.getExhaustionModifiers(attacker.id).d20Penalty || 0;
+    const flankingAdvantage = this.ruleIsOn('combat.flanking') && this.isFlanking(attacker, target, distanceToTarget);
+    const underwaterDisadvantage = this.ruleIsOn('combat.underwater') && this.hasUnderwaterPenalty(attacker, distanceToTarget);
+    const advantageNotes = {
+      advantage: [
+        options?.advantage ? 'Advantage granted to this attack' : '',
+        attackerHasAdvantage ? 'Attacker is invisible' : '',
+        targetHasAdvantageAgainst ? 'Target cannot defend itself (blinded, restrained, paralyzed, stunned or unconscious)' : '',
+        targetProneAdvantage ? 'Target is prone and within reach' : '',
+        flankingAdvantage ? 'Flanking' : '',
+      ].filter(Boolean),
+      disadvantage: [
+        options?.disadvantage ? 'Disadvantage imposed on this attack' : '',
+        targetDodging ? 'Target is dodging' : '',
+        attackerHasDisadvantage ? 'Attacker is impaired by a condition' : '',
+        targetProneDisadvantage ? 'Target is prone and out of reach' : '',
+        underwaterDisadvantage ? 'Fighting underwater' : '',
+        targetConditions.has('invisible') ? 'Target is invisible' : '',
+      ].filter(Boolean),
+    };
 
     return {
       blocked: false,
+      advantageNotes,
       roll: this.ruleset.resolveAttack({
         attackBonus:
           attacker.attackBonus +
@@ -2192,10 +2687,10 @@ export class TacticalCombatEngine {
           target.armorClass +
           this.progressionModifier(target.id, 'coreStats.armorClass') +
           this.bossPhaseModifier(target.id, 'coreStats.armorClass') +
-          this.getCoverBonus(target),
+          this.getCoverBonus(target, attacker),
         attackFormula: resolveCapabilityCheckFormula((this.rulesProfile?.mode || 'FULL_DND') as any, options?.attackFormula),
-        advantage: Boolean(options?.advantage || attackerHasAdvantage || targetHasAdvantageAgainst || targetProneAdvantage || targetConditions.has('unconscious')),
-        disadvantage: Boolean(options?.disadvantage || targetDodging || attackerHasDisadvantage || targetProneDisadvantage || targetConditions.has('invisible')),
+        advantage: Boolean(options?.advantage || attackerHasAdvantage || targetHasAdvantageAgainst || targetProneAdvantage || flankingAdvantage || targetConditions.has('unconscious')),
+        disadvantage: Boolean(options?.disadvantage || targetDodging || attackerHasDisadvantage || targetProneDisadvantage || underwaterDisadvantage || targetConditions.has('invisible')),
         diceEngine: this.diceEngine,
       }),
     };
@@ -2243,7 +2738,7 @@ export class TacticalCombatEngine {
     if (attackResult.hits) {
       const damageResult = this.ruleset.resolveDamage(
         attacker.damageFormula,
-        attackResult.isCritical,
+        this.critDice(attackResult.isCritical),
         this.diceEngine
       );
       const resolved = this.applyCombatDamage(
@@ -2298,7 +2793,7 @@ export class TacticalCombatEngine {
     }
 
     const currentActor = this.getCurrentActor();
-    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== actorId)) {
+    if (this.turnOrderEnforced() && (!currentActor || currentActor.id !== actorId)) {
       return {
         success: false,
         action,
@@ -2465,7 +2960,11 @@ export class TacticalCombatEngine {
     vulnerable?: boolean;
     destroyedBodyRegions: BodyRegionId[];
   } {
-    const amount = Math.max(0, requestedAmount);
+    let amount = Math.max(0, requestedAmount);
+    if (amount > 0 && this.stageInterrupts.size > 0) {
+      const interrupt = this.consumeStageInterrupt('BEFORE_DAMAGE', { targetIds: [target.id] });
+      if (interrupt.fired) amount = interrupt.action === 'CANCEL_EFFECT' ? 0 : Math.max(0, amount - (interrupt.amount ?? 0));
+    }
     const previousHp = Math.max(0, target.hpCurrent);
 
     if (target.usesDeathSaves && previousHp <= 0 && amount > 0) {
@@ -2569,7 +3068,7 @@ export class TacticalCombatEngine {
         target.hpCurrent <= 0 &&
         target.isDead
       ) {
-        const massiveDamage = resolvedDamage.finalAmount >= previousHp + target.hpMax;
+        const massiveDamage = this.ruleIsOn('combat.massive_damage') && resolvedDamage.finalAmount >= previousHp + target.hpMax;
         const terminalBody = resolvedDamage.destroyedBodyRegions.includes('HEART');
         if (!massiveDamage && !terminalBody) {
           this.conditionEngine.markUnconsciousAtZero(target.id);
@@ -2642,7 +3141,7 @@ export class TacticalCombatEngine {
     target.hpCurrent = Math.max(0, target.hpCurrent - finalAmount);
 
     if (target.usesDeathSaves && previousHp > 0 && target.hpCurrent <= 0) {
-      const massiveDamage = finalAmount >= previousHp + target.hpMax;
+      const massiveDamage = this.ruleIsOn('combat.massive_damage') && finalAmount >= previousHp + target.hpMax;
       if (!massiveDamage) {
         target.isDead = false;
         target.deathSaveState = deathSaveEngine.createState();
@@ -2765,15 +3264,18 @@ export class TacticalCombatEngine {
     let defense: CombatAttackInstanceResult['defense'];
     let hitLocation: BodyRegionId | undefined;
     let destroyedBodyRegions: BodyRegionId[] = [];
+    let riders: Array<{ id: string; label: string; amount: number }> = [];
 
     if (attackResult.hits) {
       const formula = options.overrideFormula || attacker.damageFormula;
       const unconsciousMeleeCritical = targetConditions.has('unconscious') && distanceToTarget <= (attacker.reachCells ?? 1.5);
       const critical = attackResult.isCritical || unconsciousMeleeCritical;
-      const dmgRes = this.ruleset.resolveDamage(formula, critical, this.diceEngine);
+      const dmgRes = this.ruleset.resolveDamage(formula, this.critDice(critical), this.diceEngine);
       damageRoll = dmgRes.roll;
       hitLocation = this.resolveHitLocation(target, options);
-      const damageResult = this.applyCombatDamage(target, dmgRes.totalDamage, options.damageType || attacker.damageType || 'slashing', critical, hitLocation);
+      riders = this.damageRiders(attacker, target, distanceToTarget, critical, attackResolution.advantageNotes);
+      const riderTotal = riders.reduce((sum, rider) => sum + rider.amount, 0);
+      const damageResult = this.applyCombatDamage(target, dmgRes.totalDamage + riderTotal, options.damageType || attacker.damageType || 'slashing', critical, hitLocation);
       damage = damageResult.damage;
       targetDied = damageResult.targetDied;
       destroyedBodyRegions = damageResult.destroyedBodyRegions || [];
@@ -2852,7 +3354,10 @@ export class TacticalCombatEngine {
       roll: attackResult.roll,
       damageRoll,
       attackRollTotal: attackResult.roll.total,
-      targetArmorClass: target.armorClass + this.progressionModifier(target.id, 'coreStats.armorClass') + this.bossPhaseModifier(target.id, 'coreStats.armorClass') + this.getCoverBonus(target),
+      ...(riders.length ? { riders } : {}),
+      ...this.explainAttack(attackSource, target),
+      advantageNotes: attackResolution.advantageNotes,
+      targetArmorClass: target.armorClass + this.progressionModifier(target.id, 'coreStats.armorClass') + this.bossPhaseModifier(target.id, 'coreStats.armorClass') + this.getCoverBonus(target, attackSource),
       defense,
     };
   }
@@ -2874,6 +3379,7 @@ export class TacticalCombatEngine {
       | 'ON_ROUND_END',
     actionText?: string,
   ): void {
+    this.fireTriggeredEffects(event, actorId);
     if (!this.conditionEngine?.getActorState(actorId)) return;
     const result = this.conditionEngine.processCombatEvent(actorId, event, {
       actionText,
@@ -3002,6 +3508,9 @@ export class TacticalCombatEngine {
     const legality = this.canActorPerformCombatAction(actorId, actionCost);
     if (!legality.success) return legality;
     if (actionCost === 'FREE') return { success: true };
+    if (actionCost === 'REACTION' && !this.ruleIsOn('combat.reactions')) return { success: false, errorReason: "Reactions are switched off in this story's rules." };
+    if (actionCost !== 'REACTION' && !this.ruleIsOn('combat.action_economy')) return { success: true };
+    if (actionCost !== 'BONUS_ACTION' && actionCost !== 'REACTION') this.attackTurnState.delete(actorId);
     const resource = actionCost === 'BONUS_ACTION'
       ? 'BONUS_ACTION'
       : actionCost === 'REACTION'
@@ -3042,7 +3551,7 @@ export class TacticalCombatEngine {
     const target = this.participants.get(targetId);
     if (!attacker || !target) throw new Error('Invalid combatants.');
     const currentActor = this.getCurrentActor();
-    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) {
+    if (this.turnOrderEnforced() && (!currentActor || currentActor.id !== attackerId)) {
       return { success: false, errorReason: "It is not this attacker's turn.", hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
     const conditionLegality = this.canActorPerformCombatAction(attackerId, 'ACTION');
@@ -3070,9 +3579,19 @@ export class TacticalCombatEngine {
       };
     }
 
-    const actionResult = options?.consumeAction === false
-      ? { success: true as const }
-      : this.consumeCombatAction(attackerId, 'ACTION');
+    let actionResult: { success: boolean; errorReason?: string } = { success: true };
+    if (options?.consumeAction !== false) {
+      const turnState = this.attackTurnState.get(attackerId);
+      if (this.ruleIsOn('combat.extra_attack') && turnState && turnState.extraRemaining > 0) {
+        turnState.extraRemaining -= 1;
+      } else {
+        actionResult = this.consumeCombatAction(attackerId, 'ACTION');
+        if (actionResult.success) {
+          const extra = this.ruleIsOn('combat.extra_attack') ? Math.max(0, Math.floor((attacker.attacksPerAction ?? 1) + this.progressionModifier(attackerId, 'combat.extraAttacks')) - 1) : 0;
+          this.attackTurnState.set(attackerId, { attacked: true, extraRemaining: extra });
+        }
+      }
+    }
     if (!actionResult.success) {
       return { success: false, errorReason: actionResult.errorReason, hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
@@ -3141,7 +3660,7 @@ export class TacticalCombatEngine {
     if (availableTargets.length === 0) return { success: false, errorReason: 'No valid targets are available.' };
     if (availableTargets.length === 0) return { success: false, errorReason: 'No valid targets are available.' };
     const currentActor = this.getCurrentActor();
-    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) return { success: false, errorReason: "It is not this attacker's turn." };
+    if (this.turnOrderEnforced() && (!currentActor || currentActor.id !== attackerId)) return { success: false, errorReason: "It is not this attacker's turn." };
     if (attacker.isDead || attacker.hpCurrent <= 0 || attacker.conditions.includes('Unconscious')) return { success: false, errorReason: 'An unconscious or dead actor cannot attack.' };
     const actionResult = options.consumeAction === false
       ? { success: true as const }
@@ -3232,7 +3751,7 @@ export class TacticalCombatEngine {
     const targets = Array.from(new Set(params.targetIds.filter(Boolean))).map((id) => this.participants.get(id)).filter((target): target is BattlefieldParticipant => Boolean(target));
     if (!targets.length) return { success: false, errorReason: 'At least one valid target is required.' };
     const currentActor = this.getCurrentActor();
-    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) return { success: false, errorReason: "It is not this actor's turn." };
+    if (this.turnOrderEnforced() && (!currentActor || currentActor.id !== params.actorId)) return { success: false, errorReason: "It is not this actor's turn." };
     const actionResult = params.consumeAction === false ? { success: true as const } : this.consumeCombatAction(params.actorId, 'ACTION');
     if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
     const actionId = params.actionId || `combat_action_${this.currentRound}_${params.actorId}_area_${this.combatActionSequence + 1}`;
@@ -3292,7 +3811,7 @@ export class TacticalCombatEngine {
     const targets = Array.from(new Set(params.targetIds.filter(Boolean))).map((id) => this.participants.get(id)).filter((target): target is BattlefieldParticipant => Boolean(target));
     if (!targets.length) return { success: false, errorReason: 'At least one valid target is required.' };
     const currentActor = this.getCurrentActor();
-    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) return { success: false, errorReason: "It is not this actor's turn." };
+    if (this.turnOrderEnforced() && (!currentActor || currentActor.id !== params.actorId)) return { success: false, errorReason: "It is not this actor's turn." };
     const actionResult = params.consumeAction === false ? { success: true as const } : this.consumeCombatAction(params.actorId, 'ACTION');
     if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
     const rollFormula = resolveCapabilityCheckFormula((this.rulesProfile?.mode || 'FULL_DND') as any, params.saveFormula);
@@ -3422,7 +3941,7 @@ export class TacticalCombatEngine {
     if (!actor || !target) throw new Error('Invalid combatants for cast.');
 
     const currentActor = this.getCurrentActor();
-    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) {
+    if (this.turnOrderEnforced() && (!currentActor || currentActor.id !== params.actorId)) {
       return {
         success: false,
         damage: 0,
@@ -3646,7 +4165,7 @@ export class TacticalCombatEngine {
       }
     } else {
       const currentActor = this.getCurrentActor();
-      if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) {
+      if (this.turnOrderEnforced() && (!currentActor || currentActor.id !== params.actorId)) {
         return { success: false, errorReason: "It is not this actor's turn." };
       }
       if (!this.actionEconomy.canConsume(params.actorId, resourceType)) {
@@ -3810,6 +4329,7 @@ export class TacticalCombatEngine {
     const endingActor = this.getCurrentActor();
     if (endingActor) {
       this.processConditionCombatEvent(endingActor.id, 'ON_ROUND_END', 'round_end');
+      this.fireTriggeredEffects('ON_TURN_END', endingActor.id);
       this.actionEconomy.endTurn(endingActor.id);
     }
 
@@ -3853,6 +4373,9 @@ export class TacticalCombatEngine {
     const currentActor = this.getCurrentActor();
     if (currentActor) {
       this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
+      this.attackTurnState.delete(currentActor.id);
+      for (const interrupt of Array.from(this.stageInterrupts.values())) if (interrupt.actorId === currentActor.id) this.stageInterrupts.delete(interrupt.id);
+      this.fireTriggeredEffects('ON_TURN_START', currentActor.id);
 
       if (
         currentActor.usesDeathSaves &&
@@ -3968,6 +4491,7 @@ export class TacticalCombatEngine {
 
       if (!currentActor.isDead) {
         for (const hazard of this.hazards) {
+          if (hazard.type === 'pit' || hazard.type === 'bridge' || hazard.type === 'trap') continue;
           const dist = Math.hypot(currentActor.x - hazard.x, currentActor.y - hazard.y);          if (dist <= hazard.radiusCells) {            const hazardType =
               hazard.type === 'fire_zone' ? 'fire' :
               hazard.type === 'ice_patch' ? 'cold' :
@@ -4258,6 +4782,8 @@ export class TacticalCombatEngine {
       spellRuntimeState: this.spellRuntime.exportState(),
       combatEffectEvents: this.getCombatEffectEvents(),
       combatActionSequence: this.combatActionSequence,
+      triggeredEffects: this.triggeredEffects.size > 0 ? Array.from(this.triggeredEffects.values()).map((entry) => JSON.parse(JSON.stringify(entry))) : undefined,
+      stageInterrupts: this.stageInterrupts.size > 0 ? Array.from(this.stageInterrupts.values()).map((entry) => JSON.parse(JSON.stringify(entry))) : undefined,
       destructibleObjects: this.getDestructibleObjects(),
       combatReplayRecords: this.getCombatReplayRecords(),
       moraleStates: this.moraleEngine.exportState(),
@@ -4330,6 +4856,7 @@ export class TacticalCombatEngine {
       const currentActor = this.getCurrentActor();
       if (currentActor) {
         this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
+      this.attackTurnState.delete(currentActor.id);
       }
     }
     if (typeof data.seed === 'number') {
@@ -4359,6 +4886,8 @@ export class TacticalCombatEngine {
       }
       this.spellRuntime.setParticipantContext(this.getMutableParticipantsForSpellResolution());
     }
+    for (const entry of data.triggeredEffects || []) this.triggeredEffects.set(entry.id, JSON.parse(JSON.stringify(entry)));
+    for (const entry of data.stageInterrupts || []) this.stageInterrupts.set(entry.id, JSON.parse(JSON.stringify(entry)));
     this.combatEffectEvents = [...(data.combatEffectEvents || [])];
     this.combatReplayRecords = [...(data.combatReplayRecords || [])].slice(-100);
     this.moraleEngine.importState((data.moraleStates as any) || []);
@@ -4399,7 +4928,7 @@ export class TacticalCombatEngine {
       ? JSON.parse(JSON.stringify(data.initiativeRolls))
       : [];
     this.surprisedActorIds = new Set(
-      (data.surprisedActorIds || []).filter((id) => this.participants.has(id))
+      (data.surprisedActorIds || []).filter((id) => this.participants.has(id) && this.ruleIsOn('combat.surprise'))
     );
     this.combatBanner = typeof data.combatBanner === 'string' ? data.combatBanner : '';
     this.lastResolution = data.lastResolution ? JSON.parse(JSON.stringify(data.lastResolution)) : undefined;

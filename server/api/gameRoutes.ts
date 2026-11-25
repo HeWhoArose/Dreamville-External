@@ -31,6 +31,9 @@ import type { CombatEffectDefinition } from '../../src/types';
 import { combatEffectEngine } from '../domain/combatEffectEngine';
 import { combatTargetingEngine } from '../domain/combatTargetingEngine';
 import { worldEffectEngine } from '../domain/worldEffectEngine';
+import { applyAuthoredTerrain, loadAuthoredTerrain } from '../domain/combatTerrain';
+import { equipInCombat, throwWeapon, withAbilityModifier } from '../services/combatGearService';
+import { subscribeProgressionTriggers } from '../domain/progressionTriggers';
 import { combatSimulationEngine } from '../domain/combatSimulationEngine';
 import { combatReplayEngine } from '../domain/combatReplayEngine';
 import { combatAnimationService } from '../services/combatAnimationService';
@@ -3403,8 +3406,8 @@ gameRouter.get('/worlds/runs/:storyId/progression', async (req: Request, res: Re
       actorId,
       state: engine.getState(actorId) || null,
       modules: engine.getAllModules(),
-      unlockedFeatures: engine.getUnlockedFeatures(actorId),
-      triggeredAbilities: engine.getTriggeredAbilities(actorId),
+      unlockedFeatures: engine.getUnlockedFeatures(actorId, rulesProfile),
+      triggeredAbilities: engine.getTriggeredAbilities(actorId, undefined, rulesProfile),
       modifiers: engine.resolveModifiers(actorId, rulesProfile),
       genesisDivergence: worldRepository.getStoryRun(storyId)?.protagonist
         ? engine.detectGenesisDivergence(actorId, worldRepository.getStoryRun(storyId).protagonist)
@@ -3505,7 +3508,7 @@ gameRouter.post('/worlds/runs/:storyId/progression', async (req: Request, res: R
           return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId, profile) }, summary: `Progression module ${operation === 'ENABLE_MODULE' ? 'enabled' : 'disabled'}.` };
         }
         if (operation === 'TRIGGER_ABILITY') {
-          const result = progression.consumeTriggeredAbility(actorId, payload.abilityId, command.commandId);
+          const result = progression.consumeTriggeredAbility(actorId, payload.abilityId, command.commandId, profile);
           if (result.ability.capabilityId || result.ability.capabilityDefinition) {
             const { abilityService } = await import('../services/abilityService');
             const applied = abilityService.resolveAbilityApplication(
@@ -4300,7 +4303,7 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       if (doll.mainHand.defId === 'def_iron_sword' || doll.mainHand.name.includes('Sword')) {
         weaponFormula = '1d8+3';
       } else {
-        weaponFormula = (props.damageFormula as string) || '1d6+0';
+        weaponFormula = withAbilityModifier((props.damageFormula as string) || (props.damageDice as string) || '1d6', attackAbilityMod);
       }
     }
 
@@ -4355,6 +4358,8 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     };
 
     combatEngine.addParticipant(playerParticipant);
+    // Class and feature abilities that react to combat events join the fight with their owner.
+    subscribeProgressionTriggers(combatEngine, progressionEngine, actorId, transactionRepo.getRulesProfile(storyId));
 
     // Dynamic enemy seeding: Ensure canonical dead NPC identities are NEVER resurrected as alive (CH5 Issue B)
     let enemyId = (typeof req.body?.enemyId === 'string' && req.body.enemyId.trim())
@@ -4457,15 +4462,21 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       combatEngine.addParticipant(enemyParticipant);
     }
 
-    combatEngine.addHazard({
-      id: 'hazard_fire_1',
-      type: 'fire_zone',
-      x: 3,
-      y: 2,
-      radiusCells: 1,
-      durationTurns: 5,
-      damagePerTurn: 4,
-    });
+    // A location whose pack authored its terrain gets that battlefield; everywhere else keeps the default brazier.
+    const authoredTerrain = loadAuthoredTerrain(transactionRepo, storyId, player?.locationId);
+    if (authoredTerrain) {
+      applyAuthoredTerrain(combatEngine, authoredTerrain, { playerId: actorId, enemyId });
+    } else {
+      combatEngine.addHazard({
+        id: 'hazard_fire_1',
+        type: 'fire_zone',
+        x: 3,
+        y: 2,
+        radiusCells: 1,
+        durationTurns: 5,
+        damagePerTurn: 4,
+      });
+    }
 
     combatEngine.prepareEncounter({
       resetInitiatives: true,
@@ -5067,6 +5078,69 @@ gameRouter.post('/combat/control', async (req: Request, res: Response) => {
     return res.json({ success: true, result: (commandResult.data as any)?.result, combatState: state, commandId, canonicalEvent: commandResult.event });
   } catch {
     return res.status(500).json({ error: 'Failed to resolve combat control action.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/equip
+ * Draw or change gear in a fight. The first change each turn is the free object interaction; another costs the action.
+ */
+gameRouter.post('/combat/equip', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : '';
+    if (!itemId) return res.status(400).json({ success: false, errorReason: 'itemId is required.' });
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const slot = typeof req.body?.slot === 'string' && req.body.slot ? req.body.slot : undefined;
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_route', storyId, '/combat/equip', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
+    let outcome: ReturnType<typeof equipInCombat> | undefined;
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      { commandId, storyId, actorId, type: 'EQUIP', payload: { itemId, slot: slot || 'auto', inCombat: true }, source: 'PLAYER', transactionMode: 'STAGED' },
+      async (_command, context) => {
+        outcome = equipInCombat({ repository: context.repository, storyId, actorId, itemId, slot });
+        return { success: outcome.success, errorReason: outcome.errorReason, data: outcome, summary: outcome.success ? `Equipped ${outcome.equipped}.` : outcome.errorReason };
+      },
+    );
+    const combatState = getCombatStateHelper(worldRepository.getCombatEngine(storyId), storyId, actorId);
+    if (!commandResult.success) return res.status(400).json({ success: false, errorReason: commandResult.errorReason || outcome?.errorReason, combatState, rolledBack: commandResult.rolledBack });
+    return res.json({ success: true, ...outcome, combatState, commandId: commandResult.commandId });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Could not change gear.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/throw
+ * Throw the wielded weapon (or a named item) at a target. The weapon lands where it fell.
+ */
+gameRouter.post('/combat/throw', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const targetId = typeof req.body?.targetId === 'string' ? req.body.targetId : '';
+    if (!targetId) return res.status(400).json({ success: false, errorReason: 'targetId is required.' });
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const itemId = typeof req.body?.itemId === 'string' && req.body.itemId ? req.body.itemId : undefined;
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_route', storyId, '/combat/throw', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
+    let outcome: ReturnType<typeof throwWeapon> | undefined;
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      { commandId, storyId, actorId, type: 'ATTACK', payload: { targetId, thrown: true, itemId }, source: 'PLAYER', transactionMode: 'STAGED' },
+      async (_command, context) => {
+        await ensureCombatReadyForLegacyAction(storyId, actorId, context.repository);
+        outcome = throwWeapon({ repository: context.repository, storyId, actorId, targetId, itemId });
+        return { success: outcome.success, errorReason: outcome.errorReason, data: outcome, summary: outcome.success ? `Threw ${outcome.weapon}: ${outcome.hits ? 'hit' : 'miss'}.` : outcome.errorReason };
+      },
+    );
+    const combatState = getCombatStateHelper(worldRepository.getCombatEngine(storyId), storyId, actorId);
+    if (!commandResult.success) return res.status(400).json({ success: false, errorReason: commandResult.errorReason || outcome?.errorReason, combatState, rolledBack: commandResult.rolledBack });
+    return res.json({ success: true, ...outcome, combatState, commandId: commandResult.commandId });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'The throw failed.' });
   }
 });
 
@@ -5785,6 +5859,23 @@ gameRouter.post('/combat/simulate', async (req: Request, res: Response) => {
     }
     const seed = req.body?.seed === undefined ? undefined : Number(req.body.seed);
     const seeds = Array.isArray(req.body?.seeds) ? req.body.seeds.map((value: any) => Number(value)).filter(Number.isFinite) : [];
+    const sandboxMode = typeof req.body?.mode === 'string' ? req.body.mode : '';
+    if (['SINGLE_RUN', 'REPLAY', 'BATCH_SIMULATION', 'SCENARIO_MATRIX'].includes(sandboxMode)) {
+      return res.json({
+        definitionAuthority,
+        sandbox: combatSimulationEngine.run({
+          engine,
+          actorId,
+          targetIds,
+          mode: sandboxMode as any,
+          definition,
+          definitions: Array.isArray(req.body?.definitions) ? (req.body.definitions as CombatEffectDefinition[]) : undefined,
+          seed,
+          seeds,
+          replayActionId: typeof req.body?.replayActionId === 'string' ? req.body.replayActionId : undefined,
+        }),
+      });
+    }
     if (Array.isArray(req.body?.definitions) && req.body.definitions.length) {
       return res.json({
         definitionAuthority,
@@ -5801,6 +5892,57 @@ gameRouter.post('/combat/simulate', async (req: Request, res: Response) => {
     return res.json({ definitionAuthority, result: combatSimulationEngine.simulate({ engine, actorId, targetIds, definition, seed }) });
   } catch (error: any) {
     return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to simulate combat effect.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/ability-draft
+ * Player-facing ability creation: describe it (or send a definition from the editor), get validation, sandbox diagnostics and a
+ * simulated preview. Nothing is registered until the player confirms.
+ */
+gameRouter.post('/combat/ability-draft', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const actorId = String(req.body?.actorId || worldRepository.getPlayerLifecycle(storyId)?.actorId || ('player_actor_' + storyId));
+    const { abilityDraftService } = await import('../services/abilityDraftService');
+    const draft = await abilityDraftService.propose({
+      repository: worldRepository,
+      storyId,
+      actorId,
+      description: String(req.body?.description || ''),
+      definition: req.body?.definition && typeof req.body.definition === 'object' ? (req.body.definition as CombatEffectDefinition) : undefined,
+    });
+    return res.json({ success: draft.status === 'READY_FOR_CONFIRMATION', draft });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Ability draft failed.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/ability-draft/confirm
+ * The player confirms a reviewed draft; only then is the ability registered and acquired.
+ */
+gameRouter.post('/combat/ability-draft/confirm', async (req: Request, res: Response) => {
+  try {
+    resolveStoryId(req, true);
+    const { abilityDraftService } = await import('../services/abilityDraftService');
+    const result = abilityDraftService.confirm({ repository: worldRepository, draftId: String(req.body?.draftId || ''), playerConfirmed: req.body?.playerConfirmed === true });
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Ability confirmation failed.' });
+  }
+});
+
+/**
+ * GET /api/game/combat/ability-drafts
+ */
+gameRouter.get('/combat/ability-drafts', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const { abilityDraftService } = await import('../services/abilityDraftService');
+    return res.json({ drafts: abilityDraftService.listDrafts(storyId) });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Could not list ability drafts.' });
   }
 });
 

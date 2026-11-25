@@ -15,11 +15,12 @@ export const DICE_THEME_IDS = [
 	'2D_EMERALD',
 	'2D_FROST',
 	'2D_OBSIDIAN',
+	'GILDED_CARD',
 ] as const;
 
 export type DiceThemeId = typeof DICE_THEME_IDS[number];
 
-export type DiceThemeMode = '2D' | '3D';
+export type DiceThemeMode = '2D' | '3D' | 'CARD';
 
 export type DiceThemeAvailability = 'AVAILABLE' | 'FALLBACK_ONLY' | 'UNAVAILABLE';
 
@@ -51,6 +52,7 @@ export const CANONICAL_DICE_THEMES: readonly CanonicalDiceTheme[] = [
 	{ id: '2D_EMERALD', mode: '2D', label: '2D Emerald Quest', assetPath: '', availability: 'AVAILABLE', supportedDiceTypes: ALL_DICE_TYPES },
 	{ id: '2D_FROST', mode: '2D', label: '2D Frost Rune', assetPath: '', availability: 'AVAILABLE', supportedDiceTypes: ALL_DICE_TYPES },
 	{ id: '2D_OBSIDIAN', mode: '2D', label: '2D Obsidian Glyph', assetPath: '', availability: 'AVAILABLE', supportedDiceTypes: ALL_DICE_TYPES },
+	{ id: 'GILDED_CARD', mode: 'CARD', label: 'Gilded Card', assetPath: '', availability: 'AVAILABLE', supportedDiceTypes: ALL_DICE_TYPES },
 ];
 
 export const DEFAULT_DICE_THEME: DiceThemeId = 'CLASSIC';

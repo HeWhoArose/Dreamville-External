@@ -5,6 +5,8 @@ import { WorldClock } from './worldClock';
 import type { ImprovisableSource } from './locationArchetypes';
 import type { ScheduledEventKind } from './livingWorldSimulation';
 import { WorldDirectorPreparationService } from '../services/worldDirectorPreparationService';
+import { saveAuthoredTerrain, validateAuthoredTerrain, type AuthoredTerrain } from './combatTerrain';
+import type { BossPhaseDefinition } from './bossPhaseEngine';
 
 /**
  * Authored world pack: everything a story needs to be playable without an LLM inventing its world.
@@ -17,6 +19,8 @@ export interface WorldPackLocation {
 	discovered?: boolean; tags?: string[];
 	/** What the scene lets a player improvise into items ("snap a branch", "pull a spear from the debris"). */
 	improvisable?: ImprovisableSource[];
+	/** The battlefield for a fight at this location: bounds, cover, pits, bridges, traps and start positions. */
+	terrain?: AuthoredTerrain;
 }
 /** A weapon, shield, armour piece or tool lying in a location, wieldable once picked up. */
 export interface WorldPackItem {
@@ -40,9 +44,18 @@ export interface WorldPackEvent {
 	id: string; kind: ScheduledEventKind; name: string; locationId: string;
 	startsAfterMinutes: number; deadlineAfterMinutes?: number;
 }
+/** What an NPC brings to a fight. Without it the encounter falls back to generic creature numbers. */
+export interface WorldPackCombat {
+	level?: number; hp: number; armorClass: number;
+	/** Speed in feet. */
+	speed?: number;
+	attackBonus: number; damageFormula: string; damageType?: string;
+	/** Boss phases: health thresholds that change how the fight goes. */
+	phases?: BossPhaseDefinition[];
+}
 export interface WorldPackNpc {
 	id: string; name: string; role: string; locationId: string; description: string; dialogueStyle?: string;
-	motivations?: string[]; knownToProtagonist?: boolean; carries?: WorldPackCarriedItem[]; knows: string[]; sharing: 'FREE' | 'GUARDED' | 'SECRET'; secrets: string[]; refuses: string[];
+	motivations?: string[]; knownToProtagonist?: boolean; carries?: WorldPackCarriedItem[]; combat?: WorldPackCombat; knows: string[]; sharing: 'FREE' | 'GUARDED' | 'SECRET'; secrets: string[]; refuses: string[];
 }
 export interface WorldPackFact {
 	id: string; statement: string; subject: string; predicate: string; object: string; knownAtStart: boolean; clueId?: string;
@@ -124,6 +137,18 @@ export function validateWorldPack(pack: WorldPack): string[] {
 		if (event.deadlineAfterMinutes !== undefined && event.deadlineAfterMinutes < event.startsAfterMinutes) problems.push(`event "${event.id}" has a deadline before it starts`);
 	}
 	for (const location of pack.locations) {
+		if (location.terrain) problems.push(...validateAuthoredTerrain(location.terrain, `location "${location.id}" terrain`));
+	}
+	for (const npc of pack.npcs) {
+		const combat = npc.combat;
+		if (!combat) continue;
+		if (!(combat.hp >= 1)) problems.push(`npc "${npc.id}" combat needs hp of at least 1`);
+		if (!(combat.armorClass >= 1)) problems.push(`npc "${npc.id}" combat needs an armor class`);
+		if (!combat.damageFormula?.trim()) problems.push(`npc "${npc.id}" combat needs a damage formula`);
+		const phaseIds = (combat.phases || []).map((phase) => phase.id);
+		if (new Set(phaseIds).size !== phaseIds.length) problems.push(`npc "${npc.id}" has duplicate boss phase ids`);
+	}
+	for (const location of pack.locations) {
 		const keys = (location.improvisable || []).map((source) => source.key);
 		if (new Set(keys).size !== keys.length) problems.push(`location "${location.id}" has duplicate improvisable keys`);
 	}
@@ -169,6 +194,7 @@ export async function applyWorldPack(repository: any, storyId: string, pack: Wor
 			discovered: Boolean(location.discovered), sceneObjects: [], tags: location.tags || [],
 			...(location.improvisable?.length ? { environment: { features: [], improvisable: location.improvisable } } : {}),
 		} as any);
+		if (location.terrain) saveAuthoredTerrain(repository, storyId, location.id, location.terrain);
 	}
 	for (const [from, to, distanceKm, terrain] of pack.routes) {
 		for (const [a, b] of [[from, to], [to, from]]) {
@@ -253,7 +279,11 @@ export async function applyWorldPack(repository: any, storyId: string, pack: Wor
 			background: { origin: npc.description, importantEvents: [], canonicalSecrets: npc.secrets },
 			worldState: { locationId: npc.locationId, currentActivity: 'present', isAlive: true, presence: 'present' },
 			lifecycle: { status: 'ACTIVE' },
-			metadata: { sourcePack: pack.id, sharing: npc.sharing, refuses: npc.refuses },
+			...(npc.combat ? { coreStats: { level: npc.combat.level ?? 1, hpCurrent: npc.combat.hp, hpMax: npc.combat.hp, armorClass: npc.combat.armorClass, speed: npc.combat.speed ?? 30, abilityScores: {} } } : {}),
+			metadata: {
+				sourcePack: pack.id, sharing: npc.sharing, refuses: npc.refuses,
+				...(npc.combat ? { attackBonus: npc.combat.attackBonus, damageFormula: npc.combat.damageFormula, ...(npc.combat.damageType ? { damageType: npc.combat.damageType } : {}), combat: { bossPhases: npc.combat.phases || [] } } : {}),
+			},
 			provenance: { source: 'WORLD_PACK', createdBy: 'SYSTEM' },
 		});
 		CharacterCanonSteward.initializeCharacterFromCard(card);
@@ -264,7 +294,7 @@ export async function applyWorldPack(repository: any, storyId: string, pack: Wor
 				...(c.maxDurability ? { maxDurability: c.maxDurability } : {}),
 				modifiers: [
 					...(c.attackBonus ? [{ id: `${npc.id}_atk_${n}`, target: 'combat.attackBonus', mode: 'ADD' as const, value: c.attackBonus, precedence: 60, stackGroup: 'WEAPON_ATTACK' }] : []),
-					...(c.armorBonus ? [{ id: `${npc.id}_ac_${n}`, target: 'coreStats.armorClass', mode: 'ADD' as const, value: c.armorBonus, precedence: 60, stackGroup: 'ARMOR_AC' }] : []),
+					...(c.armorBonus ? [{ id: `${npc.id}_ac_${n}`, target: 'coreStats.armorClass', mode: 'ADD' as const, value: c.armorBonus, precedence: 60, stackGroup: c.category === 'Shield' || c.slot === 'offHand' ? 'SHIELD_AC' : 'ARMOR_AC' }] : []),
 				],
 			}));
 			repository.getInventoryEngine(storyId).seedFromGenesisEquipment(npc.id, {

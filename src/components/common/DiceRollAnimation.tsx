@@ -3,6 +3,7 @@ import type { RollRecord } from '../../types';
 import { Dices, Loader2, RotateCw } from 'lucide-react';
 import { useAudioHaptic } from '../AudioHapticManager';
 import { getDiceThemePreset } from './diceThemes';
+import { GildedDiceCard, type GildedAdvantage } from './GildedDiceCard';
 
 interface DiceRollAnimationProps {
 	roll: RollRecord;
@@ -17,6 +18,14 @@ interface DiceRollAnimationProps {
 	showRollButton?: boolean;
 	autoReveal?: boolean;
 	revealedOverride?: boolean;
+	/** Gilded card: bonuses shown under the check name ("+1 Wisdom"). */
+	bonusesLabel?: string;
+	/** Gilded card: the difficulty class panel. Falls back to `defenseValue` when it is a number. */
+	difficultyClass?: number;
+	advantage?: GildedAdvantage;
+	avatar?: string;
+	/** Gilded card: clicking the card body opens the roll for customisation. */
+	onCustomize?: () => void;
 }
 
 export type DieVisualType = 'D4' | 'D6' | 'D8' | 'D10' | 'D12' | 'D20' | 'D100' | 'GENERIC';
@@ -154,7 +163,37 @@ function resultTone(roll: RollRecord): string {
 	return 'border-violet-300/25 bg-gradient-to-br from-violet-500/15 via-fuchsia-500/10 to-sky-500/10 text-white shadow-[0_0_45px_rgba(139,92,246,0.16)]';
 }
 
-export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
+export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = (props) => {
+	const { playSfx, triggerHaptic, settings } = useAudioHaptic();
+	const theme = getDiceThemePreset(props.roll.diceThemeId || settings.diceTheme);
+	if (theme.mode !== 'CARD') return <PhysicalDiceRollAnimation {...props} />;
+	const dc = props.difficultyClass ?? (typeof props.defenseValue === 'number' ? props.defenseValue : undefined);
+	return (
+		<GildedDiceCard
+			roll={props.roll}
+			title={props.title || 'Roll'}
+			bonusesLabel={props.bonusesLabel ?? props.subtitle}
+			difficultyClass={dc}
+			difficultyLabel={props.defenseLabel === 'ARMOR CLASS' ? 'Armor Class' : 'Difficulty Class'}
+			kind={props.defenseLabel === 'ARMOR CLASS' ? 'ATTACK' : props.defenseLabel === 'TARGET' ? 'DAMAGE' : 'CHECK'}
+			resultSuffix={props.resultSuffix}
+			advantage={props.advantage}
+			avatar={props.avatar}
+			autoRoll={props.autoReveal}
+			revealed={resolveDiceRevealState(props.revealedOverride, false)}
+			onCustomize={props.onCustomize}
+			onRollStart={() => { triggerHaptic('medium'); playSfx('dice.roll', 'HIGH', 0.82); }}
+			onRevealed={(outcome) => {
+				playSfx(outcome === 'CRITICAL_SUCCESS' ? 'dice.critical' : outcome === 'CRITICAL_FAILURE' ? 'dice.failure' : 'dice.result', outcome.startsWith('CRITICAL') ? 'HIGH' : 'NORMAL', 0.82);
+				triggerHaptic(outcome === 'CRITICAL_SUCCESS' ? 'heavy' : outcome === 'CRITICAL_FAILURE' ? 'medium' : 'light');
+				props.onComplete?.();
+			}}
+			className={props.className}
+		/>
+	);
+};
+
+const PhysicalDiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	roll,
 	onComplete,
 	className = '',

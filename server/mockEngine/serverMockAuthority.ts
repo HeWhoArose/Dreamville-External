@@ -52,7 +52,7 @@ import {
   isConsequenceCovered as sharedNarrativeConsequenceCovered,
 } from '../domain/narrativeConsequenceCoverage';
 import { analyzeKnownFactUse } from '../domain/knownFactUse';
-import type { GuardNote, GuardOutcome } from '../domain/narrationGuardPolicy';
+import { namesTravelDestination, type GuardNote, type GuardOutcome } from '../domain/narrationGuardPolicy';
 import { recordNarrationQuality, type NarrationQualityRecord } from '../domain/narrationQualityLedger';
 
 /** Token budget for the live narration prompt's context sections (situation, lore, research). */
@@ -860,7 +860,8 @@ export class ServerMockAuthority {
       [params.intent.informationGoal, params.intent.originalText].filter(Boolean).join(' '),
       [...((params.situation as any).playerKnowledge?.knownFacts || []), ...((params.situation as any).relevantLore || [])],
     ).used;
-    const actionFidelityValid = observationLike || (answeredFromKnownFact && missingConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
+    const travelResponds = Boolean(params.intent.movementIntent) && namesTravelDestination(params.narrativeText, params.intent.locationTarget?.name);
+    const actionFidelityValid = observationLike || ((answeredFromKnownFact || travelResponds) && missingConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
     const actionFidelityReason = actionFidelityValid
       ? undefined
       : missingConsequences.length

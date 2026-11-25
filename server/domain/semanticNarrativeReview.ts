@@ -355,11 +355,24 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 	return false;
 }
 
-function hasMajorAgencyTakeover(narration: string): boolean {
-	return containsAny(
-		narration,
-		/\b(?:you|the protagonist|your character)\s+(?:decide|decides|decided|choose|chooses|chose|agree|agrees|agreed|follow|follows|followed|leave|leaves|left|attack|attacks|attacked|kill|kills|killed)\b/i,
-	);
+const AGENCY_VERB = /\b(?:you|the protagonist|your character)\s+(decide|decides|decided|choose|chooses|chose|agree|agrees|agreed|follow|follows|followed|leave|leaves|left|attack|attacks|attacked|kill|kills|killed)\b/gi;
+const AGENCY_STEMS: Record<string, string> = { decides: 'decide', decided: 'decide', chooses: 'choose', chose: 'choose', agrees: 'agree', agreed: 'agree', follows: 'follow', followed: 'follow', leaves: 'leave', left: 'leave', attacks: 'attack', attacked: 'attack', kills: 'kill', killed: 'kill' };
+const MOVEMENT_ACTION_WORDS = /\b(?:head|go|walk|travel|set out|leave|depart|follow|run|ride|drive|make my way|make for)\b/i;
+
+/**
+ * Narration takes over a choice when it has the character decide, follow, leave or attack on their own. A verb the player's own
+ * action already named is the player's choice, not the narration's: "I head out to the docks" makes "you leave the office" the
+ * response, not a takeover (every live travel reply was rejected for this).
+ */
+export function hasMajorAgencyTakeover(narration: string, playerAction = ''): boolean {
+	const action = String(playerAction || '').toLowerCase();
+	for (const match of String(narration || '').matchAll(AGENCY_VERB)) {
+		const verb = match[1].toLowerCase();
+		const base = AGENCY_STEMS[verb] || verb;
+		const chosenByPlayer = action.includes(base) || (/^(?:leave|follow)$/.test(base) && MOVEMENT_ACTION_WORDS.test(action));
+		if (!chosenByPlayer) return true;
+	}
+	return false;
 }
 
 function isConditionDepictedInProse(narrationLower: string, rawCondition: string): boolean {
@@ -875,7 +888,7 @@ export class SemanticNarrativeReview {
 			}
 		}
 
-		if (hasMajorAgencyTakeover(narration) && !/\b(?:you must|you cannot|you can|you may|you are able)\b/i.test(lower)) {
+		if (hasMajorAgencyTakeover(narration, String(intent.originalText || intent.action || '')) && !/\b(?:you must|you cannot|you can|you may|you are able)\b/i.test(lower)) {
 			violations.push({ code: 'PLAYER_AGENCY', message: 'Narration appears to decide a consequential player choice rather than present the consequence and leave the decision open.', severity: 'MEDIUM' });
 		}
 
@@ -906,7 +919,9 @@ export class SemanticNarrativeReview {
 		if (informationSeeking) {
 			const authorizedFacts = [...((situation as any).playerKnowledge?.knownFacts || []), ...((situation as any).relevantLore || [])];
 			const question = [intent.informationGoal, intent.originalText].filter(Boolean).join(' ');
-			for (const ignored of findIgnoredKnownFacts(narration, question, authorizedFacts)) {
+			// A character answering in quoted speech answers the question: judge narration and dialogue together.
+			const spoken = (turnPackage.dialogue || []).map((line: any) => String(line?.text || '')).join(' ');
+			for (const ignored of findIgnoredKnownFacts(`${narration} ${spoken}`, question, authorizedFacts)) {
 				violations.push({
 					code: 'UNSUPPORTED_CLAIM',
 					message: `Narration answers an information-seeking question without using the known fact that answers it: "${ignored}".`,

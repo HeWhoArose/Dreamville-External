@@ -193,3 +193,25 @@ Three live runs of `npm run narration:baseline` (Gemini 3.5 Flash Lite then Groq
 Earlier live runs on the same route scored 0 to 4 of 8 (strict, soft gates and history variants all inside that range), so this is the first configuration that clears the noise. In every run the information answers were grounded in the player's known facts: "Where exactly was he found?" returned Pier 4 (first time it did so consistently, including "Pier Four" in Mei's voice), "Who found the body?" named Silas Okafor, and "What did they say about the bullet casing?" returned the .38 beside the body. No turn was lost to provider unavailability in these runs.
 
 Remaining rejections (all hard by policy): "I ask Mei what the police have said" (twice, environment-only or too little acknowledgement), "I examine the bloodstain" (twice; a reply that does not respond to the action), "I head out to the docks" (once). Provider calls per turn were about 3.5 to 4, with a repair used on most accepted turns, so repair is doing the work, not the first reply: a prompt that gets more first-pass answers right would cut calls.
+
+## 19. Remaining rejections and the repair rate: diagnosis and fixes (2026-11-25)
+
+Method: three recorded live runs (`diag3`) with per-turn findings; the replies behind each rejection were read from the recordings.
+
+Why repairs fired (13 of 14 accepted live turns): "Narrative richness IMPROVE" (12 findings) and the literary-voice review (3 of 8 replayed turns) triggered a repair call on almost every turn. Neither is a defect, only polish. A repair now fires for concrete findings (unsupported claims, action fidelity, environment excess, story beat) and for richness only below `NARRATION_POLISH_FLOOR` (default 0.55); voice polish alone no longer fires one in soft mode.
+
+Why attempts were wasted: 14 spurious "no distinctive lexical anchor for canonical location" failures. A reply naming the person in the scene ("Mei") could not anchor because character names were matched on 5+ letter words. Names are now matched on 3+ letters.
+
+Why turns were rejected, and the fix for each:
+| Turn | Cause | Fix |
+| --- | --- | --- |
+| What have the police said | no known fact mentioned the police, so no answering block | authored `fact_police_position` in the Ren pack; Mei and Calder know it |
+| Mei answers in a quote | the answer in dialogue was not counted (environment gate, canon check) | narration and dialogue are judged together |
+| Examine the bloodstain | describing the examined thing read as scenery padding | `describesObservedTarget` exempts a reply that names what was examined (both the environment counter and the action-substance gate) |
+| Head out to the docks | (1) "you leave the office" counted as the narration deciding for the player; (2) a departure reply is scenic and has no consequence verb | verbs the player's own action named are not a takeover; `namesTravelDestination` satisfies the scenery and fidelity gates; a TRAVEL DIRECTIVE tells the model to name the destination once and not to arrive |
+| Reply in Hindi, replies in first person | nothing in the prompt fixed language or person | the style now says to write in the language of the player action and address the character as "you" |
+| Answers opened with weather | | the answer block says to state the answer in the first sentence |
+
+Replay on the enlarged corpus (4 recordings of 8 turns, 42 recorded narration replies): 8 of 8 turns accepted, repair rate 3 of 8, outcomes kept_soft 5 and rewritten 3 (before: 7 of 8 and 5 of 7 repaired). `tests/narration-replay.test.ts` asserts the travel, bloodstain and quoted-answer turns and a repair rate of at most 0.5. The replay run now takes about 10 s instead of 90 s because far fewer calls are made.
+
+Live: one clean run after the first batch of changes (before the scenery exemptions and the agency fix): 6 of 8 accepted, repair rate 3 of 6 (was 13 of 14), 27 provider calls; the police question was accepted live for the first time with Mei saying "the harbor police are treating it as a robbery gone wrong... sealed Pier 4", the sentence-cut path fired in real use, answers opened with the fact. The next two live runs and a final one **hit the free-tier daily quotas** (Gemini RPD, Groq rate limit) and returned unavailable, so the final changes (scenery exemptions, agency rule, travel fidelity) are verified on recorded real replies and by tests, **not yet live**. Re-run `npm run narration:baseline` with `BASELINE_MODE=live` when quotas reset.

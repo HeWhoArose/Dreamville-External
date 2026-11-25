@@ -162,6 +162,7 @@ export function defaultNarrationStyle(): string {
 		'Do not turn attempts into success/failure without a canonical outcome.',
 		'Listening, watching, observing, overhearing, or eavesdropping without speech must not make the player speak. Preserve both movement and observation when combined.',
 		'Keep rumor/hearsay uncertain and stay in the canonical scene/time unless supplied state confirms a change.',
+		'Write in the language of the player action (English unless they wrote otherwise). Address the player character as "you"; never narrate as the player in the first person.',
 		'Do not expose research or engine terminology. Follow this turn’s Narrative Quality Contract for length.',
 	].join(' ');
 }
@@ -218,6 +219,20 @@ function compactRelevantResearch(value: string, maxChars: number, priorities: st
 }
 
 /**
+ * A turn that sets out for another location: the engine has not committed the move, so the narration may show the
+ * departure and the route but must not arrive. Weak models either omit the destination or narrate arriving; naming the
+ * rule and the destination in the prompt avoids both (live: "I head out to the docks" was rejected for each).
+ */
+export function buildTravelDirective(intent: PlayerIntent, currentLocationName: string): string {
+	const destination = intent.locationTarget?.name;
+	if (!intent.movementIntent || !destination) return '';
+	return [
+		`The player is setting out from ${currentLocationName} toward ${destination}. The move is not yet committed.`,
+		`Show the departure and the way there, and name ${destination} once. Do not describe arriving or anything that is at ${destination}.`,
+	].join(' ');
+}
+
+/**
  * For information-seeking turns, the authorized facts that answer the player's question, worded as a block placed
  * next to the instruction (reference study: Talemate's question-conditioned query path). Returns '' when none apply.
  */
@@ -240,6 +255,7 @@ export function buildAnswerBearingFactsBlock(blocks: Array<{ kind: string; conte
 	return [
 		'The player already holds these established facts about this question. Answer from them, in character, in specific terms.',
 		'Do not claim that nobody knows, that records are silent, or that the answer is unavailable when a fact below answers it.',
+		'State the answer in the first sentence (or as a character\'s quoted line). Do not open with weather, lamplight or other ambient description.',
 		...statements.map((statement) => '- ' + statement),
 	].join('\n');
 }
@@ -325,6 +341,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	// the instruction. Ours left the answering facts buried in research and offered "no reliable answer" as an
 	// easy exit, so models took it. For information questions, restate the matching authorized facts last.
 	const answerBearingFacts = buildAnswerBearingFactsBlock(boundedResearch.blocks || [], input.intent);
+	const travelDirective = buildTravelDirective(input.intent, input.situation?.location?.name || 'the current location');
 
 	const compose = (
 		researchContext: string,
@@ -365,6 +382,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('SUPPORTING WORKING CONTEXT', workingContext),
 		overrides?.canonicalConstraints || canonicalConstraints,
 		answerBearingFacts ? section('ESTABLISHED FACTS THAT ANSWER THIS QUESTION', answerBearingFacts) : '',
+		travelDirective ? section('TRAVEL DIRECTIVE', travelDirective) : '',
 		section('OUTPUT CONTRACT', overrides?.outputContract || outputContract),
 	].filter(Boolean).join('\n\n');
 

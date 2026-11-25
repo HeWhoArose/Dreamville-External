@@ -69,3 +69,38 @@ test('a repair only counts when it strictly reduces the findings', () => {
 	assert.equal(repairImproves(1, 1), false);
 	assert.equal(repairImproves(1, 2), false);
 });
+
+import { describesObservedTarget } from '../server/domain/narrationGuardPolicy';
+
+test('examining a named thing is answered by describing it: the reply naming the target is not scenery padding', () => {
+	const reply = 'You kneel by the chalk outline. The dark crimson stain clings to the weathered planks, soaked deep into the grain.';
+	assert.equal(describesObservedTarget(reply, 'I examine the bloodstain.'), true, '"stain" covers "bloodstain"');
+	assert.equal(describesObservedTarget(reply, 'Inspect the chalk outline'), true);
+});
+
+test('a reply that never names what was examined is not exempt', () => {
+	const scenery = 'Rain patters against the frosted glass while the desk lamp hums over the oak surface.';
+	assert.equal(describesObservedTarget(scenery, 'I examine the bloodstain.'), false);
+});
+
+test('only observation actions qualify, and filler words are not targets', () => {
+	assert.equal(describesObservedTarget('The stain is dark and old.', 'I walk to the bloodstain.'), false);
+	assert.equal(describesObservedTarget('Something about anything around.', 'I look around closely'), false, 'filler words are not targets');
+	assert.equal(describesObservedTarget('', 'I examine the bloodstain.'), false);
+});
+
+import { namesTravelDestination } from '../server/domain/narrationGuardPolicy';
+import { hasMajorAgencyTakeover } from '../server/domain/semanticNarrativeReview';
+
+test('a travel reply naming the destination is responding to the action', () => {
+	assert.equal(namesTravelDestination('You step out into the rain, the road toward the docks slick under the lamps.', 'Warehouse Docks Pier 4'), true);
+	assert.equal(namesTravelDestination('You step out into the rain.', 'Warehouse Docks Pier 4'), false);
+	assert.equal(namesTravelDestination('You step out into the rain.', undefined), false);
+});
+
+test('a verb the player chose is not an agency takeover; one the narration invents still is', () => {
+	assert.equal(hasMajorAgencyTakeover('You leave the desk behind and step into the rain.', 'I head out to the docks.'), false, 'leaving is the movement the player asked for');
+	assert.equal(hasMajorAgencyTakeover('You follow the clerk down the stairs.', 'I follow the clerk.'), false);
+	assert.equal(hasMajorAgencyTakeover('You decide to confront Lang and attack him.', 'I look at the desk.'), true);
+	assert.equal(hasMajorAgencyTakeover('You attack the guard.', 'I examine the bloodstain.'), true, 'an attack nobody asked for is a takeover');
+});

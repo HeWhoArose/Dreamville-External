@@ -220,7 +220,8 @@
         "fact_found_by_watchman",
         "fact_casing_38",
         "fact_widow_retained",
-        "fact_calder_warning"
+        "fact_calder_warning",
+        "fact_police_position"
       ],
       "sharing": "FREE",
       "secrets": [],
@@ -243,7 +244,8 @@
         "fact_found_by_watchman",
         "fact_casing_38",
         "fact_watch_1142",
-        "fact_calder_suspects_watchman"
+        "fact_calder_suspects_watchman",
+        "fact_police_position"
       ],
       "sharing": "GUARDED",
       "secrets": [
@@ -406,6 +408,14 @@
       "subject": "Inspector Calder",
       "predicate": "warned",
       "object": "Crimson Eye Agency",
+      "knownAtStart": true
+    },
+    {
+      "id": "fact_police_position",
+      "statement": "The harbor police are treating it as a robbery gone wrong at the docks, have sealed Pier 4, and want private detectives kept clear.",
+      "subject": "Harbor police",
+      "predicate": "police_position",
+      "object": "robbery gone wrong; Pier 4 sealed; private detectives kept clear",
       "knownAtStart": true
     },
     {

@@ -89,6 +89,34 @@ export function classifyNarrationFailure(reason: string | undefined | null): Fin
 	return 'HARD';
 }
 
+const OBSERVATION_ACTION = /^\s*(?:i\s+)?(?:carefully\s+|closely\s+)?(?:examine|inspect|study|look|search|check|observe|scan|survey|read)\b/i;
+const NON_TARGET_WORDS = new Set(['around', 'closely', 'carefully', 'anything', 'something', 'about', 'there', 'where', 'which', 'while', 'looking', 'searching', 'examine', 'inspect', 'study', 'check', 'search', 'observe', 'survey']);
+
+/**
+ * Observation actions ("I examine the bloodstain") are answered by describing the thing observed, which the environment-excess
+ * counter reads as scenery. When the reply names what was examined, that description is the answer, not padding.
+ * Matches on word stems both ways ("bloodstain" is covered by "stain").
+ */
+export function describesObservedTarget(narration: string, playerAction: string): boolean {
+	if (!OBSERVATION_ACTION.test(String(playerAction || ''))) return false;
+	const targets = String(playerAction || '').toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 5 && !NON_TARGET_WORDS.has(word));
+	if (targets.length === 0) return false;
+	const text = String(narration || '').toLowerCase();
+	const words = text.split(/[^a-z0-9]+/).filter((word) => word.length >= 4);
+	return targets.some((target) => text.includes(target) || words.some((word) => target.includes(word)));
+}
+
+/**
+ * A travel reply is about the route and the departure, which reads as scenery to the environment counters. When the reply names
+ * the destination the player set out for, it is responding to the action.
+ */
+export function namesTravelDestination(narration: string, destinationName: string | undefined | null): boolean {
+	const words = String(destinationName || '').toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 4);
+	if (words.length === 0) return false;
+	const text = String(narration || '').toLowerCase();
+	return words.some((word) => text.includes(word));
+}
+
 /** Splits into sentences while keeping the terminating punctuation. */
 function splitSentences(text: string): string[] {
 	return String(text || '').split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean);

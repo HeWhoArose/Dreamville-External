@@ -58,6 +58,11 @@ export interface BaselineTurnResult {
 	narration: string;
 	/** Guard policy outcome for the turn: quiet, rewritten, cut, kept_soft, rejected_hard, unavailable, none. */
 	guardOutcome?: string;
+	/** What the guard found (severity and reason), why a repair fired, and whether one was used. */
+	findings?: Array<{ severity: string; reason: string }>;
+	repairUsed?: boolean;
+	/** The full narration (not truncated) for diagnosis. */
+	fullNarration?: string;
 	/** Replay only: the turn had at least one recorded narration reply, so its outcome says something about the gates. */
 	scorable?: boolean;
 	recordedAccepted?: boolean;
@@ -72,7 +77,7 @@ export const DEFAULT_TURNS: BaselineTurn[] = [
 	{ action: 'I look around the office and check my desk for anything about the Pendelton case.' },
 	{ action: 'Who found the body?', expectFacts: ['Okafor'] },
 	{ action: 'Where exactly was he found?', expectFacts: ['Pier 4'] },
-	{ action: 'I ask Mei what the police have said so far.', expectFacts: ['Calder'] },
+	{ action: 'I ask Mei what the police have said so far.', expectFacts: ['robbery'] },
 	{ action: 'What did they say about the bullet casing?', expectFacts: ['.38'] },
 	{ action: 'I head out to the docks.' },
 	{ action: 'I examine the bloodstain.', moveTo: 'loc_warehouse_docks' },
@@ -231,6 +236,9 @@ export async function runNarrationBaseline(options: BaselineOptions): Promise<Ba
 				factsInPrompt: (turn.expectFacts || []).map((fact) => ({ fact, inPrompt: prompts.some((prompt) => prompt.includes(fact)) })),
 				narration: String(body.narrativeResponse || '').slice(0, 600),
 				guardOutcome: body.narrativeQuality?.outcome,
+				findings: body.narrativeQuality?.findings,
+				repairUsed: body.narrativeQuality?.repairUsed,
+				fullNarration: String(body.narrativeResponse || ''),
 				scorable: replay ? (recordedTurn?.replies || []).some((reply) => reply.kind === 'narrate') : undefined,
 				recordedAccepted: recordedTurn?.recordedAccepted,
 			});
@@ -244,6 +252,8 @@ export async function runNarrationBaseline(options: BaselineOptions): Promise<Ba
 		const guardOutcomes: Record<string, number> = {};
 		for (const entry of report) guardOutcomes[entry.guardOutcome || 'unknown'] = (guardOutcomes[entry.guardOutcome || 'unknown'] || 0) + 1;
 		summary.guardOutcomes = guardOutcomes;
+		const acceptedTurns = report.filter((entry) => entry.accepted);
+		summary.repairRate = acceptedTurns.length ? `${acceptedTurns.filter((entry) => entry.repairUsed).length}/${acceptedTurns.length}` : '0/0';
 		if (replay) {
 			const scorable = report.filter((entry) => entry.scorable);
 			summary.scorableTurns = scorable.length;

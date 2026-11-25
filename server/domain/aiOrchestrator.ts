@@ -22,7 +22,7 @@ import { CurrentSituationBuilder, type CurrentSituation } from './currentSituati
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
-import { classifyNarrationFailure, cutOffendingSentences, isReadableNarration, type GuardNote, type GuardOutcome } from './narrationGuardPolicy';
+import { classifyNarrationFailure, cutOffendingSentences, describesObservedTarget, isReadableNarration, namesTravelDestination, type GuardNote, type GuardOutcome } from './narrationGuardPolicy';
 import { buildAnswerBearingFactsBlock, narrationRecentTurnWindow, buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
@@ -3180,6 +3180,12 @@ export function normalizeTranscriptionProviderText(rawText: string): { valid: bo
 /** Soft quality gates are on by default; NARRATION_SOFT_GATES=0 restores strict rejection (for A/B measurement). */
 function softNarrationGatesEnabled(): boolean {
   return process.env.NARRATION_SOFT_GATES !== '0';
+}
+
+/** Richness score below which an "IMPROVE" verdict is worth a polish call on its own. NARRATION_POLISH_FLOOR overrides (default 0.55). */
+function narrationPolishFloor(): number {
+  const configured = Number(process.env.NARRATION_POLISH_FLOOR);
+  return Number.isFinite(configured) && configured > 0 ? configured : 0.55;
 }
 
 export class MultiModelOrchestrator {
@@ -7307,8 +7313,14 @@ export class MultiModelOrchestrator {
     }
     const activeDialogue = (run as any)?.runtimeState?.activeDialogue;
     if (activeDialogue?.speakerName) canonicalSceneNames.push(String(activeDialogue.speakerName));
+    // Character and object names are short ("Mei Sato"): match them on 3+ letter words, not the 5+ letter location tokens,
+    // otherwise a reply that names the person present in the scene fails the anchor check (14 spurious failures in live runs).
+    const shortTokens = (value: unknown): string[] =>
+      String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3 && !['the', 'and', 'for', 'a', 'an', 'of', 'her', 'his'].includes(token));
+    const narrationShortTokens = new Set(shortTokens(narration));
     const canonicalEntityMatch = canonicalSceneNames.some((name) =>
-      tokenize(name).some((token) => narrationTokens.has(token))
+      tokenize(name).some((token) => narrationTokens.has(token)) ||
+      shortTokens(name).some((token) => narrationShortTokens.has(token))
     );
 
     if (nameTokens.length > 0 && sceneTokens.length > 0 && !nameMatch && !sceneMatch && !canonicalEntityMatch) {
@@ -7934,11 +7946,16 @@ export class MultiModelOrchestrator {
       [params.intent.informationGoal, params.intent.originalText].filter(Boolean).join(' '),
       [...((params.situation as any).playerKnowledge?.knownFacts || []), ...((params.situation as any).relevantLore || [])],
     ).used;
+    // Examining a named thing, or setting out for a named place, is described in scenic terms but is a response to the action.
+    const scenicButResponsive = softNarrationGatesEnabled() && (
+      describesObservedTarget(narration, params.playerAction) ||
+      (Boolean(params.intent.movementIntent) && namesTravelDestination(narration, params.intent.locationTarget?.name))
+    );
     if (
       actionSubstance &&
       actionSubstance.score < 0.50 &&
       !answerIsGrounded &&
-      (environmentalPaddingDominates || informationResponseIsMissing)
+      ((environmentalPaddingDominates && !scenicButResponsive) || informationResponseIsMissing)
     ) {
       return {
         valid: false,
@@ -8092,7 +8109,9 @@ export class MultiModelOrchestrator {
       [params.intent.informationGoal, params.intent.originalText].filter(Boolean).join(' '),
       [...((params.situation as any).playerKnowledge?.knownFacts || []), ...((params.situation as any).relevantLore || [])],
     ).used;
-    const valid = (answeredFromKnownFact && missingConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
+    // Setting out for a named place is answered by the departure and the route; naming the destination is the response.
+    const travelResponds = Boolean(params.intent.movementIntent) && namesTravelDestination(params.narrativeText, params.intent.locationTarget?.name);
+    const valid = ((answeredFromKnownFact || travelResponds) && missingConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
     const reason = valid
       ? undefined
       : missingConsequences.length
@@ -8920,7 +8939,8 @@ export class MultiModelOrchestrator {
       finalNarrationText,
       (validation.turnPackage.dialogue || []).length > 0,
       currentSituation.player.name,
-    ) && !openingTurn;
+    ) && !openingTurn && !describesObservedTarget(finalNarrationText, playerAction) &&
+      !(Boolean(playerIntent.movementIntent) && namesTravelDestination(finalNarrationText, playerIntent.locationTarget?.name));
     const narrativeQualityAudit = buildNarrativeQualityAudit(
       finalNarrativeRichnessEvaluation,
       environmentExcess,
@@ -8960,11 +8980,17 @@ export class MultiModelOrchestrator {
     );
     const effectiveMaxRetries =
       params.maxRetries ?? ((hasMissingVisibleConsequence || (params.actionResolution !== undefined && !initialActionFidelity.valid)) ? 1 : 0);
+    // A richness "IMPROVE" alone used to fire a repair call on almost every turn (13 of 14 accepted live turns). Polish is
+    // only worth a call when the score is clearly low; concrete findings below still trigger a repair at any score.
+    const richnessNeedsPolish = finalNarrativeRichnessEvaluation.decision === 'IMPROVE' &&
+      (!softNarrationGatesEnabled() || finalNarrativeRichnessEvaluation.overallScore < narrationPolishFloor());
     const qualityGateTriggersRewrite =
       environmentExcess ||
-      finalNarrativeRichnessEvaluation.decision === 'IMPROVE' ||
+      richnessNeedsPolish ||
       initialSemanticReview.decision !== 'ACCEPT' ||
-      initialLiteraryReview.decision === 'REWRITE' ||
+      // Voice/novelty polish alone does not justify a repair call in soft mode (it fired on 3 of 8 replayed turns); its issues are
+      // still passed to the repair whenever another finding triggers one.
+      (initialLiteraryReview.decision === 'REWRITE' && !softNarrationGatesEnabled()) ||
       (params.actionResolution !== undefined && !finalActionModeContinuity.valid) ||
       (params.actionResolution !== undefined && !initialStoryBeatContinuity.valid) ||
       (params.actionResolution !== undefined && !initialActionFidelity.valid);
@@ -9208,8 +9234,9 @@ export class MultiModelOrchestrator {
       finalNarrationText,
       currentSituation.player.name,
     );
+    const finalSpokenText = (validation.turnPackage?.dialogue || []).map((line: any) => String(line?.text || '')).join(' ');
     const finalAnswerIsGrounded = softNarrationGatesEnabled() && (playerIntent.interactionMode === 'INFORMATION_SEEKING' || Boolean(playerIntent.informationGoal)) && analyzeKnownFactUse(
-      finalNarrationText,
+      `${finalNarrationText} ${finalSpokenText}`,
       [playerIntent.informationGoal, playerIntent.originalText].filter(Boolean).join(' '),
       [...((currentSituation as any).playerKnowledge?.knownFacts || []), ...((currentSituation as any).relevantLore || [])],
     ).used;
@@ -9217,7 +9244,8 @@ export class MultiModelOrchestrator {
       finalNarrationText,
       (validation.turnPackage.dialogue || []).length > 0,
       currentSituation.player.name,
-    ) && !openingTurn && !finalAnswerIsGrounded;
+    ) && !openingTurn && !finalAnswerIsGrounded && !describesObservedTarget(finalNarrationText, playerAction) &&
+      !(Boolean(playerIntent.movementIntent) && namesTravelDestination(finalNarrationText, playerIntent.locationTarget?.name));
     if (finalEnvironmentExcess) {
       // Content-free scenery (no action, no answer) is a HARD finding in the guard policy: it stays rejected after the repair.
       guardState.outcome = 'rejected_hard';

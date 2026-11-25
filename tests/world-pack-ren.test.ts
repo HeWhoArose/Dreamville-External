@@ -80,3 +80,18 @@ test('an NPC authored to know the casing is not flagged as leaking it', async ()
 	assert.equal(audit('npc_mei_sato', 'Mei Sato').valid, true, 'Mei is authored to know the casing');
 	assert.equal(audit('npc_hollis_brandt', 'Hollis Brandt').valid, false, 'the bar owner never saw the scene and must still be flagged');
 });
+
+test('the police position is authored and known, so "what have the police said" has an answer', async () => {
+	const { CurrentSituationBuilder } = await import('../server/domain/currentSituation');
+	const { NarrativeResearchPipeline } = await import('../server/domain/narrativeResearchPipeline');
+	const repo = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'pack_ren_police';
+	await applyWorldPack(repo, storyId, loadWorldPack(PACK));
+	const actor = repo.getPlayerLifecycle(storyId)!.actorId;
+	assert.ok(repo.getAuthorizedKnowledgeFacts(storyId, actor).some((fact: any) => fact.id === 'fact_police_position'));
+	const action = 'I ask Mei what the police have said so far.';
+	const intent: any = { action: 'attempt_action', goal: 'gather_information', interactionMode: 'INFORMATION_SEEKING', informationGoal: action, originalText: action, explicitTargets: [], impliedTargets: [], referencedEntities: [], referencedLocations: [], targetIds: [] };
+	const situation: any = CurrentSituationBuilder.build({ storyId, viewerActorId: actor, playerAction: action, currentAction: intent, worldRepo: repo } as any);
+	const research: any = NarrativeResearchPipeline.research({ repository: repo, storyId, currentSituation: CurrentSituationBuilder.toNarratorSafeProjection(situation), hardTokenBudget: 6000, playerIntent: intent, playerAction: action, viewerActorId: actor } as any);
+	assert.match(research.promptContext, /robbery gone wrong/i);
+});

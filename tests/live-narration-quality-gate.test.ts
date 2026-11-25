@@ -250,3 +250,13 @@ test('an information question answered by the fact the player already holds pass
 	});
 	assert.equal(evasion.actionFidelity.valid, false, 'scenery with no answer must still fail');
 });
+
+test('a travel reply that names the destination responds to the action; one that does not is still rejected', () => {
+	const resolutionNoEffects = { resolutionMethod: 'NO_CHECK', outcomeTier: 'NO_CHECK', actualEffect: 'The action proceeds as an ordinary deterministic world/narrative action.', physicalConsequences: [], playerVisibleConsequences: [], targetEntityIds: [], canonicalStateChanges: [] };
+	const intent = { action: 'travel', interactionMode: 'WORLD_ACTION', movementIntent: true, locationTarget: { name: 'Warehouse Docks' }, originalText: 'I head out to the docks.', speechIntent: false } as any;
+	const base = { playerAction: 'I head out to the docks.', actionResolution: resolutionNoEffects as any, situation: situation() as any, intent };
+	const departs = serverMockAuthority.evaluateLiveNarrativeQuality({ ...base, narrativeText: 'You pull your coat on and step out into the rain, the road toward the Warehouse Docks gleaming under the street lamps.' });
+	assert.equal(departs.actionFidelity.valid, true);
+	const ignores = serverMockAuthority.evaluateLiveNarrativeQuality({ ...base, narrativeText: 'Rain patters on the frosted glass while the desk lamp hums over the cluttered oak surface of the room.' });
+	assert.equal(ignores.actionFidelity.valid, false);
+});

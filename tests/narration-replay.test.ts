@@ -22,7 +22,19 @@ test('replay of recorded real replies is deterministic, keeps answering facts in
 
 	// Fail-open on soft findings plus a repair from the reserved call (reference-study guard policy): measured 6 of 7 scorable
 	// turns when the policy was introduced, against 3 of 7 with fail-closed gates. Raise the floor as the gates improve.
-	assert.ok((first.summary.acceptedOfScorable as number) >= 6, `accepted ${first.summary.acceptedOfScorable} of ${first.summary.scorableTurns}`);
+	assert.ok((first.summary.acceptedOfScorable as number) >= 7, `accepted ${first.summary.acceptedOfScorable} of ${first.summary.scorableTurns}`);
+
+	// Targeted fixes, scored on real replies: Mei answering in quoted speech counts as the answer (turn 5), and describing the
+	// thing examined is not scenery padding (turn 7). Both were rejected before.
+	const byAction = (text: string) => first.report.find((turn) => turn.action.includes(text))!;
+	assert.equal(byAction('bullet casing').accepted, true, 'a quoted answer from the asked character must count');
+	assert.equal(byAction('examine the bloodstain').accepted, true, 'describing the examined target must not read as scenery');
+	assert.equal(byAction('head out to the docks').accepted, true, 'a departure that names the destination is a response, and leaving is the movement the player asked for');
+
+	// Repairs are for concrete findings, not routine polish: richness or voice IMPROVE alone no longer spends a call.
+	// Before the change 13 of 14 accepted live turns used a repair; on this corpus it is now 3 of 8.
+	const [repaired, acceptedCount] = String(first.summary.repairRate).split('/').map(Number);
+	assert.ok(acceptedCount > 0 && repaired / acceptedCount <= 0.5, `repair rate ${first.summary.repairRate}`);
 
 	// Every turn carries a guard outcome, and the outcome agrees with whether the turn was narrated.
 	for (const turn of first.report) {

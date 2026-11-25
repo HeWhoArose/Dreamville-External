@@ -179,3 +179,17 @@ What Dreamville lacked and now has:
 Replay score on the recorded real replies (Gemini 3.5 Flash Lite then Groq): **6 of 7 scorable turns accepted, against 3 of 7 with fail-closed gates**, with outcomes quiet 0, rewritten 4, kept_soft 2. Accepted answers were checked by hand: they state the known facts (Okafor, Pier 4, Calder's warning). One accepted "where exactly" reply names the harbor front rather than "Pier 4". A reply that ignored the player's action (bloodstain) stays rejected.
 
 Behaviour changes worth knowing: soft findings no longer lose the turn; the response gained a `narrativeQuality` key (the pinned response-shape test was updated); a double-counted logical call in the rewrite was found and avoided (do not pass the turn budget into the rewrite call, `beginCorrection` already counts it).
+
+## 18. Live confirmation of the guard policy (2026-11-25)
+
+Three live runs of `npm run narration:baseline` (Gemini 3.5 Flash Lite then Groq qwen3.8-27b, same 8 turns on the Ren pack), code at commit `17eeda52`:
+
+| Run | Accepted | Guard outcomes | Provider calls |
+| --- | --- | --- | --- |
+| 1 | 6 / 8 | rewritten 6, rejected_hard 2 | 30 |
+| 2 | 7 / 8 | rewritten 7, rejected_hard 1 | 32 |
+| 3 | 6 / 8 | rewritten 4, kept_soft 2, rejected_hard 2 | 28 |
+
+Earlier live runs on the same route scored 0 to 4 of 8 (strict, soft gates and history variants all inside that range), so this is the first configuration that clears the noise. In every run the information answers were grounded in the player's known facts: "Where exactly was he found?" returned Pier 4 (first time it did so consistently, including "Pier Four" in Mei's voice), "Who found the body?" named Silas Okafor, and "What did they say about the bullet casing?" returned the .38 beside the body. No turn was lost to provider unavailability in these runs.
+
+Remaining rejections (all hard by policy): "I ask Mei what the police have said" (twice, environment-only or too little acknowledgement), "I examine the bloodstain" (twice; a reply that does not respond to the action), "I head out to the docks" (once). Provider calls per turn were about 3.5 to 4, with a repair used on most accepted turns, so repair is doing the work, not the first reply: a prompt that gets more first-pass answers right would cut calls.

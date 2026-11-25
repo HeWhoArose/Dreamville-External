@@ -1,6 +1,8 @@
 import { buildItemDescription, type ItemCategory } from './inventoryItem';
+import type { ProgressionModifier } from './characterProgressionEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { CurrentSituation } from './currentSituation';
+import { findImprovisableSource, hasImproviseVerb, materialiseImprovisedObject } from './improvisedItems';
 import type { LocationSceneObject } from './types';
 import { AffordancePlausibilityEngine } from './affordancePlausibilityEngine';
 import { inferLocationArchetype, type LocationArchetype } from './locationArchetypes';
@@ -137,6 +139,33 @@ function hasMatchingKey(repository: WorldRepository, storyId: string, actorId: s
   });
 }
 
+/** Equipment shape for scene items that are weapons, shields or armour, so authored and improvised gear can be wielded. */
+function sceneItemEquipment(
+  object: LocationSceneObject,
+  category: ItemCategory,
+  properties: Record<string, unknown>,
+): { allowedSlots?: Array<'mainHand' | 'offHand' | 'body'>; modifiers?: ProgressionModifier[] } {
+  const modifiers: ProgressionModifier[] = [];
+  const addModifier = (target: string, value: number, stackGroup: string) => {
+    if (!Number.isFinite(value) || value === 0) return;
+    const id = `${object.id}_${target.replace(/[^a-z0-9]+/gi, '_')}`;
+    modifiers.push({
+      id, target, mode: 'ADD', value, precedence: 60, stackGroup,
+      source: { moduleId: `scene:${object.id}`, moduleType: 'ITEM', featureId: id, sourceId: object.id, sourceName: object.name, precedence: 60, stackGroup },
+    });
+  };
+  addModifier('combat.attackBonus', Number(properties.attackBonus), 'WEAPON_ATTACK');
+  addModifier('coreStats.armorClass', Number(properties.armorBonus), 'ARMOR_AC');
+  const allowedSlots = category === 'Weapon' ? ['mainHand', 'offHand'] as const
+    : category === 'Shield' ? ['offHand'] as const
+    : category === 'Armor' ? ['body'] as const
+    : undefined;
+  return {
+    ...(allowedSlots ? { allowedSlots: [...allowedSlots] } : {}),
+    ...(modifiers.length ? { modifiers } : {}),
+  };
+}
+
 function ensureSceneItemDefinition(
   repository: WorldRepository,
   storyId: string,
@@ -166,7 +195,10 @@ function ensureSceneItemDefinition(
       }),
       weightKg: Number.isFinite(weightKg) && weightKg >= 0 ? weightKg : 0.5,
       baseValueGold: Number.isFinite(baseValueGold) && baseValueGold >= 0 ? baseValueGold : 0,
-      maxDurability: 1,
+      maxDurability: Number.isFinite(Number(properties.maxDurability)) && Number(properties.maxDurability) >= 1
+        ? Math.floor(Number(properties.maxDurability))
+        : 1,
+      ...sceneItemEquipment(object, category, properties),
       tags: Array.from(new Set([
         ...(Array.isArray(object.tags) ? object.tags : []),
         'scene_object',
@@ -206,17 +238,18 @@ export class SceneInteractionAuthority {
     }
 
     const pickupIntent = PICKUP_PATTERN.test(actionText);
+    const improviseIntent = !pickupIntent && hasImproviseVerb(actionText) && Boolean(location.environment?.improvisable?.length);
     const searchIntent = SEARCH_PATTERN.test(actionText);
     const examineIntent = EXAMINE_PATTERN.test(actionText);
-    if (!pickupIntent && !searchIntent && !examineIntent) {
+    if (!pickupIntent && !improviseIntent && !searchIntent && !examineIntent) {
       return { kind: 'NONE', attempted: false, committed: false, canonicalStateChanges: [], evidence: [] };
     }
 
     const requested = targetWords(actionText);
     const sceneObjects = Array.isArray(location.sceneObjects) ? location.sceneObjects : [];
 
-    if (pickupIntent) {
-      return this.pickUp({ repository, storyId, actorId, locationId, requested, sceneObjects });
+    if (pickupIntent || improviseIntent) {
+      return this.pickUp({ repository, storyId, actorId, locationId, requested, sceneObjects, improviseIntent });
     }
     if (!searchIntent && examineIntent) {
       const visibleMatch = sortedMatches(sceneObjects.filter((object) => object.visible !== false), requested)[0];
@@ -235,6 +268,22 @@ export class SceneInteractionAuthority {
       };
     }
     return this.search({ repository, storyId, locationId, requested, sceneObjects, location });
+  }
+
+  /** Lets the scene's authored improvisable profile turn a source ("branch", "debris") into a takeable object. */
+  private static tryImprovise(params: {
+    repository: WorldRepository;
+    storyId: string;
+    locationId: string;
+    requested: string[];
+    improviseIntent?: boolean;
+  }): { object?: LocationSceneObject; errorReason?: string } {
+    const { repository, storyId, locationId, requested } = params;
+    const node = repository.getGeographyGraph(storyId).getNode(locationId);
+    const source = findImprovisableSource(node?.environment?.improvisable, requested);
+    if (!source) return {};
+    const result = materialiseImprovisedObject({ repository, storyId, locationId, source });
+    return result.success ? { object: result.object } : { errorReason: result.errorReason };
   }
 
   private static search(params: {
@@ -331,6 +380,7 @@ export class SceneInteractionAuthority {
     locationId: string;
     requested: string[];
     sceneObjects: LocationSceneObject[];
+    improviseIntent?: boolean;
   }): SceneInteractionResult {
     const { repository, storyId, actorId, locationId, requested, sceneObjects } = params;
 
@@ -408,6 +458,18 @@ export class SceneInteractionAuthority {
         };
       }
 
+      const improvisable = this.tryImprovise({ repository, storyId, locationId, requested, improviseIntent: params.improviseIntent });
+      if (improvisable.object) {
+        return this.pickUp({ ...params, sceneObjects: [...sceneObjects, improvisable.object], improviseIntent: false });
+      }
+      if (improvisable.errorReason) {
+        return {
+          kind: 'PICKUP', attempted: true, committed: false,
+          errorReason: improvisable.errorReason, feedback: improvisable.errorReason,
+          canonicalStateChanges: [], evidence: [],
+        };
+      }
+
       const fixedMatch = sortedMatches(visible.filter((object) => !objectIsTakeable(object)), requested)[0];
       if (fixedMatch) {
         return {
@@ -441,9 +503,13 @@ export class SceneInteractionAuthority {
       defId,
       ownerEntityId: actorId,
       containerType: 'actor',
-      provenance: `scene_object:${matched.id}`,
+      provenance: typeof properties.improvisedProvenance === 'string' ? properties.improvisedProvenance : `scene_object:${matched.id}`,
       customName: matched.name,
     });
+    const fraction = Number(properties.durabilityFraction);
+    if (Number.isFinite(fraction) && fraction >= 0 && fraction < 1) {
+      inventory.degradeDurability(instance.id, instance.maxDurability - Math.round(instance.maxDurability * fraction));
+    }
     const graph = repository.getGeographyGraph(storyId);
     const removed = graph.removeSceneObject(locationId, matched.id);
     if (!removed.success) {

@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CharacterCanonSteward } from './characterCanonSteward';
+import { WorldClock } from './worldClock';
+import type { ImprovisableSource } from './locationArchetypes';
+import type { ScheduledEventKind } from './livingWorldSimulation';
 import { WorldDirectorPreparationService } from '../services/worldDirectorPreparationService';
 
 /**
@@ -12,10 +15,34 @@ import { WorldDirectorPreparationService } from '../services/worldDirectorPrepar
 export interface WorldPackLocation {
 	id: string; name: string; region: string; archetype: string; description: string; ambient?: string;
 	discovered?: boolean; tags?: string[];
+	/** What the scene lets a player improvise into items ("snap a branch", "pull a spear from the debris"). */
+	improvisable?: ImprovisableSource[];
+}
+/** A weapon, shield, armour piece or tool lying in a location, wieldable once picked up. */
+export interface WorldPackItem {
+	id: string; locationId: string; name: string; description: string;
+	category: 'Weapon' | 'Shield' | 'Armor' | 'Tool' | 'Miscellaneous';
+	maxDurability: number;
+	/** Fraction of maxDurability it has left (0 = already broken). Default 1. */
+	durabilityFraction?: number;
+	attackBonus?: number; armorBonus?: number; damageDice?: string;
+	visible?: boolean;
+}
+/** Gear an NPC carries. It is dropped where they fall when they are defeated. */
+export interface WorldPackCarriedItem {
+	name: string; category: string; quantity?: number;
+	/** Equipment slot if worn or wielded. */
+	slot?: string;
+	attackBonus?: number; armorBonus?: number; maxDurability?: number;
+}
+/** A timed event on the world clock, relative to the start of the story. */
+export interface WorldPackEvent {
+	id: string; kind: ScheduledEventKind; name: string; locationId: string;
+	startsAfterMinutes: number; deadlineAfterMinutes?: number;
 }
 export interface WorldPackNpc {
 	id: string; name: string; role: string; locationId: string; description: string; dialogueStyle?: string;
-	motivations?: string[]; knownToProtagonist?: boolean; knows: string[]; sharing: 'FREE' | 'GUARDED' | 'SECRET'; secrets: string[]; refuses: string[];
+	motivations?: string[]; knownToProtagonist?: boolean; carries?: WorldPackCarriedItem[]; knows: string[]; sharing: 'FREE' | 'GUARDED' | 'SECRET'; secrets: string[]; refuses: string[];
 }
 export interface WorldPackFact {
 	id: string; statement: string; subject: string; predicate: string; object: string; knownAtStart: boolean; clueId?: string;
@@ -26,8 +53,11 @@ export interface WorldPackClue {
 export interface WorldPack {
 	packVersion: 1; id: string; title: string; premise: string; openingScene: string;
 	protagonist: { name: string; startLocationId: string; kit: Array<{ name: string; category: string; quantity: number }> };
-	incident: { locationId: string };
+	/** A prepared opening investigation. Omit for worlds that are not a mystery (an arena, a journey). */
+	incident?: { locationId: string };
 	locations: WorldPackLocation[];
+	items?: WorldPackItem[];
+	events?: WorldPackEvent[];
 	routes: Array<[string, string, number, string]>;
 	npcs: WorldPackNpc[];
 	facts: WorldPackFact[];
@@ -59,7 +89,7 @@ export function validateWorldPack(pack: WorldPack): string[] {
 	if (!pack.premise?.trim()) problems.push('premise is empty');
 	if (!pack.openingScene?.trim()) problems.push('openingScene is empty');
 	if (!locations.has(pack.protagonist.startLocationId)) problems.push(`start location "${pack.protagonist.startLocationId}" does not exist`);
-	if (!locations.has(pack.incident.locationId)) problems.push(`incident location "${pack.incident.locationId}" does not exist`);
+	if (pack.incident && !locations.has(pack.incident.locationId)) problems.push(`incident location "${pack.incident.locationId}" does not exist`);
 
 	// Reachability from the start location over bidirectional routes.
 	const adjacent = new Map<string, Set<string>>();
@@ -80,6 +110,22 @@ export function validateWorldPack(pack: WorldPack): string[] {
 	for (const location of pack.locations) {
 		if (!location.description?.trim()) problems.push(`location "${location.id}" has no description`);
 		if ((location.description || '').length > MAX_DESCRIPTION_CHARS) problems.push(`location "${location.id}" description exceeds ${MAX_DESCRIPTION_CHARS} characters`);
+	}
+
+	dup('item', (pack.items || []).map((i) => i.id));
+	dup('event', (pack.events || []).map((e) => e.id));
+	for (const item of pack.items || []) {
+		if (!locations.has(item.locationId)) problems.push(`item "${item.id}" is placed at unknown location "${item.locationId}"`);
+		if (!(item.maxDurability >= 1)) problems.push(`item "${item.id}" needs a maxDurability of at least 1`);
+	}
+	for (const event of pack.events || []) {
+		if (!locations.has(event.locationId)) problems.push(`event "${event.id}" is at unknown location "${event.locationId}"`);
+		if (!(event.startsAfterMinutes >= 0)) problems.push(`event "${event.id}" has no valid start time`);
+		if (event.deadlineAfterMinutes !== undefined && event.deadlineAfterMinutes < event.startsAfterMinutes) problems.push(`event "${event.id}" has a deadline before it starts`);
+	}
+	for (const location of pack.locations) {
+		const keys = (location.improvisable || []).map((source) => source.key);
+		if (new Set(keys).size !== keys.length) problems.push(`location "${location.id}" has duplicate improvisable keys`);
 	}
 
 	const holdersByFact = new Map<string, string[]>();
@@ -121,6 +167,7 @@ export async function applyWorldPack(repository: any, storyId: string, pack: Wor
 			id: location.id, name: location.name, regionId: location.region, description: location.description,
 			ambientSensory: location.ambient, archetype: location.archetype, accessible: true,
 			discovered: Boolean(location.discovered), sceneObjects: [], tags: location.tags || [],
+			...(location.improvisable?.length ? { environment: { features: [], improvisable: location.improvisable } } : {}),
 		} as any);
 	}
 	for (const [from, to, distanceKm, terrain] of pack.routes) {
@@ -137,6 +184,19 @@ export async function applyWorldPack(repository: any, storyId: string, pack: Wor
 			interactable: clue.discoverable, tags: ['clue'], properties: { discoverable: clue.discoverable, presence: 'PRESENT', sourcePack: pack.id },
 		});
 		if (result && result.success === false) throw new Error(`Could not place clue ${clue.id}: ${result.errorReason}`);
+	}
+
+	for (const item of pack.items || []) {
+		const result = graph.addSceneObject(item.locationId, {
+			id: item.id, name: item.name, kind: 'ITEM', description: item.description, visible: item.visible !== false, interactable: true,
+			tags: ['pack_item', item.category.toLowerCase()],
+			properties: {
+				takeable: true, itemCategory: item.category, maxDurability: item.maxDurability, durabilityFraction: item.durabilityFraction ?? 1,
+				attackBonus: item.attackBonus, armorBonus: item.armorBonus, damageDice: item.damageDice, sourcePack: pack.id,
+			},
+			provenance: 'WORLD_PACK',
+		});
+		if (result && result.success === false) throw new Error(`Could not place item ${item.id}: ${result.errorReason}`);
 	}
 
 	const player = repository.getPlayerLifecycle(storyId);
@@ -157,6 +217,15 @@ export async function applyWorldPack(repository: any, storyId: string, pack: Wor
 	}
 
 	const timestamp = repository.getWorldClock(storyId).getTimestamp();
+	for (const event of pack.events || []) {
+		const at = (minutes: number) => new WorldClock({ timestamp: { ...timestamp } }).advanceSeconds(Math.max(1, minutes * 60)).timestamp;
+		repository.getLivingWorldSimulation(storyId).scheduleEvent({
+			id: event.id, kind: event.kind, name: event.name, locationId: event.locationId,
+			triggerTimestamp: event.startsAfterMinutes > 0 ? at(event.startsAfterMinutes) : { ...timestamp },
+			...(event.deadlineAfterMinutes !== undefined ? { deadlineTimestamp: at(event.deadlineAfterMinutes) } : {}),
+			isResolved: false, status: 'pending',
+		});
+	}
 	for (const fact of pack.facts) {
 		repository.saveWorldFact(storyId, {
 			id: fact.id, factId: fact.id, statement: fact.statement, category: 'AUTHORED_PACK', subjectEntityId: fact.subject,
@@ -188,6 +257,20 @@ export async function applyWorldPack(repository: any, storyId: string, pack: Wor
 			provenance: { source: 'WORLD_PACK', createdBy: 'SYSTEM' },
 		});
 		CharacterCanonSteward.initializeCharacterFromCard(card);
+		if (npc.carries?.length) {
+			const gear = npc.carries.map((c, n) => ({
+				id: `${npc.id}_gear_${n}`, name: c.name, category: c.category, quantity: c.quantity ?? 1, rarity: 'Common', properties: {},
+				provenance: 'CHARACTER_GENESIS', isEquipped: Boolean(c.slot), ...(c.slot ? { slot: c.slot } : {}),
+				...(c.maxDurability ? { maxDurability: c.maxDurability } : {}),
+				modifiers: [
+					...(c.attackBonus ? [{ id: `${npc.id}_atk_${n}`, target: 'combat.attackBonus', mode: 'ADD' as const, value: c.attackBonus, precedence: 60, stackGroup: 'WEAPON_ATTACK' }] : []),
+					...(c.armorBonus ? [{ id: `${npc.id}_ac_${n}`, target: 'coreStats.armorClass', mode: 'ADD' as const, value: c.armorBonus, precedence: 60, stackGroup: 'ARMOR_AC' }] : []),
+				],
+			}));
+			repository.getInventoryEngine(storyId).seedFromGenesisEquipment(npc.id, {
+				equipped: gear.filter((g) => g.isEquipped), inventory: gear.filter((g) => !g.isEquipped),
+			} as any);
+		}
 		if (npc.knownToProtagonist && player) repository.grantEntityIdentityKnowledge(storyId, player.actorId, npc.id, npc.name, 'told');
 		for (const factId of npc.knows) {
 			const fact = pack.facts.find((f) => f.id === factId)!;
@@ -201,7 +284,9 @@ export async function applyWorldPack(repository: any, storyId: string, pack: Wor
 		}
 	}
 
-	const preparation = await WorldDirectorPreparationService.prepareOpeningInvestigation(repository, storyId, pack.incident.locationId);
+	const preparation = pack.incident
+		? await WorldDirectorPreparationService.prepareOpeningInvestigation(repository, storyId, pack.incident.locationId)
+		: { status: 'NOT_APPLICABLE' };
 
 	// Restricted investigation facts exist only after preparation, so reconcile authored NPC knowledge with them now.
 	for (const npc of pack.npcs) {

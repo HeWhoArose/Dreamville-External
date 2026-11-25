@@ -28,6 +28,30 @@ export type LocationArchetype =
   | 'WILDERNESS'
   | 'GENERIC';
 
+/**
+ * One thing a scene allows to be turned into a usable item on demand ("snap a branch off the tree", "pull a
+ * broken spear from the debris"). Authored per location, so the scene, not the model, decides what is possible.
+ * The plot-critical denylist still applies everywhere else; this is the scene explicitly granting it.
+ */
+export interface ImprovisableSource {
+  /** Stable key, unique within the location. */
+  key: string;
+  /** Words a player might use for the source: "branch", "tree", "debris", "wreckage". */
+  sources: string[];
+  /** Name of the resulting item. */
+  name: string;
+  description: string;
+  category: 'Weapon' | 'Shield' | 'Armor' | 'Tool' | 'Miscellaneous';
+  maxDurability: number;
+  /** Fraction of maxDurability the item starts with (0 = already broken). Default 1. */
+  durabilityFraction?: number;
+  attackBonus?: number;
+  armorBonus?: number;
+  damageDice?: string;
+  /** How many can be taken from this scene. Default 3. */
+  limit?: number;
+}
+
 export interface LocationEnvironmentProfile {
   terrain?: string;
   lighting?: 'DAYLIT' | 'DIM' | 'DARK' | 'NATURAL';
@@ -41,6 +65,8 @@ export interface LocationEnvironmentProfile {
   };
   /** Optional structured note about ordinary activity appropriate to the site. */
   ambientActivity?: string;
+  /** Things this scene allows to be improvised into items. */
+  improvisable?: ImprovisableSource[];
   [key: string]: unknown;
 }
 

@@ -208,6 +208,19 @@ export function buildItemUseCases(input: {
   return [...new Set(uses)].slice(0, 8);
 }
 
+/** Fraction of an item's modifier strength that survives while it is broken. */
+export const BROKEN_ITEM_PERFORMANCE = 0.25;
+
+/**
+ * Seriously diminishes a modifier from a broken item. Additive bonuses and multiplier gains are cut to
+ * BROKEN_ITEM_PERFORMANCE of their strength; absolute SET/MIN/MAX overrides cannot be scaled so they are dropped.
+ */
+function scaleModifierForBrokenItem<T extends { mode: string; value: number }>(modifier: T): T | null {
+  if (modifier.mode === 'ADD') return { ...modifier, value: modifier.value * BROKEN_ITEM_PERFORMANCE };
+  if (modifier.mode === 'MULTIPLY') return { ...modifier, value: 1 + (modifier.value - 1) * BROKEN_ITEM_PERFORMANCE };
+  return null;
+}
+
 export interface ItemInstance {
   id: string; // Unique instance ID
   defId: string;
@@ -874,6 +887,10 @@ export class InventoryItemEngine {
     return items;
   }
 
+  public getAllItemInstances(): ItemInstance[] {
+    return Array.from(this.itemInstances.values()).map((item) => JSON.parse(JSON.stringify(item)));
+  }
+
   public getItemInstancesByOwner(ownerId: string): ItemInstance[] {
     return Array.from(this.itemInstances.values())
       .filter((item) => item.ownerEntityId === ownerId)
@@ -975,7 +992,7 @@ export class InventoryItemEngine {
     if (!item) return { success: false, errorReason: "Item " + itemId + " not found." };
     if (item.ownerEntityId !== actorId) return { success: false, errorReason: "Item is not owned by this actor." };
     if (item.containerType !== "actor") return { success: false, errorReason: "Only items in the actor inventory can be equipped." };
-    if (item.isBroken) return { success: false, errorReason: "Cannot equip a broken item." };
+    // A broken item can still be held or worn; it just performs far worse (see BROKEN_ITEM_PERFORMANCE).
 
     const normalizedSlot = normalizeEquipmentSlot(targetSlot);
     if (!normalizedSlot) return { success: false, errorReason: "Invalid equipment slot '" + String(targetSlot) + "'." };
@@ -1040,10 +1057,12 @@ export class InventoryItemEngine {
   public getEquipmentModifiers(actorId: string): ProgressionModifier[] {
     const modifiers: ProgressionModifier[] = [];
     for (const item of this.getEquippedItems(actorId)) {
-      if (item.isBroken || (item.durability !== undefined && item.durability <= 0)) continue;
+      const degraded = item.isBroken || (item.durability !== undefined && item.durability <= 0);
       const def = this.itemDefinitions.get(item.defId);
-      for (const modifier of def?.modifiers || []) {
-        if (!Number.isFinite(modifier.value)) continue;
+      for (const rawModifier of def?.modifiers || []) {
+        if (!Number.isFinite(rawModifier.value)) continue;
+        const modifier = degraded ? scaleModifierForBrokenItem(rawModifier) : rawModifier;
+        if (!modifier) continue;
         const precedence = Number.isFinite(modifier.precedence) ? modifier.precedence : 60;
         modifiers.push({
           ...JSON.parse(JSON.stringify(modifier)),
@@ -1188,8 +1207,7 @@ export class InventoryItemEngine {
     item.durability = Math.max(0, item.durability - wearAmount);
     let becameBroken = false;
     if (item.durability === 0 && !item.isBroken) {
-      item.isBroken = true;
-      item.equippedSlot = null; // Immediately unequipped when broken
+      item.isBroken = true; // Stays equipped: a broken weapon is still in hand, just badly degraded
       becameBroken = true;
     }
 

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { dropDefeatedActorLoot } from '../domain/lootDrop';
 import { serverMockAuthority, type PreparedCustomActionContext } from '../mockEngine/serverMockAuthority';
 import { ActionRequest } from '../mockEngine/serverTypes';
 import { worldRepository } from '../repositories/worldRepository';
@@ -5175,6 +5176,10 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
 
         const updatedTarget = combatEngine.getParticipant(targetId) || target;
 
+        if (updatedTarget.isDead && updatedTarget.id !== actorId && player?.locationId) {
+          dropDefeatedActorLoot(inv, updatedTarget.id, player.locationId);
+        }
+
         if (updatedTarget.id === actorId && attackResult.damage > 0) {
           const currentPower = capEngine.getPowerState(actorId);
           if (currentPower) {
@@ -6328,6 +6333,9 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
         }
 
         const updatedTarget = combatEngine.getParticipant(targetId);
+        if (updatedTarget?.isDead && updatedTarget.id !== actorId && player?.locationId) {
+          dropDefeatedActorLoot(transactionRepo.getInventoryEngine(storyId), updatedTarget.id, player.locationId);
+        }
         if (updatedTarget && updatedTarget.id === actorId) {
           const currentPower = capEngine.getPowerState(actorId);
           if (currentPower) {

@@ -673,3 +673,22 @@ test('Phase 9: client-supplied item rules cannot become authoritative custom rul
 	const state = repository.getStoryRun(storyId)?.runtimeState?.customRules;
 	assert.equal(state?.counters?.forged_rule_fired, undefined);
 });
+
+test('Broken equipped items stay usable but their modifiers are seriously diminished', () => {
+	const engine = makeEngine();
+	engine.seedFromGenesisEquipment(actorId, {
+		equipped: [{
+			id: 'blade', name: 'Keen Blade', category: 'Weapon', isEquipped: true, slot: 'mainHand', quantity: 1,
+			rarity: 'Common', properties: {}, provenance: 'CHARACTER_GENESIS',
+			modifiers: [{ id: 'keen', target: 'combat.attackBonus', mode: 'ADD', value: 4, precedence: 60, stackGroup: 'KEEN' }],
+		}],
+	});
+	const sword = engine.getActorInventory(actorId).find((i) => i.name === 'Keen Blade')!;
+	assert.equal(engine.getEquipmentModifiers(actorId)[0]?.value, 4);
+	engine.degradeDurability(sword.id, sword.maxDurability);
+	assert.equal(engine.getItemInstance(sword.id)?.isBroken, true);
+	assert.equal(engine.getItemInstance(sword.id)?.equippedSlot, 'mainHand', 'a broken weapon stays in hand');
+	assert.equal(engine.getEquipmentModifiers(actorId)[0]?.value, 1, 'broken bonus is cut to a quarter');
+	engine.unequipItem(actorId, sword.id);
+	assert.equal(engine.equipItem(actorId, sword.id, 'mainHand').success, true);
+});

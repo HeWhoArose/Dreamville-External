@@ -2,7 +2,7 @@
 
 **Status:** CURRENT RESEARCH EVIDENCE — design input, not an implementation instruction  
 **Date:** 2026-10-17  
-**Owner plan:** [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) (the deferred `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md` §10 and §15 also cite this document)  
+**Owner plan:** [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) (the deferred, now archived `outdated/superseded-plans/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN_HISTORICAL.md` §10 and §15 also cite this document)  
 **Code reviewed:** `main` at merge commit `ce3d3cb8` (merge of PR #76). Source-read audit only; nothing here is a live-model result.
 
 **Rule that still applies:** every proposal below must pass Phase 0 of the active plan and must be reproduced as a demonstrated gap before code changes. Do not create a parallel memory, plot, router or state authority. Extend the owners named in `docs/README.md`.

@@ -7,7 +7,6 @@ import { worldRepository } from '../server/repositories/worldRepository';
 import { worldSynthesisService } from '../server/services/worldSynthesisService';
 import { emergentNarrativeEngine } from '../server/services/emergentNarrativeEngine';
 import { abilityService } from '../server/services/abilityService';
-import { storyDirectorService } from '../server/services/storyDirectorService';
 import { dndSpellRulesEvaluator } from '../server/domain/dndSpellRulesModel';
 
 const app = express();
@@ -84,50 +83,8 @@ test('CH16 End-to-End Behavioral Verification Suite', async () => {
   assert.equal(actionBody.gameplayEvent.eventType, 'INVESTIGATE_AREA');
   assert.ok(actionBody.storyThreads.length > 0, 'Emergent narrative thread should be generated');
 
-  // 4. State-Dependent Story Director & Trigger Evaluation
-  const directorResult = storyDirectorService.stepDirector(activeStoryId);
-  assert.equal(typeof directorResult.eventGenerated, 'boolean');
-
-  const choiceRes = await fetch(`${baseUrl}/api/game/worlds/runs/${activeStoryId}/story-director/choice`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      beatId: 'beat_orrery_investigation',
-      optionId: 'opt_investigate_subterranean',
-    }),
-  });
-
-  assert.equal(choiceRes.status, 200);
-  const choiceBody = await choiceRes.json();
-  assert.ok(choiceBody.success);
-  assert.equal(choiceBody.recordedChoice.optionId, 'opt_investigate_subterranean');
-
-  // 5. Protagonist Refusal Consequences
-  const refusalRes = await fetch(`${baseUrl}/api/game/worlds/runs/${activeStoryId}/story-director/choice`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      beatId: 'beat_call_to_adventure',
-      optionId: 'refuse_quest',
-    }),
-  });
-
-  assert.equal(refusalRes.status, 200);
-  const refusalBody = await refusalRes.json();
-  assert.ok(refusalBody.success);
-  assert.ok(refusalBody.consequences.length > 0);
-
-  // 6. Side Character Offscreen Simulation
-  const offscreenRes = await fetch(`${baseUrl}/api/game/worlds/runs/${activeStoryId}/story-director/offscreen`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
-  });
-
-  assert.equal(offscreenRes.status, 200);
-  const offscreenBody = await offscreenRes.json();
-  assert.ok(offscreenBody.success);
-  assert.ok(offscreenBody.actionTaken);
+  // Steps 4-6 (Story Director triggers, refusal consequences, off-screen simulation) were removed with
+  // StoryDirectorService (decision D1, 2026-11-23): the trigger content was unreachable demo data.
 
   // 7. Authoritative Combat Integration & Dice Clash
   const clashRes = await fetch(`${baseUrl}/api/game/worlds/runs/${activeStoryId}/dice-clash/resolve`, {

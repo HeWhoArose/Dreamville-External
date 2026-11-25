@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import type { EntityCard } from './entityCard';
 import type { HistoricalEvidence } from './historicalEvidence';
 import type { KnowledgeFact, LocationSceneObject } from './types';
+import type { WorldDirectorInvestigationSeed } from '../../src/types';
 
 /**
  * World Director preparation identity contract.
@@ -848,4 +850,110 @@ export function planWorldDirectorOwnedRecord<TRecord extends { id: string }>(
     };
   }
 }
+
+export interface ExtractInvestigationSeedOptions {
+  characterId?: string;
+  storyId?: string;
+}
+
+export function extractInvestigationSeedFromPremise(
+  premise: string,
+  options?: ExtractInvestigationSeedOptions,
+): WorldDirectorInvestigationSeed | null {
+  const text = String(premise || '').trim();
+  if (!text) return null;
+
+  // 1. Extract victim name
+  let victimName = 'Unidentified Victim';
+  const prefixMatch =
+    text.match(/\b(?:corpse|body|murder|death|remains|slaying|homicide|killing)\s+of\s+([^,.;]+)/i) ||
+    text.match(/\b(?:victim|deceased)\s+([^,.;]+)/i);
+
+  if (prefixMatch && prefixMatch[1]) {
+    const nameMatch = prefixMatch[1].trim().match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
+    if (nameMatch && nameMatch[1] && nameMatch[1].toLowerCase() !== 'the') {
+      victimName = nameMatch[1].trim();
+    }
+  }
+
+  if (victimName === 'Unidentified Victim') {
+    const reverseMatch = text.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)(?:'s|\s+is|\s+was)?\s+(?:corpse|dead body|murdered|slain)\b/);
+    if (reverseMatch && reverseMatch[1] && reverseMatch[1].toLowerCase() !== 'the') {
+      victimName = reverseMatch[1].trim();
+    }
+  }
+
+  // 2. Extract or populate evidence anchors (F10 mandates chalk outline and perimeter tape)
+  const evidenceList: Array<{ slot: string; name: string; description?: string; visible: boolean; discoverable: boolean }> = [];
+  const addedSlots = new Set<string>();
+
+  const addEvidence = (slot: string, name: string, description: string) => {
+    if (!addedSlots.has(slot) && evidenceList.length < 8) {
+      addedSlots.add(slot);
+      evidenceList.push({ slot, name, description, visible: true, discoverable: true });
+    }
+  };
+
+  // Always include F10 default crime scene anchors:
+  addEvidence('evidence_chalk_outline', 'chalk outline', 'A white chalk outline marking the exact position where the victim fell.');
+  addEvidence('evidence_perimeter_tape', 'perimeter tape', 'Yellow crime scene barrier tape cordoning off the immediate perimeter.');
+
+  // Extract contextual clues mentioned in the premise text:
+  if (/\b(?:pocket\s*watch|broken\s*watch|shattered\s*watch|watch)\b/i.test(text)) {
+    addEvidence('evidence_pocket_watch', 'shattered pocket watch', 'A cracked pocket watch stopped at the precise moment of the trauma.');
+  }
+  if (/\b(?:shell\s*casing|spent\s*casing|bullet\s*casing|casing)\b/i.test(text)) {
+    addEvidence('evidence_shell_casing', 'spent bullet casing', 'A spent brass cartridge casing resting on the ground.');
+  }
+  if (/\b(?:bloodstain|blood|splatter|pool of blood)\b/i.test(text)) {
+    addEvidence('evidence_bloodstain', 'bloodstain', 'A dark crimson stain on the surface near the victim.');
+  }
+  if (/\b(?:broken\s*glass|shattered\s*glass|glass)\b/i.test(text)) {
+    addEvidence('evidence_broken_glass', 'shattered glass', 'Fragments of broken glass scattered across the area.');
+  }
+  if (/\b(?:footprint|footprints|boot print)\b/i.test(text)) {
+    addEvidence('evidence_footprints', 'footprints', 'Distinct footprints tracking away from the immediate scene.');
+  }
+  if (/\b(?:weapon|knife|dagger|revolver|gun|pistol)\b/i.test(text)) {
+    addEvidence('evidence_weapon', 'abandoned weapon', 'A discarded weapon recovered from the scene.');
+  }
+  if (/\b(?:note|letter|torn paper|scrap of paper)\b/i.test(text)) {
+    addEvidence('evidence_note', 'torn note', 'A crumpled paper note containing hurried, cryptic handwriting.');
+  }
+
+  // Ensure at least one physical clue beyond the perimeter anchors
+  if (evidenceList.length === 2) {
+    addEvidence('evidence_bloodstain', 'bloodstain', 'A dark crimson stain on the ground near the body.');
+  }
+
+  const hash = createHash('sha256').update(text).digest('hex').slice(0, 8);
+  const storyPart = options?.storyId ? options.storyId.slice(-8) : 'seed';
+  const preparationKey = `prep_auto_${storyPart}_${hash}`;
+  const characterId = options?.characterId || (options?.storyId ? `char_${options.storyId}` : 'protagonist');
+  const sourceRef = `${characterId}:startingSituation`;
+
+  return {
+    schemaVersion: 1,
+    profile: 'INVESTIGATION',
+    preparationKey,
+    sourceRef,
+    claimKind: 'AUTHORED_TRUTH',
+    victim: {
+      name: victimName,
+      species: 'Human',
+    },
+    body: {
+      name: `corpse of ${victimName}`,
+      description: `The deceased body of ${victimName}, lying within the chalk outline.`,
+      visible: true,
+      discoverable: true,
+    },
+    evidence: evidenceList,
+    unresolvedQuestions: [
+      `Who killed ${victimName}?`,
+      `What was the motive for the crime?`,
+    ],
+  };
+}
+
 

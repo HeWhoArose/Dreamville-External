@@ -284,6 +284,22 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 			outline: '#d6ad58',
 		},
 	},
+	{
+		id: 'GILDED_CARD',
+		mode: 'CARD',
+		label: 'Gilded Card',
+		description: 'A gold-framed roll card: the check and its bonuses, the difficulty class, one jewel-blue die and a clear result banner. One click rolls.',
+		material: 'none',
+		spotlight: 0,
+		previewTable: 'radial-gradient(circle at 50% 45%, rgba(234,179,8,.3), transparent 55%), linear-gradient(160deg, #2b1233 0%, #170b1f 55%, #1d1209 100%)',
+		customColorset: {
+			name: 'dreamville-gilded-card',
+			texture: '',
+			background: '#1e3a8a',
+			foreground: '#fde68a',
+			outline: '#fbbf24',
+		},
+	},
 ];
 
 export function getDiceThemePreset(themeId?: string | null): DiceThemePreset {

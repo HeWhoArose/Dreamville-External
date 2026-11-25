@@ -26,8 +26,18 @@ export type SpellTargetType =
   | 'AREA_LINE'
   | 'POINT';
 
+export interface SpellComponents {
+  verbal?: boolean;
+  somatic?: boolean;
+  /** Material component description. */
+  material?: string;
+  /** Gold cost of a costly material component; a focus cannot replace it. */
+  materialCost?: number;
+}
+
 export interface SpellDefinition {
   id: string;
+  components?: SpellComponents;
   name: string;
   level: number; // 0 for cantrip, 1-9 for leveled spells
   school: SpellSchool;
@@ -134,6 +144,10 @@ export interface CastSpellRequest {
   targetPosition?: { x: number; y: number };
   slotLevel?: number; // base level or upcast slot level
   isRitual?: boolean;
+  /** Material components (or a focus) are at hand. Defaults to true. Costly components need an explicit true. */
+  materialComponentsAvailable?: boolean;
+  /** The caster has a hand free for somatic components. Defaults to true. */
+  handsFree?: boolean;
   combatRound?: number;
   combatTurnIndex?: number;
   advantage?: boolean;
@@ -294,6 +308,7 @@ export class SpellRuntime {
       // CANTRIPS (Level 0)
       {
         id: 'fire_bolt',
+        components: { verbal: true, somatic: true },
         name: 'Fire Bolt',
         level: 0,
         school: 'evocation',
@@ -367,6 +382,7 @@ export class SpellRuntime {
       // LEVEL 1
       {
         id: 'magic_missile',
+        components: { verbal: true, somatic: true },
         name: 'Magic Missile',
         level: 1,
         school: 'evocation',
@@ -385,6 +401,7 @@ export class SpellRuntime {
       },
       {
         id: 'cure_wounds',
+        components: { verbal: true, somatic: true },
         name: 'Cure Wounds',
         level: 1,
         school: 'evocation',
@@ -419,6 +436,7 @@ export class SpellRuntime {
       },
       {
         id: 'shield',
+        components: { verbal: true, somatic: true },
         name: 'Shield',
         level: 1,
         school: 'abjuration',
@@ -491,6 +509,7 @@ export class SpellRuntime {
       },
       {
         id: 'identify',
+        components: { verbal: true, somatic: true, material: 'a pearl worth at least 100 gp', materialCost: 100 },
         name: 'Identify',
         level: 1,
         school: 'divination',
@@ -508,6 +527,7 @@ export class SpellRuntime {
       // LEVEL 2
       {
         id: 'hold_person',
+        components: { verbal: true, somatic: true, material: 'a small, straight piece of iron' },
         name: 'Hold Person',
         level: 2,
         school: 'enchantment',
@@ -578,6 +598,7 @@ export class SpellRuntime {
       // LEVEL 3
       {
         id: 'fireball',
+        components: { verbal: true, somatic: true, material: 'a tiny ball of bat guano and sulfur' },
         name: 'Fireball',
         level: 3,
         school: 'evocation',
@@ -1025,6 +1046,73 @@ export class SpellRuntime {
     return JSON.parse(JSON.stringify(active));
   }
 
+  private spellcastingModifier(state: ActorSpellcastingState): number {
+    const proficiency = Math.floor((Math.max(1, state.casterLevel) - 1) / 4) + 2;
+    return state.spellAttackBonus - proficiency;
+  }
+
+  /**
+   * Counterspell: a reaction that spends a slot of level 3 or higher. A spell of the slot level or lower is countered; a
+   * higher spell needs a spellcasting ability check of 10 + the spell level.
+   */
+  public counterspell(params: {
+    counterCasterId: string;
+    targetSpellLevel: number;
+    slotLevel?: number;
+    rulesProfile?: RulesProfile;
+    diceEngine?: LocalDiceEngine;
+  }): { success: boolean; countered: boolean; errorReason?: string; checkTotal?: number; checkDc?: number } {
+    const profile = params.rulesProfile || rulesProfileEngine.createDefault('FULL_DND');
+    if (!rulesProfileEngine.rulePermits(profile, 'casting.counterspell_dispel')) return { success: false, countered: false, errorReason: "Counterspell is switched off in this story's rules." };
+    const state = this.actorStates.get(params.counterCasterId);
+    if (!state) return { success: false, countered: false, errorReason: 'The counterspelling caster has no spell state.' };
+    const slotLevel = Math.max(3, Math.floor(params.slotLevel ?? 3));
+    if (rulesProfileEngine.rulePermits(profile, 'casting.spell_slots')) {
+      const slot = state.spellSlots[slotLevel];
+      if (!slot || slot.current <= 0) return { success: false, countered: false, errorReason: `No level ${slotLevel} spell slot is available for Counterspell.` };
+      slot.current -= 1;
+    }
+    if (params.targetSpellLevel <= slotLevel) return { success: true, countered: true };
+    const dice = params.diceEngine || new LocalDiceEngine(1337);
+    const dc = 10 + params.targetSpellLevel;
+    const roll = dice.roll('1d20', this.spellcastingModifier(state));
+    return { success: true, countered: roll.total >= dc, checkTotal: roll.total, checkDc: dc };
+  }
+
+  /**
+   * Dispel Magic: ends the concentration effect on a target caster. An effect of the slot level or lower ends; a higher one
+   * needs a spellcasting ability check of 10 + the effect level.
+   */
+  public dispelMagic(params: {
+    dispellerId: string;
+    targetCasterId: string;
+    slotLevel?: number;
+    rulesProfile?: RulesProfile;
+    diceEngine?: LocalDiceEngine;
+  }): { success: boolean; dispelled: boolean; spellName?: string; errorReason?: string } {
+    const profile = params.rulesProfile || rulesProfileEngine.createDefault('FULL_DND');
+    if (!rulesProfileEngine.rulePermits(profile, 'casting.counterspell_dispel')) return { success: false, dispelled: false, errorReason: "Dispel Magic is switched off in this story's rules." };
+    const dispeller = this.actorStates.get(params.dispellerId);
+    if (!dispeller) return { success: false, dispelled: false, errorReason: 'The dispelling caster has no spell state.' };
+    const target = this.actorStates.get(params.targetCasterId);
+    const active = target?.activeConcentration;
+    if (!target || !active) return { success: true, dispelled: false, errorReason: 'There is no concentration effect to dispel.' };
+    const slotLevel = Math.max(3, Math.floor(params.slotLevel ?? 3));
+    if (rulesProfileEngine.rulePermits(profile, 'casting.spell_slots')) {
+      const slot = dispeller.spellSlots[slotLevel];
+      if (!slot || slot.current <= 0) return { success: false, dispelled: false, errorReason: `No level ${slotLevel} spell slot is available for Dispel Magic.` };
+      slot.current -= 1;
+    }
+    let removed = active.slotLevel <= slotLevel;
+    if (!removed) {
+      const dice = params.diceEngine || new LocalDiceEngine(1337);
+      removed = dice.roll('1d20', this.spellcastingModifier(dispeller)).total >= 10 + active.slotLevel;
+    }
+    if (!removed) return { success: true, dispelled: false, spellName: active.spellName };
+    this.breakConcentration(params.targetCasterId, 'Dispelled by ' + params.dispellerId);
+    return { success: true, dispelled: true, spellName: active.spellName };
+  }
+
   public breakConcentration(
     actorId: string,
     reason: string
@@ -1316,11 +1404,12 @@ export class SpellRuntime {
     const customOverrides = profile.parameterOverrides?.custom_spell_rules as Record<string, unknown> | undefined;
     const overrides = allowsStandardSpellRules ? standardOverrides : customOverrides;
     const unlimitedSlots = Boolean(overrides?.unlimitedSpellSlots);
-    const allowUnprepared = Boolean(overrides?.allowUnpreparedCasting);
+    const allowUnprepared = Boolean(overrides?.allowUnpreparedCasting) || !rulesProfileEngine.rulePermits(profile, 'casting.prepared_known_limits');
     const maxAllowedLevel = overrides?.maxAllowedSpellLevel !== undefined ? Number(overrides.maxAllowedSpellLevel) : undefined;
+    const slotsRuleOn = rulesProfileEngine.rulePermits(profile, 'casting.spell_slots');
     const enforceSlotConsumption = allowsStandardSpellRules
-      ? !unlimitedSlots
-      : Boolean(customOverrides?.enforceSlotConsumption);
+      ? !unlimitedSlots && slotsRuleOn
+      : (Boolean(customOverrides?.enforceSlotConsumption) || profile.ruleToggles?.['casting.spell_slots'] === true) && slotsRuleOn;
 
     // Rule: Mode-specific level caps
     if (maxAllowedLevel !== undefined && spell.level > maxAllowedLevel) {
@@ -1361,6 +1450,20 @@ export class SpellRuntime {
       }
     }
 
+    if (isRitual && !rulesProfileEngine.rulePermits(profile, 'casting.rituals')) {
+      return {
+        success: false,
+        errorCode: 'RITUALS_DISABLED',
+        errorReason: "Ritual casting is switched off in this story's rules.",
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: 0,
+        isRitual: true,
+        requiresConcentration: spell.requiresConcentration,
+        headline: `Cannot cast ${spell.name} as a ritual: rituals are switched off.`,
+      };
+    }
+
     // Rule 2: Ritual Casting Verification. Standard D&D ritual legality is enforced
     // only when standard spell rules are enabled; Custom Homebrew owns its own semantics.
     if (isRitual && allowsStandardSpellRules) {
@@ -1376,6 +1479,29 @@ export class SpellRuntime {
           requiresConcentration: spell.requiresConcentration,
           headline: `Cannot cast ${spell.name} as ritual: spell lacks ritual property.`,
         };
+      }
+    }
+
+    // Casting rule: components (verbal, somatic, material).
+    if (spell.components && rulesProfileEngine.rulePermits(profile, 'casting.components')) {
+      const casterConditions = new Set((casterParticipant.conditions || []).map((c) => c.toLowerCase()));
+      const fail = (reason: string) => ({
+        success: false as const,
+        errorCode: 'COMPONENTS_UNAVAILABLE',
+        errorReason: reason,
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: 0,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: `Cannot cast ${spell.name}: ${reason}`,
+      });
+      if (spell.components.verbal && (casterConditions.has('silenced') || casterConditions.has('gagged'))) return fail('the caster cannot speak the verbal component.');
+      if (spell.components.somatic && (casterConditions.has('restrained') || request.handsFree === false)) return fail('the caster has no free hand for the somatic component.');
+      if (spell.components.material) {
+        const costly = Number(spell.components.materialCost || 0) > 0;
+        const available = costly ? request.materialComponentsAvailable === true : request.materialComponentsAvailable !== false;
+        if (!available) return fail(costly ? 'the costly material component is not at hand.' : 'no material component or spellcasting focus is at hand.');
       }
     }
 
@@ -1398,6 +1524,25 @@ export class SpellRuntime {
         requiresConcentration: spell.requiresConcentration,
         headline: `Invalid slot level ${effectiveSlotLevel} for ${spell.name}.`,
       };
+    }
+
+    // When slots do not bound the cast, the character level still caps the highest spell level reachable.
+    if (!enforceSlotConsumption && spell.level > 0 && rulesProfileEngine.rulePermits(profile, 'casting.max_spell_level')) {
+      const reachable = Object.entries(state.spellSlots).filter(([, slot]) => slot.max > 0).map(([lvl]) => Number(lvl));
+      const highestSlot = Math.max(0, ...reachable);
+      if (reachable.length > 0 && Math.max(spell.level, effectiveSlotLevel) > highestSlot) {
+        return {
+          success: false,
+          errorCode: 'SPELL_LEVEL_EXCEEDS_CAP',
+          errorReason: `A level ${state.casterLevel} caster cannot reach level ${Math.max(spell.level, effectiveSlotLevel)} spells.`,
+          spellId: spell.id,
+          spellName: spell.name,
+          slotLevelUsed: effectiveSlotLevel,
+          isRitual,
+          requiresConcentration: spell.requiresConcentration,
+          headline: `Cannot cast ${spell.name}: beyond the caster's level.`,
+        };
+      }
     }
 
     if (effectiveSlotLevel > 0 && enforceSlotConsumption) {
@@ -1581,7 +1726,8 @@ export class SpellRuntime {
 
     // 2. Concentration Transition
     let brokenPreviousConcentration: { spellId: string; spellName: string } | undefined;
-    if (spell.requiresConcentration) {
+    const concentrationOn = rulesProfileEngine.rulePermits(profile, 'casting.concentration');
+    if (spell.requiresConcentration && concentrationOn) {
       if (state.activeConcentration) {
         const breakRes = this.breakConcentration(
           casterId,
@@ -1628,7 +1774,13 @@ export class SpellRuntime {
     let targetConcCheck: ConcentrationCheckResult | undefined;
 
     // Upcasting scaling calculations
-    const upcastLevelDelta = Math.max(0, effectiveSlotLevel - spell.level);
+    // Cantrips grow stronger at caster levels 5, 11 and 17 (extra damage dice) while the rule is on.
+    let effectiveDamageFormula = spell.damageFormula;
+    if (spell.level === 0 && spell.damageFormula && rulesProfileEngine.rulePermits(profile, 'casting.cantrip_scaling')) {
+      const tier = state.casterLevel >= 17 ? 4 : state.casterLevel >= 11 ? 3 : state.casterLevel >= 5 ? 2 : 1;
+      effectiveDamageFormula = spell.damageFormula.replace(/^(\d+)d(\d+)/, (_m, count, sides) => `${Number(count) * tier}d${sides}`);
+    }
+    const upcastLevelDelta = rulesProfileEngine.rulePermits(profile, 'casting.upcasting') ? Math.max(0, effectiveSlotLevel - spell.level) : 0;
 
     if (isAreaSpell) {
       for (const areaTarget of areaTargets) {
@@ -1645,7 +1797,7 @@ export class SpellRuntime {
           savingThrowResult = { roll, succeeds, ability, dc };
 
           if (spell.damageFormula) {
-            let baseDmg = dice.roll(spell.damageFormula).total + spellDamageBonus;
+            let baseDmg = dice.roll(effectiveDamageFormula as string).total + spellDamageBonus;
             if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
               for (let u = 0; u < upcastLevelDelta; u++) baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
             }
@@ -1686,7 +1838,7 @@ export class SpellRuntime {
           }
         } else if (spell.defenseModel === 'AUTOMATIC') {
           if (!spell.damageFormula) continue;
-          let baseDmg = dice.roll(spell.damageFormula).total + spellDamageBonus;
+          let baseDmg = dice.roll(effectiveDamageFormula as string).total + spellDamageBonus;
           if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
             for (let u = 0; u < upcastLevelDelta; u++) baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
           }
@@ -1740,7 +1892,7 @@ export class SpellRuntime {
       };
 
       if (hits && spell.damageFormula) {
-        const baseDmgRoll = dice.roll(spell.damageFormula);
+        const baseDmgRoll = dice.roll(effectiveDamageFormula as string);
         let dmgTotal = baseDmgRoll.total;
         if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
           for (let u = 0; u < upcastLevelDelta; u++) {
@@ -1778,7 +1930,7 @@ export class SpellRuntime {
       savingThrowResult = { roll, succeeds, ability, dc };
 
       if (spell.damageFormula) {
-        let baseDmg = dice.roll(spell.damageFormula).total + spellDamageBonus;
+        let baseDmg = dice.roll(effectiveDamageFormula as string).total + spellDamageBonus;
         if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
           for (let u = 0; u < upcastLevelDelta; u++) {
             baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
@@ -1826,7 +1978,7 @@ export class SpellRuntime {
       }
     } else if (spell.defenseModel === 'AUTOMATIC' && targetParticipant) {
       if (spell.damageFormula) {
-        let baseDmg = dice.roll(spell.damageFormula).total + spellDamageBonus;
+        let baseDmg = dice.roll(effectiveDamageFormula as string).total + spellDamageBonus;
         if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
           for (let u = 0; u < upcastLevelDelta; u++) {
             baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
@@ -1991,7 +2143,7 @@ export class SpellRuntime {
 
     // Establish Concentration if spell requires it and was successfully cast
     let concentrationEstablished = false;
-    if (spell.requiresConcentration && !targetDied) {
+    if (spell.requiresConcentration && concentrationOn && !targetDied) {
       const targetIds = areaTargets.length > 0
         ? areaTargets.map((p) => p.id)
         : targetParticipant

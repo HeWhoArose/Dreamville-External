@@ -9,7 +9,11 @@ import {
   WORLD_DIRECTOR_PREPARATION_CONTRACT_VERSION,
   WORLD_DIRECTOR_INVESTIGATION_EVENT_CATEGORY,
   WORLD_DIRECTOR_INVESTIGATION_OWNER_ROLES,
+  extractInvestigationSeedFromPremise,
 } from '../domain/worldDirectorPreparationContract';
+import { isInvestigationPremise } from '../domain/worldDirector';
+import { CharacterCanonSteward } from '../domain/characterCanonSteward';
+import { deterministicId } from '../domain/deterministicRng';
 import type { InMemoryWorldRepository, WorldRepository } from '../repositories/worldRepository';
 import type { WorldDirectorInvestigationSeed } from '../../src/types';
 
@@ -60,7 +64,7 @@ function validateSeed(value: unknown): value is WorldDirectorInvestigationSeed {
 }
 
 function sourceRefForRun(run: any): string | undefined {
-  const characterId = run?.protagonist?.characterId || run?.characterId || run?.protagonist?.id;
+  const characterId = run?.protagonist?.characterId || run?.characterId || run?.protagonist?.id || (run?.storyId ? `char_${run.storyId}` : undefined);
   return isNonEmpty(characterId) ? `${characterId}:startingSituation` : undefined;
 }
 
@@ -95,7 +99,23 @@ export class WorldDirectorPreparationService {
     locationId: string,
   ): Promise<WorldDirectorPreparationResult> {
     const run = repository.getStoryRun(storyId);
-    const seed = run?.startingSituation?.worldDirectorInvestigation;
+    let seed = run?.startingSituation?.worldDirectorInvestigation;
+
+    // F09: If no structured seed is present and run.startingSituation is a freeform string, synthesize investigation seed
+    if (seed === undefined && typeof run?.startingSituation === 'string') {
+      const rawPremise = run.startingSituation;
+      if (rawPremise && isInvestigationPremise(rawPremise)) {
+        const characterId = run?.protagonist?.characterId || run?.characterId || run?.protagonist?.id || (run?.storyId ? `char_${run.storyId}` : undefined);
+        const synthesizedSeed = extractInvestigationSeedFromPremise(rawPremise, { characterId, storyId });
+        if (synthesizedSeed) {
+          seed = synthesizedSeed;
+          // Normalize run.startingSituation to preserve the synthesized seed
+          run.startingSituation = { summary: rawPremise, worldDirectorInvestigation: seed };
+          repository.saveStoryRun(run);
+        }
+      }
+    }
+
     if (seed === undefined) {
       return { status: 'NOT_REQUESTED', canonicalChanges: [], issues: [] };
     }
@@ -337,6 +357,25 @@ export class WorldDirectorPreparationService {
       const code = error.startsWith('OWNER_CONFLICT:') ? 'OWNER_CONFLICT' : 'COMMIT_FAILED';
       return blocked(code, error.replace(/^OWNER_CONFLICT:\s*/, ''), preparationKey, seed.sourceRef);
     }
+    // Register restricted investigation facts with CharacterCanonSteward (F18)
+    for (const anchor of seed.evidence) {
+      CharacterCanonSteward.registerRestrictedInvestigationFact({
+        storyId,
+        factId: deterministicId('investigation_fact', storyId, preparationKey, anchor.slot),
+        summary: anchor.name || anchor.slot,
+        originLocationId: locationId,
+        keywords: [anchor.slot, ...(anchor.name ? anchor.name.split(/\W+/) : [])].filter((k) => k.length >= 3),
+      });
+    }
+
+    // Assign explicit localized knowledge boundaries to opening scene NPCs (F18)
+    const entities = repository.getEntityCards(storyId);
+    for (const card of entities) {
+      if (card.kind !== 'PLAYER') {
+        CharacterCanonSteward.initializeCharacterFromCard(card);
+      }
+    }
+
     const data = commandResult.data;
     if (data?.recordRefs) {
       return { status: 'PREPARED', preparationKey, sourceRef: seed.sourceRef, canonicalChanges: data.canonicalChanges || [], recordRefs: data.recordRefs, issues: [] };

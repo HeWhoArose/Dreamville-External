@@ -57,6 +57,20 @@ export class CombatEffectEngine {
     } else if (normalized.resolutionMode === 'SAVE' || normalized.resolutionMode === 'AREA') {
       normalized.saveFormula = resolveCapabilityCheckFormula(rulesMode as any, undefined);
     }
+    if (normalized.deliveryMode === 'CHECK_REQUIRED') {
+      const dc = Number(normalized.deliveryDifficultyClass);
+      if (!Number.isFinite(dc) || dc < 1) return { success: false, errorReason: 'CHECK_REQUIRED delivery requires deliveryDifficultyClass.' };
+    }
+    if (normalized.deliveryFormula !== undefined) {
+      if (!isDiceFormula(normalized.deliveryFormula)) return { success: false, errorReason: `Invalid or unsafe delivery formula '${normalized.deliveryFormula}'.` };
+      normalized.deliveryFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.deliveryFormula);
+    }
+    if (normalized.resourceCost !== undefined) {
+      const name = String(normalized.resourceCost.name || '').trim();
+      const amount = Number(normalized.resourceCost.amount);
+      if (!name || !Number.isFinite(amount) || amount < 0 || amount > 1000) return { success: false, errorReason: 'resourceCost needs a resource name and an amount from 0 to 1000.' };
+      normalized.resourceCost = { name, amount: Math.trunc(amount) };
+    }
     if (normalized.executionFormula !== undefined) {
       if (!isDiceFormula(normalized.executionFormula)) {
         return { success: false, errorReason: `Invalid or unsafe execution formula '${normalized.executionFormula}'.` };
@@ -203,7 +217,7 @@ export class CombatEffectEngine {
     actorId: string,
     targetIds: string[],
     definition: CombatEffectDefinition,
-    options: { consumeAction?: boolean; recordReplay?: boolean } = {}
+    options: { consumeAction?: boolean; recordReplay?: boolean; consumeResources?: boolean } = {}
   ): CombatEffectResult {
     const profile = engine.getRulesProfile();
     const validation = this.validateDefinition(definition, profile?.mode || 'FULL_DND');
@@ -215,7 +229,9 @@ export class CombatEffectEngine {
       ...beforeState,
       combatReplayRecords: [],
     }));
+    const deliveredResultsHolder: { value?: NonNullable<CombatEffectResult['deliveryResults']> } = {};
     const rollback = <T extends CombatEffectResult>(result: T): T => {
+      if (result.success && deliveredResultsHolder.value && !result.deliveryResults) result.deliveryResults = deliveredResultsHolder.value;
       if (!result.success) {
         engine.importState(beforeState);
         return result;
@@ -269,6 +285,111 @@ export class CombatEffectEngine {
       const resourceResult = engine.consumeCombatAction(actorId, normalized.actionCost || 'ACTION');
       if (!resourceResult.success) return rollback({ success: false, errorReason: resourceResult.errorReason });
       resourceConsumed = normalized.actionCost !== 'FREE';
+    }
+
+    const afterExecution = engine.consumeStageInterrupt('AFTER_EXECUTION', { sourceActorId: actorId, targetIds });
+    if (afterExecution.fired && afterExecution.action === 'CANCEL_EFFECT') {
+      engine.recordStageEvent('EXECUTION_INTERRUPTED', afterExecution.actorId || actorId, targetIds[0], `${normalized.name} was cancelled as it was produced.`, { interruptId: afterExecution.interruptId });
+      return rollback({
+        success: true,
+        actionConsumed: resourceConsumed,
+        effectId: normalized.id,
+        effectName: normalized.name,
+        instances: [],
+        totalDamage: 0,
+        deliveryBlocked: true,
+        interrupted: { stage: 'AFTER_EXECUTION', byActorId: afterExecution.actorId || '', interruptId: afterExecution.interruptId || '' },
+        executionResult,
+      });
+    }
+
+    if (normalized.resourceCost && options.consumeResources !== false) {
+      const spent = engine.spendSpecialResource(actorId, normalized.resourceCost.name, normalized.resourceCost.amount);
+      if (!spent.success) return rollback({ success: false, errorReason: spent.errorReason });
+    }
+
+    // Delivery stage: the effect has been executed; does it reach each target? Distinct from a save (resisted) and from
+    // execution (the user failing to produce it). Interrupts, wards and delivery checks live here.
+    const reachable = targeting.targetIds.filter((id) => id !== actorId);
+    if (normalized.resolutionMode !== 'WORLD_EFFECT' && reachable.length > 0) {
+      const interrupt = engine.consumeStageInterrupt('BEFORE_DELIVERY', { sourceActorId: actorId, targetIds: targeting.targetIds });
+      if (interrupt.fired && interrupt.action === 'CANCEL_EFFECT') {
+        engine.recordStageEvent('DELIVERY_INTERRUPTED', interrupt.actorId || actorId, targeting.targetIds[0], `${normalized.name} was cancelled before it arrived.`, { interruptId: interrupt.interruptId });
+        return rollback({
+          success: true,
+          actionConsumed: resourceConsumed,
+          effectId: normalized.id,
+          effectName: normalized.name,
+          instances: [],
+          totalDamage: 0,
+          deliveryBlocked: true,
+          interrupted: { stage: 'BEFORE_DELIVERY', byActorId: interrupt.actorId || '', interruptId: interrupt.interruptId || '' },
+          deliveryResults: targeting.targetIds.map((targetId) => ({ targetId, delivered: false, reason: 'Cancelled by an interrupt before delivery.' })),
+          executionResult,
+        });
+      }
+      const deliveryResults: NonNullable<CombatEffectResult['deliveryResults']> = [];
+      const tags = [...(normalized.tags || []), normalized.damageType || ''].filter(Boolean).map((tag) => tag.toLowerCase());
+      for (const targetId of targeting.targetIds) {
+        if (targetId === actorId) { deliveryResults.push({ targetId, delivered: true, reason: 'Self-targeted.' }); continue; }
+        const wards = (engine.getParticipant(targetId)?.wardedAgainst || []).map((ward) => ward.toLowerCase());
+        const warded = wards.includes('all') || tags.some((tag) => wards.includes(tag));
+        if (warded) {
+          deliveryResults.push({ targetId, delivered: false, reason: 'Warded: the effect cannot reach this target.' });
+          engine.recordStageEvent('DELIVERY_BLOCKED', actorId, targetId, `${normalized.name} was blocked by a ward before reaching its target.`, { tags });
+          continue;
+        }
+        if (normalized.deliveryMode === 'CHECK_REQUIRED' && normalized.resolutionMode !== 'MULTI_INSTANCE') {
+          const dc = Number(normalized.deliveryDifficultyClass);
+          const roll = engine.getDiceEngine().roll(normalized.deliveryFormula || '1d20', 0);
+          const delivered = roll.total >= dc;
+          deliveryResults.push({ targetId, delivered, reason: delivered ? 'Delivery check passed.' : 'Delivery check failed.', roll, difficultyClass: dc });
+          if (!delivered) engine.recordStageEvent('DELIVERY_BLOCKED', actorId, targetId, `${normalized.name} failed its delivery check and did not arrive.`, { roll: roll.total, difficultyClass: dc });
+          continue;
+        }
+        deliveryResults.push({ targetId, delivered: true, reason: 'Delivered.' });
+      }
+      // A multi-instance effect rolls delivery for each instance: five beams can each fail to arrive on their own.
+      if (normalized.deliveryMode === 'CHECK_REQUIRED' && normalized.resolutionMode === 'MULTI_INSTANCE') {
+        const dc = Number(normalized.deliveryDifficultyClass);
+        const total = normalized.instanceCount || 1;
+        const wardedIds = new Set(deliveryResults.filter((entry) => !entry.delivered).map((entry) => entry.targetId));
+        const kept: Array<{ index: number; targetId: string }> = [];
+        for (let index = 0; index < total; index += 1) {
+          const targetId = normalized.instanceTargetIds?.[index] ?? targeting.targetIds[0];
+          if (wardedIds.has(targetId)) continue;
+          const roll = engine.getDiceEngine().roll(normalized.deliveryFormula || '1d20', 0);
+          const delivered = roll.total >= dc;
+          deliveryResults.push({ targetId, delivered, instanceIndex: index, reason: delivered ? 'Delivery check passed.' : 'Delivery check failed.', roll, difficultyClass: dc });
+          if (delivered) kept.push({ index, targetId }); else engine.recordStageEvent('DELIVERY_BLOCKED', actorId, targetId, `${normalized.name} (instance ${index + 1}) failed its delivery check and did not arrive.`, { roll: roll.total, difficultyClass: dc, instanceIndex: index });
+        }
+        if (kept.length > 0 && kept.length < total) {
+          normalized.instanceCount = kept.length;
+          if (normalized.instanceTargetIds?.length) normalized.instanceTargetIds = kept.map((entry) => entry.targetId);
+        }
+        // The per-beam results replace the generic per-target "delivered" entries; wards (undelivered) stay.
+        for (let index = deliveryResults.length - 1; index >= 0; index -= 1) {
+          if (deliveryResults[index].instanceIndex === undefined && deliveryResults[index].delivered) deliveryResults.splice(index, 1);
+        }
+      }
+      const deliveredIds = Array.from(new Set(deliveryResults.filter((entry) => entry.delivered).map((entry) => entry.targetId)));
+      if (deliveredIds.length < targeting.targetIds.length) {
+        if (deliveredIds.length === 0) {
+          return rollback({
+            success: true,
+            actionConsumed: resourceConsumed,
+            effectId: normalized.id,
+            effectName: normalized.name,
+            instances: [],
+            totalDamage: 0,
+            deliveryBlocked: true,
+            deliveryResults,
+            executionResult,
+          });
+        }
+        (targeting as { targetIds: string[] }).targetIds = deliveredIds;
+      }
+      deliveredResultsHolder.value = deliveryResults;
     }
 
     if (normalized.resolutionMode === 'OUTCOME') {
@@ -520,3 +641,51 @@ export class CombatEffectEngine {
 }
 
 export const combatEffectEngine = new CombatEffectEngine();
+
+// Lets the combat engine resolve triggered effects and falls through this pipeline without importing it (no import cycle).
+TacticalCombatEngine.setEffectResolver(
+  (engine, actorId, targetIds, definition, options) => combatEffectEngine.resolve(engine, actorId, targetIds, definition, options),
+  (actorId, feet) => buildFallEffect(actorId, feet),
+);
+
+/**
+ * Extra Attack and Multiattack as the unified multi-instance effect: one action, one independent attack roll per instance.
+ * `attacks` defaults to the actor's attacks per action.
+ */
+export function buildMultiattackEffect(engine: TacticalCombatEngine, actorId: string, targetId: string, attacks?: number): CombatEffectDefinition | undefined {
+  const actor = engine.getParticipant(actorId);
+  if (!actor) return undefined;
+  const count = Math.max(1, Math.floor(attacks ?? actor.attacksPerAction ?? 1));
+  return {
+    id: `multiattack_${actorId}`,
+    name: 'Multiattack',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    instanceCount: count,
+    damageFormula: actor.damageFormula,
+    damageType: actor.damageType,
+    provenance: 'dreamville:multiattack',
+  };
+}
+
+/** A fall as an automatic effect on the faller: 1d6 per 10 feet (at most 20d6), bludgeoning, landing prone. */
+export function buildFallEffect(actorId: string, feet: number): CombatEffectDefinition | undefined {
+  const dice = Math.min(20, Math.floor(Math.max(0, feet) / 10));
+  if (dice <= 0) return undefined;
+  return {
+    id: `fall_${actorId}`,
+    name: 'Fall',
+    resolutionMode: 'AREA',
+    scale: 'PERSON',
+    actionCost: 'FREE',
+    targetingMode: 'SELF',
+    damageFormula: `${dice}d6`,
+    damageType: 'bludgeoning',
+    areaShape: 'POINT',
+    areaRadiusCells: 0,
+    conditionEffects: [{ trigger: 'ALWAYS', conditionIdOrName: 'Prone' }],
+    provenance: 'dreamville:fall',
+  };
+}

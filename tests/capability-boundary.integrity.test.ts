@@ -54,7 +54,7 @@ test('freeform player actions remain the only content in Recent Actions history'
 test('capability advisor bypass is server-internal only', () => {
   const routes = read('server/api/gameRoutes.ts');
   const authority = read('server/mockEngine/serverMockAuthority.ts');
-  assert.match(authority, /options\?: \{ bypassCapabilityAdvisor\?: boolean \}/);
+  assert.match(authority, /options\?: \{ bypassCapabilityAdvisor\?: boolean(?:; narrationDirective\?: string)? \}/);
   assert.match(authority, /options\?\.bypassCapabilityAdvisor/);
   assert.doesNotMatch(authority, /Boolean\(\(request as any\)\.bypassCapabilityAdvisor\)/);
   assert.match(routes, /delete \(actionRequest as any\)\.bypassCapabilityAdvisor/);

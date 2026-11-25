@@ -39,7 +39,7 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
       assert.ok(invalidRes.errorReason?.includes('cannot be equipped in slot head'));
     });
 
-    it('degrades durability, breaks item at 0, and unequips broken items', () => {
+    it('degrades durability, breaks item at 0, and keeps broken items usable but degraded', () => {
       const invEngine = new InventoryItemEngine();
       const sword = invEngine.createInstance({
         defId: 'def_iron_sword',
@@ -52,10 +52,11 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
       assert.strictEqual(wearRes.currentDurability, 0);
       assert.strictEqual(wearRes.becameBroken, true);
 
-      // Cannot equip a broken item
+      // A broken item stays equipped (and can be re-equipped); its performance is diminished instead
+      assert.strictEqual(invEngine.getItemInstance(sword.id)?.equippedSlot, 'mainHand');
+      invEngine.unequipItem('actor_vael', sword.id);
       const equipBroken = invEngine.equipItem('actor_vael', sword.id, 'mainHand');
-      assert.strictEqual(equipBroken.success, false);
-      assert.ok(equipBroken.errorReason?.includes('Cannot equip a broken item'));
+      assert.strictEqual(equipBroken.success, true);
 
       // Repair restores functionality
       const repRes = invEngine.repairItem(sword.id, 50);

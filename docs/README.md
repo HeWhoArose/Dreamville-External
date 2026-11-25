@@ -1,7 +1,7 @@
 # Dreamville Documentation Index — Read This Before Planning or Coding
 
-**Index status:** CURRENT  
-**Reviewed against:** current `main` at `18d7831cf51503920396067279b21af7b615b319` and PR #76 code/test head `15f1477599c0e09695e752789e31cc9819f3101a` (2026-10-17). Earlier code/test checkpoints are superseded; earlier `090b7d7…` source traces remain explicitly baseline snapshots.  
+**Index status:** CURRENT — re-reviewed 2026-11-23 (see section 0 and "Current integration status"). The 2026-10-17 checkpoint further down is historical.  
+**Originally reviewed against (2026-10-17, historical):** current `main` at `18d7831cf51503920396067279b21af7b615b319` and PR #76 code/test head `15f1477599c0e09695e752789e31cc9819f3101a` (2026-10-17). Earlier code/test checkpoints are superseded; earlier `090b7d7…` source traces remain explicitly baseline snapshots.  
 **Purpose:** tell future developers/AI agents which documents are authoritative, what is complete, what is still planned, and which files must not be used as implementation instructions.
 
 ## 0. CURRENT FOCUS PLAN (2026-11-03)
@@ -11,6 +11,10 @@
 - All new work follows its roadmap phase-by-phase, starting at **Phase 1A (stabilise the live narration and validation contract)** after Phase 0 baseline reconciliation.
 - It **supersedes every other plan document in `docs/`** as a work queue — including `WORLD_DIRECTOR_IMPLEMENTATION_PLAN.md`, `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`, the phase checklists and all other roadmaps. Do not start new work from those; they remain only as contracts/traceability for their respective subsystems.
 - `docs/README.md` (this index) and the per-subsystem owner contracts it lists are not superseded for their own narrow topics; everywhere else, when documents conflict, UNIFIED_AUDIT_RECONCILIATION.md wins.
+
+**Roadmap status (2026-11-23):** Phase 0 and Phases 1A–1F are implemented and verified offline on branch `feat/unified-audit-reconciliation-programme` (not yet committed or merged). The plan contains **no phase after 1F**. Real-provider testing is only partly done and human UI testing is BLOCKED. Evidence: [FINAL_24_DOMAIN_AUDIT_AND_DELIVERABLES.md](audit/FINAL_24_DOMAIN_AUDIT_AND_DELIVERABLES.md). What to do next, and which plan documents are needed, redundant or test-pinned: [PLAN_DOCUMENT_AUDIT_2026-11-23.md](audit/PLAN_DOCUMENT_AUDIT_2026-11-23.md).
+
+**Relationship to V2:** the Unified plan was written separately from `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` (from two outside audits, not from V2) and declares V2 superseded as a work queue without absorbing V2's unbuilt slices (X1–X9). Treat V2 as a backlog and a source of live-test scenarios (section 2), not as the repository work queue.
 
 ## 1. Source-of-truth order
 
@@ -24,7 +28,16 @@ When documents disagree, use this order:
 6. A current verification report for the exact code/commit being discussed.
 7. Historical audit records only as evidence of what was found at their recorded commit.
 
-## Current integration status — 2026-10-17
+**Do not use documents inside `docs/outdated/` as implementation instructions.** They are kept for traceability and to explain previous decisions, not as a queue of unfinished work.
+
+## Current integration status — 2026-11-23
+
+- **Automated gates (re-run 2026-11-23):** full suite 1,986/1,986 pass (250 suites), opaque-box E2E tiers 118/118, `npm run verify:contracts`, `tsc --noEmit` (`npm run lint`) and `npm run build` exit 0.
+- **Branch state:** work is on `feat/unified-audit-reconciliation-programme`, whose `HEAD` is still the baseline `d3d0fff`; the programme is **uncommitted** in the working tree, so there is no final commit SHA yet.
+- **Real provider:** one limited live run on OpenRouter free models (partial, see audit ledger section 12.1a). Scenarios A–X and the human UI playtest are not run.
+- **Records:** [audit ledger](audit/FINAL_24_DOMAIN_AUDIT_AND_DELIVERABLES.md), [narration fix-vs-replace assessment](audit/NARRATION_FIX_VS_REPLACE_ASSESSMENT.md), [plan document audit](audit/PLAN_DOCUMENT_AUDIT_2026-11-23.md), [plan status audit](audit/PLAN_STATUS_AUDIT_2026-11-23.md), root `PROJECT.md` (milestones), `TEST_READY.md` and `TEST_INFRA.md` (E2E suite).
+
+## Historical integration checkpoint — 2026-10-17 (superseded by the status above)
 
 The latest verified code/test head is `15f1477599c0e09695e752789e31cc9819f3101a` on PR #76, based on `main` at `18d7831cf51503920396067279b21af7b615b319`. All three exact-head workflows passed: **1,530/1,530 tests across 117 suites**, zero failures; release contracts, lint, type-check, and production build passed. This checkpoint also verifies that opening prose must contain a canonical scene anchor while distinct, canonically grounded opening prose remains eligible.
 
@@ -37,29 +50,15 @@ The availability-query regression now verifies the final prompt, not only interm
 The real-provider 125-turn player acceptance test remains deferred and is not covered by these mocked/automated checks. Always check CI for the actual current PR #76 head before release.
 
 
-## 1. Source-of-truth order
-
-When documents disagree, use this order:
-
-1. Current code and tests on the target branch, plus the most recent verified CI result.
-2. This index and the current project identity/authority boundary in the root `README.md`.
-3. The active focus plan `UNIFIED_AUDIT_RECONCILIATION.md` for roadmap/phase priority.
-4. The active owner specification for the subsystem being changed.
-5. The cross-system plan `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md` for the narrative-grounding work covered there.
-6. A current verification report for the exact code/commit being discussed.
-7. Historical audit records only as evidence of what was found at their recorded commit.
-
-**Do not use documents inside `docs/outdated/` as implementation instructions.** They are kept for traceability and to explain previous decisions, not as a queue of unfinished work.
-
 ### `NARRATIVE_GROUNDING_PHASE0_RUNTIME_TRACE_2026-10-15.md`
 
 Current-main source trace for the live freeform narration pipeline, candidate rewrite/final-review seam, other narration callers, and living-world encounter boundary. Records a confirmed fail-open rejected-rewrite path and the follow-on runtime-only fix; this source trace is not a claim of passing tests or live-model validation.
 
-## 2. Current active plan for narrative grounding
+## 2. Narrative grounding plan (V2): backlog and live-test scenarios, not the work queue
 
 ### `NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`
 
-This is the complete, active owner plan. It carries forward every phase of the earlier plan (same Phase 0–9 numbering) and adds the research-driven slices. It covers:
+This is the owner plan for the narrative-grounding backlog. It is **not** the repository work queue (section 0 makes the Unified plan that); its slices X1–X9 are real but unbuilt (no objective ledger, redirection policy, milestone layer, stall ladder or replay harness exists in code as of 2026-11-23). It carries forward every phase of the earlier plan (same Phase 0–9 numbering) and adds the research-driven slices. It covers:
 - the retained **Phase 1 live-model behavioural validation**, now scenarios A–X;
 - preserving the player's information goal across follow-ups and showing a unified objective ledger;
 - finding real evidence for questions about work, contracts, quests, notices and other opportunities;
@@ -72,9 +71,9 @@ This is the complete, active owner plan. It carries forward every phase of the e
 
 **Phase 1 is not passed.** The plan specifies required scenarios, not completed results. Mock tests and replays cannot satisfy the real-provider requirement.
 
-### `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md` (deferred)
+### `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md` (deferred, archived 2026-11-23)
 
-Deferred to V2 on 2026-10-17 and kept unchanged as the historical record (CI evidence, PR triage, Phase 6 source findings, connection maps). Where it differs from V2, V2 wins. Do not start new work from it.
+Now at [outdated/superseded-plans/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN_HISTORICAL.md](outdated/superseded-plans/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN_HISTORICAL.md). Deferred to V2 on 2026-10-17 and kept unchanged as the historical record (CI evidence, PR triage, Phase 6 source findings, connection maps). Where it differs from V2, V2 wins. Do not start new work from it.
 
 ### Exact wording for Phase 1
 
@@ -128,6 +127,25 @@ Read [Narrative Grounding Phase 0 Baseline Audit](NARRATIVE_GROUNDING_PHASE0_BAS
 | `N19_CREATIVE_MODEL_TIER_CADENCE_ROUTING_AUDIT.md` | N19 routing projection extends existing orchestration | Do not add a second router or reorder explicit configured fallback routes |
 
 These records are verification snapshots, not permission to assume the latest `main` still passes. For any new change, record the exact tested commit and current CI status.
+
+### Historical and test-pinned records (not work queues)
+
+**Do not move or edit these without updating the tests that read them.** The release gate pins several by path or content.
+
+| Document | Status | Pinned by |
+|---|---|---|
+| `DREAMVILLE_VERIFICATION_DISCIPLINE_PHASE19.md` | Historical | `tests/verification-discipline.phase19.test.ts`, `tests/system-wide-phase-audit.phase24.test.ts` |
+| `DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20.md` | Historical | `tests/orphan-connection-audit.phase20.test.ts` |
+| `DREAMVILLE_RELEASE_GATE_PHASE21.md` | Historical (PR #76 era) | `tests/release-gate.phase21.test.ts` |
+| `docs/outdated/phase-17-to-24/*_HISTORICAL.md` (Phase 17, 20–24) | Archived but **required** | `scripts/verify-release-contract.mjs`, `tests/integration-matrix.phase17.test.ts`, `tests/system-wide-phase-audit.phase24.test.ts` |
+| `DREAMVILLE_DEEP_IMPLEMENTATION_SPECIFICATION.md`, `DREAMVILLE_INTEGRATION_MATRIX_PHASE17.md`, `DREAMVILLE_RELEASE_STABILIZATION_PHASE22.md`, `DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24.md`, `PHASE1_LIVE_MODEL_BEHAVIORAL_VALIDATION.md` | 7-line compatibility pointers | linked from archived documents |
+| `SYSTEM_WIDE_AUDIT_FINAL_REPORT.md` | Evidence (2026-10-04, mock run) | cited by the audit ledger |
+| `P0_NPC_AUTHORITY_AUDIT.md` | Evidence (2026-10-02) | cited by `tests/p0_npc_authority.test.ts` |
+| `DREAMVILLE_LIVE_PROVIDER_125_TURN_AUDIT.md` | Evidence (PR #76 head `15f1477`) | linked from the Phase 21 record |
+| `CAPABILITY_SKILLS_CHECKS_SURGICAL_AUDIT_2026-09-27.md`, `STORY_RUNTIME_AND_PLAYER_INTERACTION_AUDIT_2026-09-27.md` | Verified audits of earlier work | none |
+| `UNIFIED_PLAN_PHASE1A_AUDIT_2026-11-03.md` | Evidence for Phase 1A | none |
+
+Archived on 2026-11-23: `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN`, `DREAMVILLE_OPEN_PR_INTEGRATION_TRIAGE_2026-10-16` and `DAMAGE_CONTROL_AUDIT_2026-09-27` (now under `docs/outdated/`, with a `_HISTORICAL` suffix).
 
 ## 6. Required human/live validation
 

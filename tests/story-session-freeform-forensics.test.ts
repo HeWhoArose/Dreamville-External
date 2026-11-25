@@ -106,7 +106,7 @@ describe('freeform narration turns are fully recorded without leaking forensics'
 
     // No forensic fields in the client response.
     // The response shape is unchanged by recording: same top-level keys as before the change.
-    assert.deepEqual(Object.keys(data).sort(), ['actionAdvice', 'actionId', 'authoritativeFeedback', 'message', 'narrativeGeneration', 'narrativeResponse', 'requestType', 'status', 'success', 'viewState']);
+    assert.deepEqual(Object.keys(data).sort(), ['actionAdvice', 'actionId', 'authoritativeFeedback', 'message', 'narrativeGeneration', 'narrativeQuality', 'narrativeResponse', 'requestType', 'stateAdjudication', 'status', 'success', 'viewState']);
     for (const forbidden of ['forensicContext', 'forensicSink', 'narrationPrompt', 'narrationStyleInstruction', 'researchPacket', 'currentSituation']) {
       const at = response.raw.indexOf(`"${forbidden}"`);
       assert.equal(at >= 0, false, `response must not contain ${forbidden}: ...${at >= 0 ? response.raw.slice(Math.max(0, at - 80), at + 120) : ''}`);

@@ -120,6 +120,7 @@ const StoryCheckCard: React.FC<{
 			onComplete={onReveal}
 			title={check.testType === 'SAVING_THROW' ? `${check.ability} Saving Throw` : `${check.skill} Check`}
 			subtitle={`${check.roll.formula} · ${check.ability}`}
+			bonusesLabel={`${(check.roll.modifier || 0) >= 0 ? '+' : '−'}${Math.abs(check.roll.modifier || 0)} ${check.ability}`}
 			defenseLabel="DC"
 			defenseValue={check.difficultyClass}
 			outcome={revealed ? (check.success ? 'SUCCESS' : 'FAILURE') : 'NEUTRAL'}
@@ -1714,13 +1715,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
                         <Dices className="h-3.5 w-3.5 text-amber-300" />
                         <div className="min-w-0">
                           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-100/70">Dice appearance</p>
-                          <p className="mt-0.5 text-[9px] leading-4 text-stone-600">Choose physical 3D dice or lightweight 2D illustrated dice.</p>
+                          <p className="mt-0.5 text-[9px] leading-4 text-stone-600">Choose physical 3D dice, lightweight 2D illustrated dice, or the gilded roll card.</p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/6 bg-black/20 p-1">
-                      {(['3D', '2D'] as const).map((mode) => {
+                    <div className="grid grid-cols-3 gap-1 rounded-lg border border-white/6 bg-black/20 p-1">
+                      {(['3D', '2D', 'CARD'] as const).map((mode) => {
                         const active = DICE_THEME_PRESETS.find((theme) => theme.id === settings.diceTheme)?.mode === mode;
                         return (
                           <button
@@ -1733,20 +1734,20 @@ export const StoryView: React.FC<StoryViewProps> = ({
                             className={"rounded-md px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition " + (active ? 'bg-amber-300 text-[#24170a]' : 'text-stone-500 hover:bg-white/[0.04] hover:text-stone-200')}
                             aria-pressed={active}
                           >
-                            {mode === '3D' ? '3D Physical' : '2D Illustrated'}
+                            {mode === '3D' ? '3D Physical' : mode === '2D' ? '2D Illustrated' : 'Gilded Card'}
                           </button>
                         );
                       })}
                     </div>
 
                     <div className="mt-2 space-y-1">
-                      {(['3D', '2D'] as const).map((mode) => {
+                      {(['3D', '2D', 'CARD'] as const).map((mode) => {
                         const themes = DICE_THEME_PRESETS.filter((theme) => theme.mode === mode);
                         const modeActive = themes.some((theme) => theme.id === settings.diceTheme);
                         return (
                           <div key={mode} className={modeActive ? '' : 'hidden'}>
                             <div className="px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-stone-600">
-                              {mode === '3D' ? '3D Physical Dice' : '2D Illustrated Dice'}
+                              {mode === '3D' ? '3D Physical Dice' : mode === '2D' ? '2D Illustrated Dice' : 'Gilded Roll Card'}
                             </div>
                             {themes.map((theme) => {
                               const active = settings.diceTheme === theme.id;
@@ -1766,7 +1767,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                                       className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-md border text-[8px] font-black"
                                       style={{ background: theme.customColorset.background, color: theme.customColorset.foreground, borderColor: theme.customColorset.outline }}
                                     >
-                                      {mode === '2D' ? '2D' : '3D'}
+                                      {mode === '2D' ? '2D' : mode === 'CARD' ? '✦' : '3D'}
                                     </span>
                                   </span>
                                   <span className="min-w-0 flex-1">

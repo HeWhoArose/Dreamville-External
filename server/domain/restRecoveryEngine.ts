@@ -31,6 +31,8 @@ export interface RestRecoverySnapshot {
     completedAtSeconds?: number;
     interruptionReason?: string;
   }>;
+  /** World-clock second at which each actor last completed a long rest (one long rest per 24 hours). */
+  lastLongRestCompletedAt?: Record<string, number>;
 }
 
 export interface RestRequest {
@@ -135,6 +137,7 @@ export class RestRecoveryEngine {
   private activeRests = new Map<string, RestState>();
   private hitDice = new Map<string, HitDiceRecoveryState>();
   private lastRestResults = new Map<string, RestRecoverySnapshot['lastRestResults'][string]>();
+  private lastLongRestCompletedAt = new Map<string, number>();
 
   constructor(private readonly repository: InMemoryWorldRepository, private readonly storyId: string) {}
 
@@ -143,6 +146,7 @@ export class RestRecoveryEngine {
       activeRests: Object.fromEntries(Array.from(this.activeRests.entries()).map(([k, v]) => [k, clone(v)])),
       hitDice: Object.fromEntries(Array.from(this.hitDice.entries()).map(([k, v]) => [k, clone(v)])),
       lastRestResults: Object.fromEntries(Array.from(this.lastRestResults.entries()).map(([k, v]) => [k, clone(v)])),
+      lastLongRestCompletedAt: Object.fromEntries(this.lastLongRestCompletedAt.entries()),
     };
   }
 
@@ -150,6 +154,10 @@ export class RestRecoveryEngine {
     this.activeRests.clear();
     this.hitDice.clear();
     this.lastRestResults.clear();
+    this.lastLongRestCompletedAt.clear();
+    for (const [id, at] of Object.entries(snapshot?.lastLongRestCompletedAt || {})) {
+      if (Number.isFinite(at)) this.lastLongRestCompletedAt.set(id, Number(at));
+    }
     for (const [id, state] of Object.entries(snapshot?.activeRests || {})) {
       if (state?.actorId && state.status === 'ACTIVE') this.activeRests.set(id, clone(state));
     }
@@ -182,7 +190,7 @@ export class RestRecoveryEngine {
   }
 
   public execute(request: RestRequest): RestRecoveryResult {
-    const policy = this.resolvePolicy(request.storyId);
+    const policy = this.resolvePolicy(request.storyId, request.restType);
     if (!policy.success || !policy.value) return this.fail(request, policy.errorReason || 'Rest rules are unavailable.');
     switch (request.action) {
       case 'BEGIN': return this.begin(request, policy.value);
@@ -373,6 +381,7 @@ export class RestRecoveryEngine {
     };
     this.activeRests.delete(request.actorId);
     this.lastRestResults.set(request.actorId, { restType: completed.restType, status: completed.status, completedAtSeconds: now });
+    if (completed.restType === 'LONG_REST') this.lastLongRestCompletedAt.set(request.actorId, now);
 
     return this.ok(request, {
       restType: completed.restType,
@@ -423,6 +432,14 @@ export class RestRecoveryEngine {
     if (!state) return { success: false, errorReason: 'Actor has no canonical condition state.' };
     if (state.dead || state.healthCurrent <= 0 || state.instances.some((c) => c.name.toLowerCase() === 'unconscious')) {
       return { success: false, errorReason: 'Dead, unconscious, or zero-HP actors cannot begin rest.' };
+    }
+    if (request.restType === 'LONG_REST') {
+      const profile = this.repository.getRulesProfile(request.storyId) || rulesProfileEngine.createDefault('FULL_DND');
+      const last = this.lastLongRestCompletedAt.get(request.actorId);
+      if (last !== undefined && rulesProfileEngine.rulePermits(profile, 'rest.once_per_day_limit')) {
+        const now = this.repository.getWorldClock(request.storyId).getAbsoluteTime();
+        if (now - last < 24 * 3600) return { success: false, errorReason: 'A character benefits from only one long rest in 24 hours.' };
+      }
     }
     const player = this.repository.getPlayerLifecycle(request.storyId);
     if (player?.isTraveling && !policy.allowRestWhileTraveling) return { success: false, errorReason: 'Rest cannot begin while traveling under the active rules profile.' };
@@ -525,12 +542,14 @@ export class RestRecoveryEngine {
     }
   }
 
-  private resolvePolicy(storyId: string): { success: boolean; value?: RestPolicy; errorReason?: string } {
+  private resolvePolicy(storyId: string, restType?: RestType): { success: boolean; value?: RestPolicy; errorReason?: string } {
     const profile = this.repository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND');
     if (!rulesProfileEngine.allowsStandardRestRules(profile)) return { success: false, errorReason: 'Rest is disabled by the active rules profile.' };
+    if (restType === 'SHORT_REST' && !rulesProfileEngine.rulePermits(profile, 'rest.short_rest')) return { success: false, errorReason: "Short rests are switched off in this story's rules." };
+    if (restType === 'LONG_REST' && !rulesProfileEngine.rulePermits(profile, 'rest.long_rest')) return { success: false, errorReason: "Long rests are switched off in this story's rules." };
 
     const raw = profile.parameterOverrides?.[REST_RECOVERY_RULES];
-    if (profile.mode === 'CUSTOM_HOMEBREW_DND' && (!raw || typeof raw !== 'object')) {
+    if (profile.mode === 'CUSTOM_HOMEBREW_DND' && (!raw || typeof raw !== 'object') && profile.ruleToggles?.['rest.recovery'] !== true) {
       return { success: false, errorReason: 'CUSTOM_HOMEBREW_DND requires an explicit rest_recovery_rules override before rest is available.' };
     }
 
@@ -547,6 +566,16 @@ export class RestRecoveryEngine {
       if (typeof value.conditionIdsToClearOnLongRest === 'string') {
         policy.conditionIdsToClearOnLongRest = value.conditionIdsToClearOnLongRest.split('|').map((v) => v.trim()).filter(Boolean);
       }
+    }
+
+    if (!rulesProfileEngine.rulePermits(profile, 'rest.slot_recovery')) policy.longRestRestoreSpellSlots = false;
+    if (!rulesProfileEngine.rulePermits(profile, 'rest.hit_dice')) {
+      policy.shortRestRecoveryModel = 'NONE';
+      policy.longRestHitDiceRecoveryFraction = 0;
+    }
+    if (profile.mode !== 'FULL_DND' && rulesProfileEngine.rulePermits(profile, 'rest.gritty_realism')) {
+      policy.shortRestSeconds = 8 * 3600;
+      policy.longRestSeconds = 7 * 24 * 3600;
     }
 
     policy.shortRestSeconds = Math.max(1, Math.trunc(policy.shortRestSeconds));

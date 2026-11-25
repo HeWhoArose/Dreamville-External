@@ -1,5 +1,6 @@
 import type { CombatAnimationPlan, CombatEffectDefinition, CombatEventRecord } from '../../src/types';
 import type { WorldRepository } from '../repositories/worldRepository';
+import { ANIMATION_COMPOSITION_IDS, getAnimationComposition, selectAnimationComposition } from '../../src/data/combatAnimationCompositions';
 
 function safeJson(text: string): any {
   const trimmed = (text || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
@@ -42,19 +43,18 @@ export class CombatAnimationService {
   }
 
   public deterministicPlan(definition: CombatEffectDefinition): CombatAnimationPlan {
-    const composition = definition.resolutionMode === 'MULTI_INSTANCE' ? 'MULTI_BEAM' :
-      definition.resolutionMode === 'CHAIN' ? 'CHAIN' :
-      definition.resolutionMode === 'AREA' ? 'AREA_BURST' :
-      definition.resolutionMode === 'WORLD_EFFECT' ? 'WORLD_CINEMATIC' : 'SINGLE_EFFECT';
+    const composition = selectAnimationComposition(definition);
+    const spec = getAnimationComposition(composition);
     return {
       id: `anim_${definition.id}`,
       composition,
-      sequence: definition.resolutionMode === 'MULTI_INSTANCE' ? 'SEQUENTIAL' : 'INSTANT',
+      sequence: definition.resolutionMode === 'MULTI_INSTANCE' ? 'SEQUENTIAL' : (spec?.sequence || 'INSTANT'),
       count: definition.instanceCount,
-      origin: 'ABILITY_ORIGIN',
-      impact: 'IMPACT',
-      criticalImpact: 'CRITICAL_IMPACT',
-      missBehavior: 'PASS_TARGET',
+      origin: spec?.origin || 'ABILITY_ORIGIN',
+      impact: spec?.impact || 'IMPACT',
+      criticalImpact: spec?.criticalImpact || 'CRITICAL_IMPACT',
+      missBehavior: spec?.missBehavior || 'PASS_TARGET',
+      primitives: [...(spec?.primitives || [])],
       style: definition.damageType || definition.name,
       assetRefs: [...(definition.assetRefs || [])],
       assetUrls: [],
@@ -115,13 +115,7 @@ export class CombatAnimationService {
         });
         return { plan: fallback, source: 'SYSTEM', fallbackReason: 'AI returned invalid animation plan JSON.' };
       }
-      const compositions = new Set([
-        'SINGLE_EFFECT',
-        'MULTI_BEAM',
-        'CHAIN',
-        'AREA_BURST',
-        'WORLD_CINEMATIC',
-      ]);
+      const compositions = new Set<string>(ANIMATION_COMPOSITION_IDS);
       const composition = compositions.has(String(parsed.composition)) ? String(parsed.composition) : fallback.composition;
       const sequence =
         parsed.sequence === 'PARALLEL' || parsed.sequence === 'SEQUENTIAL' || parsed.sequence === 'INSTANT'

@@ -1,0 +1,556 @@
+{
+  "packVersion": 1,
+  "id": "pack_crimson_eye_noir",
+  "title": "The Pendelton Murder (Crimson Eye Agency)",
+  "premise": "You are Ren Takahashi, chief investigator at the Crimson Eye Agency. Last night, the murder of Arthur Pendelton occurred at the Warehouse Docks, where a shattered pocket watch, a spent bullet casing, and a dark bloodstain were found beside the victim.",
+  "openingScene": "Rain on the frosted glass of the agency office. Mei Sato sets a damp case folder on your desk: Nora Pendelton retained the agency at dawn, the police have the pier sealed, and Inspector Calder has already phoned twice to tell you to stay out of it.",
+  "protagonist": {
+    "name": "Ren Takahashi",
+    "startLocationId": "loc_crimson_eye_office",
+    "kit": [
+      {
+        "name": "Leather notebook",
+        "category": "Miscellaneous",
+        "quantity": 1
+      },
+      {
+        "name": "Agency badge",
+        "category": "Miscellaneous",
+        "quantity": 1
+      },
+      {
+        "name": "Pocket flashlight",
+        "category": "Tool",
+        "quantity": 1
+      },
+      {
+        "name": "Case folder (Pendelton retainer)",
+        "category": "Miscellaneous",
+        "quantity": 1
+      }
+    ]
+  },
+  "incident": {
+    "locationId": "loc_warehouse_docks"
+  },
+  "locations": [
+    {
+      "id": "loc_crimson_eye_office",
+      "name": "Crimson Eye Agency Office",
+      "region": "reg_neon_ward",
+      "archetype": "WORKPLACE",
+      "discovered": true,
+      "tags": [
+        "office",
+        "indoor"
+      ],
+      "description": "A second-floor detective office with frosted glass doors, an oak desk heaped with files, and a kettle that never quite boils.",
+      "ambient": "Rain patters on the frosted glass; a desk lamp hums."
+    },
+    {
+      "id": "loc_crimson_street",
+      "name": "Vermilion Avenue Kerb",
+      "region": "reg_neon_ward",
+      "archetype": "URBAN_DISTRICT",
+      "discovered": true,
+      "tags": [
+        "street",
+        "road"
+      ],
+      "description": "A rain-slicked thoroughfare under neon signs, with trams, taxis and a newspaper kiosk at the corner.",
+      "ambient": "Neon smears in the gutter water; distant tram bells."
+    },
+    {
+      "id": "loc_warehouse_docks",
+      "name": "Warehouse Docks Pier 4",
+      "region": "reg_harbor_ward",
+      "archetype": "CRIME_SCENE",
+      "discovered": true,
+      "tags": [
+        "crime_scene",
+        "harbor",
+        "docks"
+      ],
+      "description": "A cordoned cargo pier of wet planks and stacked crates, with river fog and police tape snapping in the wind.",
+      "ambient": "Cold water slaps rotting pilings; a foghorn sounds downriver."
+    },
+    {
+      "id": "loc_watch_hut",
+      "name": "Pier 4 Watch Hut",
+      "region": "reg_harbor_ward",
+      "archetype": "WORKPLACE",
+      "discovered": false,
+      "tags": [
+        "harbor",
+        "indoor"
+      ],
+      "description": "A tin-roofed hut at the pier gate with a stove, a battered radio, a duty log and a deck of worn cards.",
+      "ambient": "The stove ticks as it cools; the radio hisses."
+    },
+    {
+      "id": "loc_precinct",
+      "name": "Harbor Precinct House",
+      "region": "reg_harbor_ward",
+      "archetype": "URBAN_DISTRICT",
+      "discovered": true,
+      "tags": [
+        "police",
+        "indoor"
+      ],
+      "description": "A soot-dark brick station with a crowded front desk and a detectives' bullpen upstairs.",
+      "ambient": "Typewriters clatter; a prisoner shouts in the cells."
+    },
+    {
+      "id": "loc_morgue",
+      "name": "City Morgue",
+      "region": "reg_harbor_ward",
+      "archetype": "URBAN_DISTRICT",
+      "discovered": false,
+      "tags": [
+        "indoor",
+        "medical"
+      ],
+      "description": "A tiled basement of steel tables and cold drawers beneath the precinct, smelling of carbolic.",
+      "ambient": "Water drips; a refrigeration unit shudders."
+    },
+    {
+      "id": "loc_pendelton_townhouse",
+      "name": "Pendelton Townhouse",
+      "region": "reg_old_quarter",
+      "archetype": "URBAN_DISTRICT",
+      "discovered": false,
+      "tags": [
+        "home",
+        "indoor"
+      ],
+      "description": "A narrow terraced house with drawn curtains, a ticking hall clock and a cramped study at the back.",
+      "ambient": "A clock ticks; the house smells of cold tea."
+    },
+    {
+      "id": "loc_drowned_lantern",
+      "name": "The Drowned Lantern",
+      "region": "reg_harbor_ward",
+      "archetype": "URBAN_DISTRICT",
+      "discovered": false,
+      "tags": [
+        "bar",
+        "indoor"
+      ],
+      "description": "A dockside bar of low beams and lamp-lit smoke where stevedores drink between shifts.",
+      "ambient": "Glasses clink; a gramophone plays through static."
+    },
+    {
+      "id": "loc_lang_shipping",
+      "name": "Lang & Sons Shipping Office",
+      "region": "reg_neon_ward",
+      "archetype": "WORKPLACE",
+      "discovered": false,
+      "tags": [
+        "office",
+        "indoor"
+      ],
+      "description": "A polished brokerage office with brass fittings, a wall of manifests and a clerk who watches the door.",
+      "ambient": "A ledger page turns; a clock chimes the quarter hour."
+    }
+  ],
+  "routes": [
+    [
+      "loc_crimson_eye_office",
+      "loc_crimson_street",
+      0.1,
+      "Road"
+    ],
+    [
+      "loc_crimson_street",
+      "loc_warehouse_docks",
+      2.4,
+      "Road"
+    ],
+    [
+      "loc_crimson_street",
+      "loc_precinct",
+      1.2,
+      "Road"
+    ],
+    [
+      "loc_crimson_street",
+      "loc_pendelton_townhouse",
+      1.8,
+      "Road"
+    ],
+    [
+      "loc_crimson_street",
+      "loc_drowned_lantern",
+      2.2,
+      "Road"
+    ],
+    [
+      "loc_crimson_street",
+      "loc_lang_shipping",
+      0.6,
+      "Road"
+    ],
+    [
+      "loc_warehouse_docks",
+      "loc_watch_hut",
+      0.05,
+      "Road"
+    ],
+    [
+      "loc_precinct",
+      "loc_morgue",
+      0.01,
+      "Road"
+    ]
+  ],
+  "npcs": [
+    {
+      "id": "npc_mei_sato",
+      "name": "Mei Sato",
+      "role": "Agency assistant",
+      "locationId": "loc_crimson_eye_office",
+      "description": "Ren's sharp, dry-witted assistant who answers the agency phones and keeps the files in order.",
+      "dialogueStyle": "Brisk and wry; reports facts first and opinions after.",
+      "motivations": [
+        "Keep the agency solvent",
+        "Keep Ren from getting arrested"
+      ],
+      "knows": [
+        "fact_victim",
+        "fact_found_by_watchman",
+        "fact_casing_38",
+        "fact_widow_retained",
+        "fact_calder_warning",
+        "fact_police_position"
+      ],
+      "sharing": "FREE",
+      "secrets": [],
+      "refuses": [],
+      "knownToProtagonist": true
+    },
+    {
+      "id": "npc_inspector_calder",
+      "name": "Inspector Dale Calder",
+      "role": "Police inspector",
+      "locationId": "loc_precinct",
+      "description": "A heavy, tired inspector who guards his scenes jealously and distrusts private detectives.",
+      "dialogueStyle": "Curt, official, quick to change the subject.",
+      "motivations": [
+        "Close the case fast",
+        "Keep the press away from the harbor"
+      ],
+      "knows": [
+        "fact_victim",
+        "fact_found_by_watchman",
+        "fact_casing_38",
+        "fact_watch_1142",
+        "fact_calder_suspects_watchman",
+        "fact_police_position"
+      ],
+      "sharing": "GUARDED",
+      "secrets": [
+        "He suspects Silas Okafor and has no other lead."
+      ],
+      "refuses": [
+        "Autopsy findings",
+        "Anything about the watchman"
+      ],
+      "knownToProtagonist": true
+    },
+    {
+      "id": "npc_silas_okafor",
+      "name": "Silas Okafor",
+      "role": "Night watchman",
+      "locationId": "loc_watch_hut",
+      "description": "A wiry night watchman in a salt-stained coat who found the body and has not slept since.",
+      "dialogueStyle": "Nervous, over-explains, avoids looking at you.",
+      "motivations": [
+        "Keep his job",
+        "Hide that he left his post"
+      ],
+      "knows": [
+        "fact_found_by_watchman",
+        "fact_sedan_1115",
+        "fact_okafor_left_post"
+      ],
+      "sharing": "GUARDED",
+      "secrets": [
+        "He left his post from ten-thirty until midnight for a card game."
+      ],
+      "refuses": [
+        "Where he was before midnight"
+      ]
+    },
+    {
+      "id": "npc_iris_vandermeer",
+      "name": "Dr. Iris Vandermeer",
+      "role": "Coroner",
+      "locationId": "loc_morgue",
+      "description": "A precise, unflappable coroner who prefers evidence to opinion and dislikes being hurried.",
+      "dialogueStyle": "Clinical, exact, dryly humorous.",
+      "motivations": [
+        "Get the findings right",
+        "Resent police pressure to rush"
+      ],
+      "knows": [
+        "fact_one_shot_close",
+        "fact_death_1045",
+        "fact_watch_post_mortem"
+      ],
+      "sharing": "GUARDED",
+      "secrets": [],
+      "refuses": [
+        "Findings to anyone without police clearance or a fair trade of information"
+      ]
+    },
+    {
+      "id": "npc_hollis_brandt",
+      "name": "Hollis Brandt",
+      "role": "Bar owner",
+      "locationId": "loc_drowned_lantern",
+      "description": "A broad, affable bar owner who hears everything on the docks and trades in gossip.",
+      "dialogueStyle": "Warm, rambling, charges for information with drinks.",
+      "motivations": [
+        "Keep his regulars happy",
+        "Stay out of police business"
+      ],
+      "knows": [
+        "fact_argument_lang_1000"
+      ],
+      "sharing": "FREE",
+      "secrets": [],
+      "refuses": []
+    },
+    {
+      "id": "npc_nora_pendelton",
+      "name": "Nora Pendelton",
+      "role": "Widow",
+      "locationId": "loc_pendelton_townhouse",
+      "description": "The victim's composed, grieving widow, who hired the agency because she does not trust the police.",
+      "dialogueStyle": "Quiet, controlled, answers exactly what is asked.",
+      "motivations": [
+        "Learn who killed Arthur",
+        "Protect his name"
+      ],
+      "knows": [
+        "fact_widow_retained",
+        "fact_arthur_nervous",
+        "fact_locker_key_study"
+      ],
+      "sharing": "FREE",
+      "secrets": [
+        "Arthur told her he had found something in the manifests that frightened him."
+      ],
+      "refuses": []
+    },
+    {
+      "id": "npc_victor_lang",
+      "name": "Victor Lang",
+      "role": "Shipping broker (the killer)",
+      "locationId": "loc_lang_shipping",
+      "description": "A smooth, immaculate shipping broker who smiles when he is lying and has an answer ready for everything.",
+      "dialogueStyle": "Courteous, polished, deflects with questions.",
+      "motivations": [
+        "Protect his smuggling operation",
+        "Appear helpful"
+      ],
+      "knows": [
+        "fact_argument_lang_1000",
+        "fact_altered_manifests",
+        "fact_lang_killed_pendelton"
+      ],
+      "sharing": "SECRET",
+      "secrets": [
+        "He shot Pendelton on Pier 4 at about 10:45 and smashed the watch to fake the time."
+      ],
+      "refuses": [
+        "Anything about the manifests",
+        "His movements after ten"
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "fact_victim",
+      "statement": "Arthur Pendelton, a 54-year-old harbor customs ledger clerk, was found shot dead on Pier 4.",
+      "subject": "Arthur Pendelton",
+      "predicate": "was_found_dead_at",
+      "object": "Pier 4",
+      "knownAtStart": true
+    },
+    {
+      "id": "fact_found_by_watchman",
+      "statement": "Night watchman Silas Okafor found the body shortly after midnight.",
+      "subject": "Silas Okafor",
+      "predicate": "found_body_at",
+      "object": "just after midnight",
+      "knownAtStart": true
+    },
+    {
+      "id": "fact_casing_38",
+      "statement": "A spent .38 bullet casing lay beside the body.",
+      "subject": "bullet casing",
+      "predicate": "is_caliber",
+      "object": ".38",
+      "knownAtStart": true
+    },
+    {
+      "id": "fact_widow_retained",
+      "statement": "Nora Pendelton retained the Crimson Eye Agency at dawn.",
+      "subject": "Nora Pendelton",
+      "predicate": "retained",
+      "object": "Crimson Eye Agency",
+      "knownAtStart": true
+    },
+    {
+      "id": "fact_calder_warning",
+      "statement": "Inspector Calder has told the agency twice to keep away from the pier.",
+      "subject": "Inspector Calder",
+      "predicate": "warned",
+      "object": "Crimson Eye Agency",
+      "knownAtStart": true
+    },
+    {
+      "id": "fact_police_position",
+      "statement": "The harbor police are treating it as a robbery gone wrong at the docks, have sealed Pier 4, and want private detectives kept clear.",
+      "subject": "Harbor police",
+      "predicate": "police_position",
+      "object": "robbery gone wrong; Pier 4 sealed; private detectives kept clear",
+      "knownAtStart": true
+    },
+    {
+      "id": "fact_watch_1142",
+      "statement": "The shattered pocket watch stopped at 11:42.",
+      "subject": "pocket watch",
+      "predicate": "stopped_at",
+      "object": "11:42",
+      "knownAtStart": false
+    },
+    {
+      "id": "fact_calder_suspects_watchman",
+      "statement": "Inspector Calder suspects the watchman, Silas Okafor.",
+      "subject": "Inspector Calder",
+      "predicate": "suspects",
+      "object": "Silas Okafor",
+      "knownAtStart": false
+    },
+    {
+      "id": "fact_sedan_1115",
+      "statement": "A dark sedan left Pier 4 at about 11:15.",
+      "subject": "dark sedan",
+      "predicate": "left_pier_at",
+      "object": "11:15",
+      "knownAtStart": false,
+      "clueId": "clue_tyre_tracks"
+    },
+    {
+      "id": "fact_okafor_left_post",
+      "statement": "Okafor left his post from 10:30 until midnight to play cards.",
+      "subject": "Silas Okafor",
+      "predicate": "left_post",
+      "object": "10:30 to midnight",
+      "knownAtStart": false,
+      "clueId": "clue_duty_log"
+    },
+    {
+      "id": "fact_one_shot_close",
+      "statement": "Pendelton was killed by one close-range .38 shot.",
+      "subject": "Arthur Pendelton",
+      "predicate": "died_of",
+      "object": "one close-range .38 shot",
+      "knownAtStart": false
+    },
+    {
+      "id": "fact_death_1045",
+      "statement": "Time of death was about 10:45 pm, not 11:42.",
+      "subject": "Arthur Pendelton",
+      "predicate": "died_at",
+      "object": "about 10:45 pm",
+      "knownAtStart": false
+    },
+    {
+      "id": "fact_watch_post_mortem",
+      "statement": "The watch was smashed after death; the stopped time is false.",
+      "subject": "pocket watch",
+      "predicate": "was_smashed",
+      "object": "after death",
+      "knownAtStart": false
+    },
+    {
+      "id": "fact_argument_lang_1000",
+      "statement": "Pendelton argued with shipping broker Victor Lang at the Drowned Lantern at about 10 pm.",
+      "subject": "Arthur Pendelton",
+      "predicate": "argued_with",
+      "object": "Victor Lang at 10 pm",
+      "knownAtStart": false
+    },
+    {
+      "id": "fact_arthur_nervous",
+      "statement": "Arthur had been frightened for a week and locked himself in his study each night.",
+      "subject": "Arthur Pendelton",
+      "predicate": "was_behaving",
+      "object": "frightened and secretive",
+      "knownAtStart": false
+    },
+    {
+      "id": "fact_locker_key_study",
+      "statement": "A locker key is hidden in the study desk; it opens a customs-house locker.",
+      "subject": "locker key",
+      "predicate": "is_hidden_in",
+      "object": "Pendelton's study desk",
+      "knownAtStart": false,
+      "clueId": "clue_study_desk"
+    },
+    {
+      "id": "fact_altered_manifests",
+      "statement": "Lang & Sons altered cargo manifests to import unlisted crates.",
+      "subject": "Lang & Sons",
+      "predicate": "altered",
+      "object": "cargo manifests",
+      "knownAtStart": false,
+      "clueId": "clue_manifest_scrap"
+    },
+    {
+      "id": "fact_lang_killed_pendelton",
+      "statement": "Victor Lang shot Arthur Pendelton to stop him exposing the altered manifests.",
+      "subject": "Victor Lang",
+      "predicate": "killed",
+      "object": "Arthur Pendelton",
+      "knownAtStart": false
+    }
+  ],
+  "clues": [
+    {
+      "id": "clue_tyre_tracks",
+      "locationId": "loc_warehouse_docks",
+      "name": "Tyre tracks on the planks",
+      "description": "Narrow tyre tracks in the wet grit near the gate, pointing away from the water.",
+      "visible": false,
+      "discoverable": true
+    },
+    {
+      "id": "clue_manifest_scrap",
+      "locationId": "loc_warehouse_docks",
+      "name": "Torn manifest corner",
+      "description": "A scrap of cargo manifest wedged between two planks, stamped with a Lang & Sons seal.",
+      "visible": false,
+      "discoverable": true
+    },
+    {
+      "id": "clue_duty_log",
+      "locationId": "loc_watch_hut",
+      "name": "Watch duty log",
+      "description": "A duty log with no entries between 10:30 and midnight and a pencil line where one was rubbed out.",
+      "visible": true,
+      "discoverable": true
+    },
+    {
+      "id": "clue_study_desk",
+      "locationId": "loc_pendelton_townhouse",
+      "name": "Study desk with a false drawer",
+      "description": "A locked desk drawer whose false bottom holds a small brass key.",
+      "visible": false,
+      "discoverable": true
+    }
+  ]
+}

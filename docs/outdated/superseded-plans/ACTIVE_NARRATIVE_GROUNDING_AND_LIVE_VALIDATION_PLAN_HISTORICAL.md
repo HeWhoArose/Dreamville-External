@@ -1,6 +1,6 @@
 # Dreamville — Active Narrative Grounding & Live-Model Validation Plan
 
-> **DEFERRED — 2026-10-17. Execution of this program is deferred to [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md).**
+> **DEFERRED — 2026-10-17. Execution of this program is deferred to [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](../../NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md).**
 > V2 carries every phase of this plan forward with the same Phase 0–9 numbering, scenarios A–P, hard failure conditions, hard gates, status vocabulary and scope boundaries, and adds the research-driven slices (X1–X9), scenarios Q–X, new gates and owner decisions D1–D5.
 > From this date V2 owns phase status, gates, scope and sequencing. This file is retained as the historical record (CI evidence, PR triage, Phase 6 source findings, connection maps and rationale). **Where the two files differ, V2 wins.** Do not start new work from this file.
 > Phase 1 live-model validation remains **NOT YET PASSED**; deferral changes ownership of the plan, not the evidence.
@@ -29,7 +29,7 @@
 - **Observed in Git history:** `main` now contains merge commit `ce3d3cb8` (“Merge pull request #76 from HeWhoArose/integration/narrative-grounding-runtime-2026-10-16-v2”). Statements elsewhere in this file that PR #76 is open, draft or unmerged describe the earlier checkpoints and are superseded on that point.
 - **Not verified by this revision:** the GitHub Actions results for `ce3d3cb8` (the GitHub API was rate-limited during review). Check Actions on that commit before calling `main` green. The disposition of PRs #69–#75 was likewise not verified.
 - **PASS — AUTOMATED (local run, not CI):** a fresh clone of the code at `ce3d3cb8` plus a git-tracking cleanup commit (not on `main`; it only changes ignore rules and untracks generated assets) passed release-contract verification, type-check, production build, and **1,530/1,530** tests in 117 suites.
-- **Research appendix complete:** see [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md). §10 is updated and §15 adds scenarios, gates and candidate slices derived from it.
+- **Research appendix complete:** see [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](../../NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md). §10 is updated and §15 adds scenarios, gates and candidate slices derived from it.
 - **Still not passed:** Phase 1 live-model/player validation. Nothing in the research or the local run changes that.
 
 ---
@@ -761,7 +761,7 @@ This document should be the cross-cutting plan and acceptance matrix, not anothe
 
 ## 10. Research evidence appendix (completed 2026-10-17)
 
-The deep-research investigation requested here is complete: [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md). It covers Friends & Fables, AI Dungeon, AI Realm, the several products named Loreweaver, open-source lorebook tooling and the academic work on LLM game masters, and it labels each source by evidence tier (first-party documentation, open source, peer-reviewed or preprint, marketing, anecdote).
+The deep-research investigation requested here is complete: [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](../../NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md). It covers Friends & Fables, AI Dungeon, AI Realm, the several products named Loreweaver, open-source lorebook tooling and the academic work on LLM game masters, and it labels each source by evidence tier (first-party documentation, open source, peer-reviewed or preprint, marketing, anecdote).
 
 Short findings that bear on this plan:
 - The strongest published designs keep structured state as the authority and let the model propose and narrate. That is Dreamville's existing architecture; the plan's boundaries are confirmed, not changed.
@@ -842,9 +842,9 @@ The retired broad implementation specifications and completed phase plans are pr
 
 ## 15. Research-driven addendum (2026-10-17)
 
-Source: [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md).
+Source: [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](../../NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md).
 
-**Carried into [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) (§3, §5, §6, §7), which is authoritative; this section is kept as the earlier summary.** It extended the Phase 1 scenario matrix, the gates and the slice list. **It does not authorise implementation.** A slice may start only when (a) its failure is reproduced in a Phase 1 baseline run or a deterministic test on current code, and (b) it extends the named existing owner instead of adding a parallel authority.
+**Carried into [`NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md`](../../NARRATIVE_GROUNDING_EXECUTION_PLAN_V2.md) (§3, §5, §6, §7), which is authoritative; this section is kept as the earlier summary.** It extended the Phase 1 scenario matrix, the gates and the slice list. **It does not authorise implementation.** A slice may start only when (a) its failure is reproduced in a Phase 1 baseline run or a deterministic test on current code, and (b) it extends the named existing owner instead of adding a parallel authority.
 
 ### 15.1 Audit-confirmed starting facts
 

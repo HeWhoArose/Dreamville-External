@@ -4,6 +4,7 @@
  */
 
 import type { LocationArchetype, LocationEnvironmentProfile } from './locationArchetypes';
+import type { EntityLifecycleStage } from './worldSimulationProposal';
 
 export type DayPhase = 'Dawn' | 'Morning' | 'Afternoon' | 'Dusk' | 'Night' | 'Predawn';
 
@@ -49,6 +50,9 @@ export interface LocationSceneObject {
   tags?: string[];
   properties?: Record<string, unknown>;
   provenance?: string;
+  lifecycleStage?: EntityLifecycleStage;
+  ttlTurns?: number;
+  activeDependencies?: string[];
 }
 
 export type LocationOccupancyStatus = 'INHABITED' | 'RESTRICTED' | 'ABANDONED' | 'UNKNOWN';

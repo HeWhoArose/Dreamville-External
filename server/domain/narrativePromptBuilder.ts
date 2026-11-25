@@ -16,6 +16,8 @@ import { SceneCompositionEngine, type SceneCompositionContract } from './sceneCo
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 import { NarrativeEpisodeProjectionEngine, type NarrativeEpisodeProjection } from './narrativeEpisodeProjection';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
+import { CharacterCanonSteward } from './characterCanonSteward';
+import { questionContentTokens } from './knownFactUse';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -104,7 +106,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		.join(' | ') || 'None';
 
 	const recentTurns = (Array.isArray(situation.recentTurns) ? situation.recentTurns : [])
-		.slice(-2)
+		.slice(-narrationRecentTurnWindow())
 		.map((turn) => [
 			turn.playerAction ? 'Player: ' + turn.playerAction : '',
 			turn.narration ? 'Narration: ' + turn.narration : '',
@@ -136,7 +138,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		'Identity rule: use only the player-facing labels supplied for visible entities. An unidentified person must stay a role/description; never invent or guess a canonical name.',
 		'Canonical visible scene entities/events are authoritative; do not infer additional concrete people, structures, props, or environmental features from descriptive prose.',
 		'Scene-grounding rule: only treat a discrete physical object as present when it appears in canonical visible scene objects or another explicitly supplied authoritative fact. Location prose is environmental description and does not create discrete objects.',
-		situation.activeDialogue ? 'Active dialogue: ' + situation.activeDialogue.speakerName + ': ' + situation.activeDialogue.text : '',
+		situation.activeDialogue ? 'Active dialogue: ' + (situation.activeDialogue.speakerName || 'Speaker') + ': ' + situation.activeDialogue.text : '',
 		'Current action: ' + (situation.currentAction?.originalText || situation.currentAction?.action || 'None'),
 		'Plot arc: ' + (situation.plot?.currentArc || 'OPENING'),
 		situation.plot?.summary ? 'Plot summary: ' + situation.plot.summary : '',
@@ -160,8 +162,18 @@ export function defaultNarrationStyle(): string {
 		'Do not turn attempts into success/failure without a canonical outcome.',
 		'Listening, watching, observing, overhearing, or eavesdropping without speech must not make the player speak. Preserve both movement and observation when combined.',
 		'Keep rumor/hearsay uncertain and stay in the canonical scene/time unless supplied state confirms a change.',
+		'Write in the language of the player action (English unless they wrote otherwise). Address the player character as "you"; never narrate as the player in the first person.',
 		'Do not expose research or engine terminology. Follow this turn’s Narrative Quality Contract for length.',
 	].join(' ');
+}
+
+/**
+ * How many recent turns the narration prompt carries. Default 2. Raise with NARRATION_RECENT_TURNS (1-12) to test
+ * whether more continuity helps; the reference study (Talemate) sends a much longer transcript.
+ */
+export function narrationRecentTurnWindow(): number {
+	const configured = Number(process.env.NARRATION_RECENT_TURNS);
+	return Number.isFinite(configured) && configured >= 1 ? Math.min(12, Math.floor(configured)) : 2;
 }
 
 function section(title: string, body: string): string {
@@ -189,50 +201,98 @@ function compactRelevantResearch(value: string, maxChars: number, priorities: st
 	const ranked = segments.map((segment, index) => ({
 		segment,
 		index,
-		score: terms.reduce((score, term) => score + (segment.toLowerCase().includes(term) ? 1 : 0), 0),
+		// Authorized facts that overlap the question outrank scene dressing that merely shares a word with it.
+		score: terms.reduce((score, term) => score + (segment.toLowerCase().includes(term) ? 1 : 0), 0)
+			+ (segment.startsWith('[KNOWLEDGE]') && terms.some((term) => segment.toLowerCase().includes(term)) ? 0.5 : 0),
 	}));
 	const relevant = ranked
 		.filter((entry) => entry.score > 0)
 		.sort((left, right) => right.score - left.score || left.index - right.index)
-		.slice(0, 6)
+		.slice(0, 10)
 		.sort((left, right) => left.index - right.index)
 		.map((entry) => entry.segment);
-	const chosen = Array.from(new Set([...segments.slice(0, 2), ...relevant, ...segments.slice(-1)]));
+	// Question-relevant segments come first: with a hard character cap the tail is what gets clipped, and the
+	// authorized fact that answers the player's question must not be the part that is cut.
+	const chosen = Array.from(new Set([...relevant, ...segments.slice(0, 2), ...segments.slice(-1)]));
 	const compact = chosen.join('\n');
 	return truncatePromptSection(compact || normalized, maxChars);
 }
 
+/**
+ * A turn that sets out for another location: the engine has not committed the move, so the narration may show the
+ * departure and the route but must not arrive. Weak models either omit the destination or narrate arriving; naming the
+ * rule and the destination in the prompt avoids both (live: "I head out to the docks" was rejected for each).
+ */
+export function buildTravelDirective(intent: PlayerIntent, currentLocationName: string): string {
+	const destination = intent.locationTarget?.name;
+	if (!intent.movementIntent || !destination) return '';
+	return [
+		`The player is setting out from ${currentLocationName} toward ${destination}. The move is not yet committed.`,
+		`Show the departure and the way there, and name ${destination} once. Do not describe arriving or anything that is at ${destination}.`,
+	].join(' ');
+}
+
+/**
+ * For information-seeking turns, the authorized facts that answer the player's question, worded as a block placed
+ * next to the instruction (reference study: Talemate's question-conditioned query path). Returns '' when none apply.
+ */
+export function buildAnswerBearingFactsBlock(blocks: Array<{ kind: string; content?: string }>, intent: PlayerIntent): string {
+	const isInformationTurn = intent.interactionMode === 'INFORMATION_SEEKING' || intent.interactionMode === 'DIALOGUE' || Boolean(intent.informationGoal);
+	if (!isInformationTurn) return '';
+	const tokens = questionContentTokens([intent.informationGoal, intent.originalText].filter(Boolean).join(' '));
+	if (tokens.length === 0) return '';
+	const statements = (blocks || [])
+		.filter((block) => block.kind === 'KNOWLEDGE')
+		.map((block) => String(block.content || '').replace(/\s+/g, ' ').trim())
+		.filter((content) => {
+			const lower = content.toLowerCase();
+			return tokens.some((token) => lower.includes(token));
+		})
+		.map((content) => content.replace(/^.*?\bscope=\w+\s+/, '').trim())
+		.filter((content) => content.length >= 12)
+		.slice(0, 4);
+	if (statements.length === 0) return '';
+	return [
+		'The player already holds these established facts about this question. Answer from them, in character, in specific terms.',
+		'Do not claim that nobody knows, that records are silent, or that the answer is unavailable when a fact below answers it.',
+		'State the answer in the first sentence (or as a character\'s quoted line). Do not open with weather, lamplight or other ambient description.',
+		...statements.map((statement) => '- ' + statement),
+	].join('\n');
+}
+
 export function buildNarrationPrompt(input: NarrationPromptInput): NarrationPromptResult {
-	const boundedResearch = EpistemicBoundaryEnforcer.sanitizeResearch(input.research, input.situation).result;
-	const boundedWorkingContext = EpistemicBoundaryEnforcer.sanitizeContext(input.workingContext || '[no additional working context]', input.situation).text;
+	const rawSituation = input.situation;
+	const boundedResearch = EpistemicBoundaryEnforcer.sanitizeResearch(input.research, rawSituation).result;
+	const boundedWorkingContext = EpistemicBoundaryEnforcer.sanitizeContext(input.workingContext || '[no additional working context]', rawSituation).text;
+	const situation = rawSituation ? CurrentSituationBuilder.toNarratorSafeProjection(rawSituation) : rawSituation;
 	const globalInstruction = input.globalInstruction || 'You are the narrative presentation engine for Dreamville. Generate only the player-facing narrative turn. Canonical state, player intent, bounded research, and the ephemeral plan are authoritative inputs; prose is not canonical truth.';
 	const styleInstruction = input.styleInstruction || defaultNarrationStyle();
-	const situationContext = input.situation ? buildNarrationSituationContext(input.situation) : '[current situation unavailable]';
+	const situationContext = situation ? buildNarrationSituationContext(situation) : '[current situation unavailable]';
 	// Keep bounded canonical event evidence outside truncatable situation prose so
 	// low-token compact prompts cannot silently drop committed NPC interactions.
-	const canonicalVisibleSceneEvents = (Array.isArray(input.situation.visibleEvents) ? input.situation.visibleEvents : [])
-		.filter((event) => !event.locationId || event.locationId === input.situation.location?.id)
+	const canonicalVisibleSceneEvents = (Array.isArray(situation?.visibleEvents) ? situation.visibleEvents : [])
+		.filter((event) => !event.locationId || event.locationId === situation?.location?.id)
 		.slice(0, 8)
 		.map((event) => '[' + String(event.type || 'EVENT').slice(0, 48) + '] ' + String(event.summary || '').slice(0, 220))
 		.filter((event) => event.trim().length > 0)
 		.join(' | ') || 'None';
 	const intentContext = JSON.stringify(input.intent);
 	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
-	const narrativeContinuityState = input.narrativeContinuityState || NarrativeContinuityStateEngine.defaultState(input.situation.storyId);
-	const narrativeNoveltyState = input.narrativeNoveltyState || NarrativeNoveltyEngine.defaultState(input.situation.storyId);
+	const narrativeContinuityState = input.narrativeContinuityState || NarrativeContinuityStateEngine.defaultState(situation?.storyId || 'default');
+	const narrativeNoveltyState = input.narrativeNoveltyState || NarrativeNoveltyEngine.defaultState(situation?.storyId || 'default');
 	const narrativeNoveltyContext = NarrativeNoveltyEngine.toPromptContext(narrativeNoveltyState);
 	const narrativeContinuityContext = NarrativeContinuityStateEngine.toPromptContext(narrativeContinuityState);
 	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
-	const narrativePacingContract = input.narrativePacingContract || NarrativePacingEngine.resolve({ situation: input.situation, intent: input.intent, actionResolution: input.actionResolution, canonicalOutcome: input.canonicalOutcome, continuityState: narrativeContinuityState, controls: input.narrativePacingControls });
+	const narrativePacingContract = input.narrativePacingContract || NarrativePacingEngine.resolve({ situation, intent: input.intent, actionResolution: input.actionResolution, canonicalOutcome: input.canonicalOutcome, continuityState: narrativeContinuityState, controls: input.narrativePacingControls });
 	const storyBeat = input.storyBeat || input.plan.storyBeat;
-	const sceneComposition = input.sceneComposition || SceneCompositionEngine.resolve({ situation: input.situation, intent: input.intent, informationToReveal: input.plan.informationToReveal, entitiesToReact: input.plan.entitiesToReact, unresolvedThread: input.plan.unresolvedThread, continuityState: narrativeContinuityState, pacingContract: narrativePacingContract, storyBeat });
+	const sceneComposition = input.sceneComposition || SceneCompositionEngine.resolve({ situation, intent: input.intent, informationToReveal: input.plan.informationToReveal, entitiesToReact: input.plan.entitiesToReact, unresolvedThread: input.plan.unresolvedThread, continuityState: narrativeContinuityState, pacingContract: narrativePacingContract, storyBeat });
 	const presentationPlan: EphemeralNarrativePlan = { ...input.plan, sceneComposition };
 	const planContext = NarrativeDirector.toPromptContext(presentationPlan);
 	const sceneCompositionContext = SceneCompositionEngine.toPromptContext(sceneComposition);
 	const socialTopologyContext = EntitySceneRelevanceEngine.toConversationPromptContext(presentationPlan.socialTopology);
 	const episodeProjectionContext = NarrativeEpisodeProjectionEngine.toPromptContext(presentationPlan.episodeProjection);
 	const storyBeatContext = StoryBeatDirector.toPromptContext(storyBeat);
-	const narrativeProviderHandoff = input.narrativeProviderHandoff || NarrativeProviderHandoffEngine.resolve({ storyId: input.situation.storyId, turnId: input.situation.turnId, voice: input.narratorVoiceState || NarratorVoiceEngine.resolve({ getUserData: () => null, saveUserData: () => undefined }, input.situation.storyId), quality: narrativeQualityContract, pacing: narrativePacingContract, continuity: narrativeContinuityState, novelty: narrativeNoveltyState });
+	const narrativeProviderHandoff = input.narrativeProviderHandoff || NarrativeProviderHandoffEngine.resolve({ storyId: situation?.storyId || 'default', turnId: situation?.turnId || 'turn_1', voice: input.narratorVoiceState || NarratorVoiceEngine.resolve({ getUserData: () => null, saveUserData: () => undefined }, situation?.storyId || 'default'), quality: narrativeQualityContract, pacing: narrativePacingContract, continuity: narrativeContinuityState, novelty: narrativeNoveltyState });
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
 	const promptBudgetVoiceContext = input.narratorVoiceState ? NarratorVoiceEngine.toPromptContext(input.narratorVoiceState) : 'Narrator Voice Contract: disabled for this turn.';
 	const promptBudgetQualityContext = input.maxPromptTokens && input.maxPromptTokens <= 1500
@@ -260,6 +320,28 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'Narrative should contain only the player-facing prose for this turn.',
 		'Do not include markdown fences, commentary, analysis, implementation details, model names, or debug information.',
 	].join('\n');
+
+	let speakerBoundaryContext = '';
+	if (situation && situation.storyId && situation.nearbyEntities) {
+		const targetedNpc = situation.nearbyEntities.find((e) =>
+			(input.intent?.explicitTargets || []).some((t) => t.id === e.id || t.name.toLowerCase() === e.name.toLowerCase()) ||
+			(input.intent?.target?.name && input.intent.target.name.toLowerCase() === e.name.toLowerCase())
+		);
+		if (targetedNpc && targetedNpc.kind !== 'PLAYER') {
+			speakerBoundaryContext = CharacterCanonSteward.getSpeakerEpistemicPromptBlock({
+				storyId: situation.storyId,
+				speakerId: targetedNpc.id,
+				speakerName: targetedNpc.displayName || targetedNpc.name,
+				currentLocationId: situation.location?.id || '',
+			});
+		}
+	}
+
+	// Reference study (Talemate): its query path puts the question-conditioned facts in their own block close to
+	// the instruction. Ours left the answering facts buried in research and offered "no reliable answer" as an
+	// easy exit, so models took it. For information questions, restate the matching authorized facts last.
+	const answerBearingFacts = buildAnswerBearingFactsBlock(boundedResearch.blocks || [], input.intent);
+	const travelDirective = buildTravelDirective(input.intent, input.situation?.location?.name || 'the current location');
 
 	const compose = (
 		researchContext: string,
@@ -296,10 +378,13 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', overrides?.socialTopologyContext || socialTopologyContext),
 		section('N17 NARRATIVE EPISODE PROJECTION', overrides?.episodeProjectionContext || episodeProjectionContext),
 		section('NPC COGNITION BOUNDARY', 'NPC cognition is presentation guidance. Private beliefs, secrets, and knowledge must never be stated as player-visible facts unless independently authorized by research or canonical scene evidence. Express cognition through observable behavior, dialogue, hesitation, priorities, and reactions.'),
+		speakerBoundaryContext ? section('NPC KNOWLEDGE BOUNDARY', speakerBoundaryContext) : '',
 		section('SUPPORTING WORKING CONTEXT', workingContext),
 		overrides?.canonicalConstraints || canonicalConstraints,
+		answerBearingFacts ? section('ESTABLISHED FACTS THAT ANSWER THIS QUESTION', answerBearingFacts) : '',
+		travelDirective ? section('TRAVEL DIRECTIVE', travelDirective) : '',
 		section('OUTPUT CONTRACT', overrides?.outputContract || outputContract),
-	].join('\n\n');
+	].filter(Boolean).join('\n\n');
 
 	const initialResearch = boundedResearch.promptContext || '[research unavailable; use current situation only and preserve uncertainty]';
 	const initialWorking = boundedWorkingContext || '[no additional working context]';
@@ -322,7 +407,13 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		if (workingContext.length > 700) {
 			workingContext = workingContext.slice(0, Math.max(350, workingContext.length - excessChars)).trimEnd();
 		} else if (researchContext.length > 900) {
-			researchContext = researchContext.slice(0, Math.max(600, researchContext.length - excessChars)).trimEnd();
+			// Shed the least question-relevant research first. Slicing the tail dropped the authorized fact that
+			// answers the player's question whenever it happened to be ranked last.
+			researchContext = compactRelevantResearch(researchContext, Math.max(600, researchContext.length - excessChars), [
+				input.intent.originalText,
+				String(input.intent.informationGoal || ''),
+				...(input.plan.informationToReveal || []).map((reveal) => typeof reveal === 'string' ? reveal : reveal.topic),
+			]);
 		} else {
 			break;
 		}
@@ -419,7 +510,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					locationTarget: input.intent.locationTarget,
 					originalText: input.intent.originalText,
 				}),
-				researchContext: compactRelevantResearch(initialResearch, tightEpisodeBudget ? 180 : 700, [
+				researchContext: compactRelevantResearch(initialResearch, tightEpisodeBudget ? 600 : 1800, [
 					input.intent.originalText,
 					String(input.intent.informationGoal || ''),
 					...(input.plan.informationToReveal || []).map((reveal) => typeof reveal === 'string' ? reveal : reveal.topic),

@@ -485,6 +485,8 @@ export interface ActionLog {
   /** Canonical mechanics envelope projected to narration and reusable for presentation regeneration. */
   actionResolution?: ActionResolution;
   actionAdvice?: ActionAdvice;
+  /** Authoritative state adjudication record associated with this turn. */
+  stateAdjudication?: import('../server/domain/narrativeStateAdjudicator').StateAdjudicationResult;
 }
 
 export interface ProtagonistProfile {
@@ -715,10 +717,25 @@ export interface ActionResult {
   authoritativeFeedback: string;
   narrativeResponse?: string;
   narrativeError?: ActionLog['narrativeError'];
+  /** Guard outcome, findings and repair use for this turn. */
+  narrativeQuality?: {
+    actionId?: string;
+    at: string;
+    accepted: boolean;
+    outcome: 'quiet' | 'rewritten' | 'cut' | 'kept_soft' | 'rejected_hard' | 'unavailable' | 'none';
+    findings: Array<{ severity: 'HARD' | 'SOFT'; reason: string }>;
+    providerId?: string;
+    modelId?: string;
+    providerAttempts: number;
+    repairUsed: boolean;
+    reservedRepairUsed: boolean;
+    errorCode?: string;
+  };
   narrativeGeneration?: ActionLog['narrativeGeneration'];
   checkResult?: StoryCheckResult;
   actionAdvice?: ActionAdvice;
   combatTransition?: CombatTransitionState;
+  stateAdjudication?: import('../server/domain/narrativeStateAdjudicator').StateAdjudicationResult;
   viewState: ExternalViewState;
 }
 
@@ -982,6 +999,11 @@ export interface RulesProfile {
   disabledMechanics: string[];
   parameterOverrides: Record<string, unknown>;
   overrides: RuleOverride[];
+  /**
+   * Per-rule switches over the rules catalogue (src/data/rulesCatalogue.ts). Hybrid D&D: absent ids are on, locked groups
+   * cannot be changed. Custom Homebrew: absent ids are off. Full D&D ignores switches.
+   */
+  ruleToggles?: Record<string, boolean>;
 }
 
 export interface RuleProfileResolution {
@@ -1237,12 +1259,18 @@ export type DestructibleCombatObject = DestructibleEnvironmentObject;
 
 export interface DynamicHazardZone {
   id: string;
-  type: 'fire_zone' | 'ice_patch' | 'poison_cloud' | 'barricade';
+  type: 'fire_zone' | 'ice_patch' | 'poison_cloud' | 'barricade' | 'pit' | 'bridge' | 'trap';
   x: number;
   y: number;
   radiusCells: number;
   durationTurns: number;
   damagePerTurn: number;
+  /** Pit: how far a creature falls on entering. */
+  fallFeet?: number;
+  /** Trap: removed after it triggers once (default true). */
+  oneShot?: boolean;
+  /** Trap: damage type of the trigger damage. */
+  damageType?: string;
 }
 
 export interface BattleEvent {
@@ -1268,6 +1296,8 @@ export interface CombatTurnResourceSnapshot {
   dashMovementBonusCells: number;
   disengaging: boolean;
   dodging: boolean;
+  /** Special resources (rage, ki, energy, legendary charges) held by the actor, part of the turn ledger view. */
+  specialResources?: Record<string, number>;
   readyAction?: {
     actionDescription: string;
     triggerDescription: string;
@@ -2439,6 +2469,8 @@ export interface CharacterProgressionCustomModule {
     description: string;
     level: number;
     enabled: boolean;
+    /** Rules-catalogue id; the feature is inert while that rule is switched off. */
+    ruleId?: string;
     passiveModifiers?: Array<{
       id: string;
       target: string;
@@ -2861,6 +2893,14 @@ export interface CombatEffectDefinition {
 	visualStyle?: string;
 	aiGenerated?: boolean;
 	provenance?: string;
+	/** Delivery stage: how the effect reaches each target after it has been executed. */
+	deliveryMode?: 'AUTOMATIC' | 'CHECK_REQUIRED';
+	deliveryDifficultyClass?: number;
+	deliveryFormula?: string;
+	/** Tags matched against a target's wards (e.g. 'MAGIC', a damage type). A warded target is not reached. */
+	tags?: string[];
+	/** A special resource spent with the action (rage, ki, energy). */
+	resourceCost?: { name: string; amount: number };
 }
 
 export interface DestructibleEnvironmentObject {
@@ -2891,6 +2931,14 @@ export interface CombatAttackInstanceResult {
 	destroyedBodyRegions?: BodyRegionId[];
 	roll?: unknown;
 	attackRollTotal?: number;
+	/** How the attack total was made up, for the combat inspector (the d20 is in `roll`). */
+	attackBreakdown?: Array<{ label: string; value: number }>;
+	/** How the target's armor class was made up, including terrain cover. */
+	defenseBreakdown?: Array<{ label: string; value: number }>;
+	/** Plain-language sources of advantage and disadvantage on this attack. */
+	advantageNotes?: { advantage: string[]; disadvantage: string[] };
+	/** Extra damage added by class features (Sneak Attack, Rage), already included in `damage`. */
+	riders?: Array<{ id: string; label: string; amount: number }>;
 	targetArmorClass?: number;
 	damageRoll?: unknown;
 	forcedMovement?: CombatForcedMovementResult;
@@ -2916,6 +2964,9 @@ export interface CombatEffectResult {
 	animationPlan?: CombatAnimationPlan;
 	executionResult?: { success: boolean; mode: CombatExecutionMode; roll?: unknown; difficultyClass?: number; reason?: string };
 	conditionsApplied?: Array<{ targetId: string; conditionIdOrName: string; trigger: CombatConditionEffectDefinition['trigger']; applied: boolean; immune: boolean }>;
+	deliveryResults?: Array<{ targetId: string; delivered: boolean; reason: string; roll?: unknown; difficultyClass?: number; instanceIndex?: number }>;
+	deliveryBlocked?: boolean;
+	interrupted?: { stage: string; byActorId: string; interruptId: string };
 	worldEffectPreview?: {
 		scale: CombatEffectScale;
 		outcome?: CombatOutcomeType;
@@ -3028,6 +3079,8 @@ export interface CombatAnimationTrack {
 export interface CombatAnimationPlan {
 	id: string;
 	composition: string;
+	/** Reusable primitives the composition is built from (beam, slash, explosion, shockwave, ...). */
+	primitives?: string[];
 	sequence: 'INSTANT' | 'SEQUENTIAL' | 'PARALLEL';
 	count?: number;
 	origin?: string;
@@ -3041,3 +3094,23 @@ export interface CombatAnimationPlan {
 	generatedBy?: 'SYSTEM' | 'AI';
 	provenance?: string;
 }
+
+export {
+	type EntityLifecycleStage,
+	EntityLifecycleStateMachine,
+} from '../server/domain/entityLifecycle';
+
+export {
+	type WorldSimulationProposal,
+	type SimulationPrecondition,
+	type SimulationStateTransition,
+	type SimulationProvenance,
+	type SimulationSafeFallback,
+	type AdjudicationResultCode,
+	type WorldSimulationCommitRecord,
+	type WorldSimulationAdjudicationResult,
+	type AdjudicationResult,
+	type SimulationWorldState,
+	WorldSimulatorAdjudicator,
+} from '../server/domain/worldSimulationProposal';
+

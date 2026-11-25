@@ -379,15 +379,51 @@ function articleFor(label: string): string {
 	return /^[aeiou]/i.test(label) ? 'an' : 'a';
 }
 
-function unknownIdentityLabel(card: { kind?: string; classification?: any; social?: any; metadata?: any }): string {
+function unknownIdentityLabel(card: {
+	kind?: string;
+	classification?: any;
+	social?: any;
+	metadata?: any;
+	identity?: any;
+	traits?: string[];
+}): string {
+	// 1. Explicit author-provided unidentified label (highest priority)
+	const explicit = card.metadata?.unidentifiedLabel || card.metadata?.strangerLabel || card.metadata?.apparentIdentity;
+	if (typeof explicit === 'string' && explicit.trim()) {
+		return explicit.trim();
+	}
+
+	// 2. Trait or appearance-based descriptors (e.g. "a cloaked man", "a hooded figure")
+	const traits = Array.isArray(card.traits) ? card.traits.map((t: string) => String(t).toLowerCase()) : [];
+	const gender = String(card.identity?.gender || '').toLowerCase();
+	const personNoun = gender === 'female' ? 'woman' : gender === 'male' ? 'man' : 'figure';
+
+	if (traits.includes('cloaked')) return `a cloaked ${personNoun}`;
+	if (traits.includes('hooded')) return `a hooded ${personNoun}`;
+	if (traits.includes('armored') || traits.includes('armoured')) return `an armored ${personNoun}`;
+
+	// 3. Functional or professional role (e.g. "the bartender", "the receptionist", "the desk sergeant")
 	const rawRole = normalizeText(
+		card.classification?.title ||
 		card.classification?.role ||
 		card.social?.role ||
 		card.classification?.profession ||
 		card.kind ||
 		'person',
 	).toLowerCase();
-	const role = rawRole === 'npc' || rawRole === 'character' ? 'person' : rawRole;
+
+	const role = rawRole === 'npc' || rawRole === 'character' ? 'stranger' : rawRole;
+
+	// Prominent scene roles take definite article "the", generic roles take indefinite "a/an"
+	const uniqueSceneRoles = new Set([
+		'bartender', 'innkeeper', 'receptionist', 'curator', 'desk sergeant',
+		'shopkeeper', 'librarian', 'conductor', 'driver', 'doorman', 'concierge',
+	]);
+
+	if (uniqueSceneRoles.has(role)) {
+		return `the ${role}`;
+	}
+
 	return `${articleFor(role)} ${role}`;
 }
 
@@ -1138,7 +1174,14 @@ export class CurrentSituationBuilder {
 
 		const lore = situation.relevantLore
 			.slice(0, 4)
-			.map((fact) => `[${fact.sourceType}] ${fact.subjectEntityId} ${fact.predicate} -> ${fact.objectValue}`)
+			.map((fact) => {
+				// Prefer the authored sentence when it actually states the fact; raw triples are hard for small models to use.
+				const statement = String(fact.provenanceSummary || '').trim();
+				const statesFact = statement.length >= 20 && String(fact.objectValue || '').length > 0 && statement.toLowerCase().includes(String(fact.objectValue).toLowerCase().slice(0, 24));
+				return statesFact
+					? `[${fact.sourceType}] KNOWN: ${statement}`
+					: `[${fact.sourceType}] ${fact.subjectEntityId} ${fact.predicate} -> ${fact.objectValue}`;
+			})
 			.join('\n') || 'None retrieved.';
 
 		return [
@@ -1174,10 +1217,13 @@ export class CurrentSituationBuilder {
 	 */
 	public static toNarratorSafeProjection(situation: CurrentSituation): CurrentSituation {
 		const safe = clone(situation);
-		const relabel = <T extends { name?: string; displayName?: string; identityKnown?: boolean }>(entity: T): T =>
-			entity && entity.identityKnown === false && entity.displayName
-				? { ...entity, name: entity.displayName }
-				: entity;
+		const relabel = <T extends { name?: string; displayName?: string; identityKnown?: boolean }>(entity: T): T => {
+			if (entity && entity.identityKnown === false && entity.displayName) {
+				const { originalName, ...rest } = entity as any;
+				return { ...rest, name: entity.displayName };
+			}
+			return entity;
+		};
 		safe.nearbyEntities = (safe.nearbyEntities || []).map(relabel);
 		if (safe.sceneEvidence && Array.isArray(safe.sceneEvidence.entities)) {
 			safe.sceneEvidence.entities = safe.sceneEvidence.entities.map(relabel);
@@ -1185,14 +1231,63 @@ export class CurrentSituationBuilder {
 		// Interaction plumbing carries the canonical target name for validation.
 		// The narrator only sees labels, so redact unknown target names too.
 		const redacted = new Map(
-			(safe.nearbyEntities || [])
+			(situation.nearbyEntities || [])
 				.filter((entity) => entity.identityKnown === false && entity.displayName)
-				.map((entity) => [entity.id, String(entity.displayName)]),
+				.map((entity) => [entity.id, { displayName: String(entity.displayName), originalName: String(entity.name) }]),
 		);
 		if (redacted.size > 0 && Array.isArray(safe.availableInteractions)) {
 			safe.availableInteractions = safe.availableInteractions.map((interaction) => {
-				const label = interaction.targetId ? redacted.get(interaction.targetId) : undefined;
-				return label ? { ...interaction, targetName: label } : interaction;
+				const info = interaction.targetId ? redacted.get(interaction.targetId) : undefined;
+				let targetName = info ? info.displayName : interaction.targetName;
+				let label = interaction.label;
+				for (const { originalName, displayName } of redacted.values()) {
+					if (originalName && label && label.toLowerCase().includes(originalName.toLowerCase())) {
+						const regex = new RegExp(`(?<![\\w])${originalName.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(?![\\w])`, 'gi');
+						label = label.replace(regex, displayName);
+					}
+					if (originalName && targetName && targetName.toLowerCase().includes(originalName.toLowerCase())) {
+						const regex = new RegExp(`(?<![\\w])${originalName.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(?![\\w])`, 'gi');
+						targetName = targetName.replace(regex, displayName);
+					}
+				}
+				return { ...interaction, targetName, label };
+			});
+		}
+		if (safe.activeDialogue) {
+			const info = safe.activeDialogue.speakerId ? redacted.get(safe.activeDialogue.speakerId) : undefined;
+			if (info) {
+				safe.activeDialogue.speakerName = info.displayName;
+			} else {
+				for (const { originalName, displayName } of redacted.values()) {
+					if (originalName && safe.activeDialogue.speakerName && safe.activeDialogue.speakerName.toLowerCase().includes(originalName.toLowerCase())) {
+						const regex = new RegExp(`(?<![\\w])${originalName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'gi');
+						safe.activeDialogue.speakerName = safe.activeDialogue.speakerName.replace(regex, displayName);
+					}
+				}
+			}
+		}
+		if (Array.isArray(safe.visibleEvents) && redacted.size > 0) {
+			safe.visibleEvents = safe.visibleEvents.map((event) => {
+				let summary = event.summary;
+				for (const { originalName, displayName } of redacted.values()) {
+					if (originalName && summary && summary.toLowerCase().includes(originalName.toLowerCase())) {
+						const regex = new RegExp(`(?<![\\w])${originalName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'gi');
+						summary = summary.replace(regex, displayName);
+					}
+				}
+				return { ...event, summary };
+			});
+		}
+		if (safe.sceneEvidence && Array.isArray(safe.sceneEvidence.events) && redacted.size > 0) {
+			safe.sceneEvidence.events = safe.sceneEvidence.events.map((event) => {
+				let summary = event.summary;
+				for (const { originalName, displayName } of redacted.values()) {
+					if (originalName && summary && summary.toLowerCase().includes(originalName.toLowerCase())) {
+						const regex = new RegExp(`(?<![\\w])${originalName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'gi');
+						summary = summary.replace(regex, displayName);
+					}
+				}
+				return { ...event, summary };
 			});
 		}
 		return safe;

@@ -1,6 +1,7 @@
 import { deterministicId } from './deterministicRng';
 import type { CharacterFeat, CharacterEffect, CharacterGenesisDraft, ConfirmedCharacter, RulesProfile } from '../../src/types';
 import type { CapabilityDefinition } from './capabilityEngine';
+import { rulesProfileEngine } from './rulesProfileEngine';
 
 export type ProgressionModuleType = 'CLASS' | 'SUBCLASS' | 'SPECIES' | 'FEAT' | 'ITEM';
 export type ProgressionModifierMode = 'ADD' | 'MULTIPLY' | 'SET' | 'MIN' | 'MAX';
@@ -53,6 +54,8 @@ export interface ProgressionFeature {
   description: string;
   level: number;
   enabled: boolean;
+  /** Rules-catalogue id this feature belongs to (e.g. 'class.rage'). The feature is inert while that rule is switched off. */
+  ruleId?: string;
   passiveModifiers?: ProgressionModifier[];
   triggeredAbilities?: ProgressionAbilityDefinition[];
 }
@@ -600,13 +603,19 @@ export class CharacterProgressionEngine {
     return clone(state);
   }
 
-  public getUnlockedFeatures(actorId: string): ProgressionFeature[] {
+  /** A feature tagged with a rules-catalogue id applies only while the active rules profile permits that rule. */
+  private featureRulePermitted(feature: ProgressionFeature, rulesProfile?: RulesProfile | null): boolean {
+    return !feature.ruleId || rulesProfileEngine.rulePermits(rulesProfile, feature.ruleId);
+  }
+
+  public getUnlockedFeatures(actorId: string, rulesProfile?: RulesProfile | null): ProgressionFeature[] {
     const state = this.requireActor(actorId);
     const byId = new Map<string, ProgressionFeature>();
     for (const moduleId of state.enabledModuleIds) {
       const module = this.modules.get(moduleId);
       if (!module || !module.enabled) continue;
       for (const feature of module.features) {
+        if (!this.featureRulePermitted(feature, rulesProfile)) continue;
         if (feature.enabled && feature.level <= state.currentLevel && state.unlockedFeatureIds.includes(feature.id)) {
           byId.set(feature.id, clone(feature));
         }
@@ -615,9 +624,9 @@ export class CharacterProgressionEngine {
     return Array.from(byId.values()).sort((a, b) => a.level - b.level || a.id.localeCompare(b.id));
   }
 
-  public getTriggeredAbilities(actorId: string, trigger?: ProgressionAbilityTrigger): ProgressionAbilityDefinition[] {
+  public getTriggeredAbilities(actorId: string, trigger?: ProgressionAbilityTrigger, rulesProfile?: RulesProfile | null): ProgressionAbilityDefinition[] {
     const abilities: ProgressionAbilityDefinition[] = [];
-    for (const feature of this.getUnlockedFeatures(actorId)) {
+    for (const feature of this.getUnlockedFeatures(actorId, rulesProfile)) {
       for (const ability of feature.triggeredAbilities || []) {
         if (!trigger || ability.trigger === trigger) abilities.push(clone(ability));
       }
@@ -628,11 +637,12 @@ export class CharacterProgressionEngine {
   public consumeTriggeredAbility(
     actorId: string,
     abilityId: string,
-    commandId: string
+    commandId: string,
+    rulesProfile?: RulesProfile | null
   ): { success: boolean; ability: ProgressionAbilityDefinition; state: CharacterProgressionState } {
     this.assertCanonicalMutationAuthority();
     const state = this.requireActor(actorId);
-    const ability = this.getTriggeredAbilities(actorId).find((entry) => entry.id === abilityId);
+    const ability = this.getTriggeredAbilities(actorId, undefined, rulesProfile).find((entry) => entry.id === abilityId);
     if (!ability) throw new Error(`Triggered progression ability '${abilityId}' is not unlocked.`);
     const usage = state.usage[abilityId] || {};
     if (usage.cooldownRemainingTurns && usage.cooldownRemainingTurns > 0) {
@@ -687,6 +697,7 @@ export class CharacterProgressionEngine {
         if (!module || !module.enabled || !this.isModuleAllowed(moduleId, rulesProfile)) continue;
         for (const feature of module.features) {
           if (!feature.enabled || feature.level > state.currentLevel || !state.unlockedFeatureIds.includes(feature.id)) continue;
+          if (!this.featureRulePermitted(feature, rulesProfile)) continue;
           for (const modifier of feature.passiveModifiers || []) collected.push(clone(modifier));
         }
       }

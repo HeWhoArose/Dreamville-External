@@ -1,7 +1,11 @@
 import { buildItemDescription, type ItemCategory } from './inventoryItem';
+import type { ProgressionModifier } from './characterProgressionEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { CurrentSituation } from './currentSituation';
+import { findImprovisableSource, hasImproviseVerb, materialiseImprovisedObject } from './improvisedItems';
 import type { LocationSceneObject } from './types';
+import { AffordancePlausibilityEngine } from './affordancePlausibilityEngine';
+import { inferLocationArchetype, type LocationArchetype } from './locationArchetypes';
 
 export type SceneInteractionKind = 'NONE' | 'EXAMINE' | 'SEARCH' | 'PICKUP';
 
@@ -18,6 +22,7 @@ export interface SceneInteractionResult {
   committed: boolean;
   /** Canonical prose-safe summary for narration. Never invents an object. */
   feedback?: string;
+  errorCode?: string;
   errorReason?: string;
   discoveredObjectId?: string;
   pickedUpItemId?: string;
@@ -34,7 +39,7 @@ export interface GroundedObservation {
 
 const SEARCH_PATTERN = /\b(?:search|look for|look around|look about|rummage|scavenge|scour|hunt for|find|seek|check (?:for|around)|gather|pick through)\b/i;
 const EXAMINE_PATTERN = /\b(?:examine|examines|examined|inspect|inspects|inspected|study|studies|studied)\b/i;
-const PICKUP_PATTERN = /\b(?:pick up|picks up|picking up|take|takes|taking|grab|grabs|grabbing|collect|collects|collecting|lift|lifts|lifting|retrieve|retrieves|retrieving|pocket|pockets|pocketing)\b/i;
+const PICKUP_PATTERN = /\b(?:pick up|picks up|picking up|take|takes|taking|grab|grabs|grabbing|collect|collects|collecting|lift|lifts|lifting|retrieve|retrieves|retrieving|pocket|pockets|pocketing|loot|loots|looting)\b/i;
 
 const TARGET_STOP_WORDS = new Set([
   'i', 'me', 'my', 'we', 'our', 'the', 'a', 'an', 'some', 'any', 'this', 'that', 'these', 'those',
@@ -104,9 +109,21 @@ function asItemCategory(value: unknown): ItemCategory {
 
 function objectIsTakeable(object: LocationSceneObject): boolean {
   const properties = object.properties && typeof object.properties === 'object' ? object.properties : {};
-  return object.kind === 'ITEM'
-    || object.kind === 'OTHER' && object.interactable === true
-    || properties.takeable === true;
+  // Explicit false takes absolute precedence
+  if (properties.takeable === false) return false;
+  // Deceased bodies and investigation victim slots are NEVER takeable
+  if (
+    properties.slot === 'BODY' ||
+    properties.worldDirectorRole === 'INVESTIGATION_BODY' ||
+    Boolean(properties.representsVictimRef) ||
+    Boolean(properties.isCorpse) ||
+    (object.tags && (object.tags.includes('corpse') || object.tags.includes('deceased_body') || object.tags.includes('victim')))
+  ) {
+    return false;
+  }
+  // Explicitly takeable items or standard items are takeable
+  if (properties.takeable === true) return true;
+  return object.kind === 'ITEM';
 }
 
 function hasMatchingKey(repository: WorldRepository, storyId: string, actorId: string, keyTag: unknown): boolean {
@@ -120,6 +137,33 @@ function hasMatchingKey(repository: WorldRepository, storyId: string, actorId: s
     ].map((tag) => String(tag).toLowerCase());
     return name.includes(requiredTag.replace(/_/g, ' ')) || tags.includes(requiredTag);
   });
+}
+
+/** Equipment shape for scene items that are weapons, shields or armour, so authored and improvised gear can be wielded. */
+function sceneItemEquipment(
+  object: LocationSceneObject,
+  category: ItemCategory,
+  properties: Record<string, unknown>,
+): { allowedSlots?: Array<'mainHand' | 'offHand' | 'body'>; modifiers?: ProgressionModifier[] } {
+  const modifiers: ProgressionModifier[] = [];
+  const addModifier = (target: string, value: number, stackGroup: string) => {
+    if (!Number.isFinite(value) || value === 0) return;
+    const id = `${object.id}_${target.replace(/[^a-z0-9]+/gi, '_')}`;
+    modifiers.push({
+      id, target, mode: 'ADD', value, precedence: 60, stackGroup,
+      source: { moduleId: `scene:${object.id}`, moduleType: 'ITEM', featureId: id, sourceId: object.id, sourceName: object.name, precedence: 60, stackGroup },
+    });
+  };
+  addModifier('combat.attackBonus', Number(properties.attackBonus), 'WEAPON_ATTACK');
+  addModifier('coreStats.armorClass', Number(properties.armorBonus), 'ARMOR_AC');
+  const allowedSlots = category === 'Weapon' ? ['mainHand', 'offHand'] as const
+    : category === 'Shield' ? ['offHand'] as const
+    : category === 'Armor' ? ['body'] as const
+    : undefined;
+  return {
+    ...(allowedSlots ? { allowedSlots: [...allowedSlots] } : {}),
+    ...(modifiers.length ? { modifiers } : {}),
+  };
 }
 
 function ensureSceneItemDefinition(
@@ -151,7 +195,10 @@ function ensureSceneItemDefinition(
       }),
       weightKg: Number.isFinite(weightKg) && weightKg >= 0 ? weightKg : 0.5,
       baseValueGold: Number.isFinite(baseValueGold) && baseValueGold >= 0 ? baseValueGold : 0,
-      maxDurability: 1,
+      maxDurability: Number.isFinite(Number(properties.maxDurability)) && Number(properties.maxDurability) >= 1
+        ? Math.floor(Number(properties.maxDurability))
+        : 1,
+      ...sceneItemEquipment(object, category, properties),
       tags: Array.from(new Set([
         ...(Array.isArray(object.tags) ? object.tags : []),
         'scene_object',
@@ -191,17 +238,18 @@ export class SceneInteractionAuthority {
     }
 
     const pickupIntent = PICKUP_PATTERN.test(actionText);
+    const improviseIntent = !pickupIntent && hasImproviseVerb(actionText) && Boolean(location.environment?.improvisable?.length);
     const searchIntent = SEARCH_PATTERN.test(actionText);
     const examineIntent = EXAMINE_PATTERN.test(actionText);
-    if (!pickupIntent && !searchIntent && !examineIntent) {
+    if (!pickupIntent && !improviseIntent && !searchIntent && !examineIntent) {
       return { kind: 'NONE', attempted: false, committed: false, canonicalStateChanges: [], evidence: [] };
     }
 
     const requested = targetWords(actionText);
     const sceneObjects = Array.isArray(location.sceneObjects) ? location.sceneObjects : [];
 
-    if (pickupIntent) {
-      return this.pickUp({ repository, storyId, actorId, locationId, requested, sceneObjects });
+    if (pickupIntent || improviseIntent) {
+      return this.pickUp({ repository, storyId, actorId, locationId, requested, sceneObjects, improviseIntent });
     }
     if (!searchIntent && examineIntent) {
       const visibleMatch = sortedMatches(sceneObjects.filter((object) => object.visible !== false), requested)[0];
@@ -220,6 +268,22 @@ export class SceneInteractionAuthority {
       };
     }
     return this.search({ repository, storyId, locationId, requested, sceneObjects, location });
+  }
+
+  /** Lets the scene's authored improvisable profile turn a source ("branch", "debris") into a takeable object. */
+  private static tryImprovise(params: {
+    repository: WorldRepository;
+    storyId: string;
+    locationId: string;
+    requested: string[];
+    improviseIntent?: boolean;
+  }): { object?: LocationSceneObject; errorReason?: string } {
+    const { repository, storyId, locationId, requested } = params;
+    const node = repository.getGeographyGraph(storyId).getNode(locationId);
+    const source = findImprovisableSource(node?.environment?.improvisable, requested);
+    if (!source) return {};
+    const result = materialiseImprovisedObject({ repository, storyId, locationId, source });
+    return result.success ? { object: result.object } : { errorReason: result.errorReason };
   }
 
   private static search(params: {
@@ -316,8 +380,50 @@ export class SceneInteractionAuthority {
     locationId: string;
     requested: string[];
     sceneObjects: LocationSceneObject[];
+    improviseIntent?: boolean;
   }): SceneInteractionResult {
     const { repository, storyId, actorId, locationId, requested, sceneObjects } = params;
+
+    // F12: Strict CANNOT_TAKE_CORPSE Invariant Check
+    // 1. Check deceased entity cards in repository
+    const cards = repository.getEntityCards(storyId);
+    const deceasedEntity = cards.find((card) => {
+      const isDeceased = card.worldState?.isAlive === false ||
+        card.lifecycle?.status === 'DEAD' ||
+        (card.classification?.tags || []).some((t: string) => t.toLowerCase() === 'corpse') ||
+        (card.traits || []).some((t: string) => t.toLowerCase() === 'corpse' || t.toLowerCase() === 'deceased_body');
+      if (!isDeceased) return false;
+      const cardVocab = [card.name, ...(card.identity?.aliases || []), 'body', 'corpse', 'victim', 'cadaver'].map((w) => w.toLowerCase());
+      return requested.some((word) => cardVocab.some((candidate) => candidate.includes(word)));
+    });
+
+    // 2. Check scene objects representing deceased bodies
+    const corpseObject = sceneObjects.find((obj) => {
+      const props = (obj.properties && typeof obj.properties === 'object') ? obj.properties : {};
+      const isBodyRole = props.worldDirectorRole === 'INVESTIGATION_BODY' ||
+        props.slot === 'BODY' ||
+        Boolean(props.representsVictimRef) ||
+        Boolean(props.isCorpse) ||
+        (obj.tags || []).some((t) => t.toLowerCase() === 'corpse' || t.toLowerCase() === 'deceased_body' || t.toLowerCase() === 'victim');
+      if (!isBodyRole) return false;
+      const vocab = [obj.name, ...(obj.tags || []), 'body', 'corpse', 'victim', 'cadaver'].map((w) => w.toLowerCase());
+      return requested.some((word) => vocab.some((candidate) => candidate.includes(word)));
+    });
+
+    if (deceasedEntity || corpseObject) {
+      const label = corpseObject?.name || deceasedEntity?.name || 'corpse';
+      return {
+        kind: 'PICKUP',
+        attempted: true,
+        committed: false,
+        errorCode: 'CANNOT_TAKE_CORPSE',
+        errorReason: 'CANNOT_TAKE_CORPSE: Deceased bodies cannot be taken into inventory.',
+        feedback: 'Deceased bodies cannot be taken into inventory.',
+        canonicalStateChanges: [],
+        evidence: [label],
+      };
+    }
+
     const visible = sceneObjects.filter((object) => object.visible !== false);
     const takeable = visible.filter(objectIsTakeable);
     const matched = sortedMatches(takeable, requested)[0];
@@ -349,6 +455,18 @@ export class SceneInteractionAuthority {
             metadata: { source: 'canonical_scene_pickup' },
           }],
           evidence: [groundMatch.name],
+        };
+      }
+
+      const improvisable = this.tryImprovise({ repository, storyId, locationId, requested, improviseIntent: params.improviseIntent });
+      if (improvisable.object) {
+        return this.pickUp({ ...params, sceneObjects: [...sceneObjects, improvisable.object], improviseIntent: false });
+      }
+      if (improvisable.errorReason) {
+        return {
+          kind: 'PICKUP', attempted: true, committed: false,
+          errorReason: improvisable.errorReason, feedback: improvisable.errorReason,
+          canonicalStateChanges: [], evidence: [],
         };
       }
 
@@ -385,9 +503,13 @@ export class SceneInteractionAuthority {
       defId,
       ownerEntityId: actorId,
       containerType: 'actor',
-      provenance: `scene_object:${matched.id}`,
+      provenance: typeof properties.improvisedProvenance === 'string' ? properties.improvisedProvenance : `scene_object:${matched.id}`,
       customName: matched.name,
     });
+    const fraction = Number(properties.durabilityFraction);
+    if (Number.isFinite(fraction) && fraction >= 0 && fraction < 1) {
+      inventory.degradeDurability(instance.id, instance.maxDurability - Math.round(instance.maxDurability * fraction));
+    }
     const graph = repository.getGeographyGraph(storyId);
     const removed = graph.removeSceneObject(locationId, matched.id);
     if (!removed.success) {
@@ -449,6 +571,10 @@ export class SceneInteractionAuthority {
       })
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score || a.item.id.localeCompare(b.item.id))[0]?.item;
+  }
+
+  public static resolveGroundedObservation(situation: CurrentSituation, actionText: string): GroundedObservation {
+    return resolveGroundedObservation(situation, actionText);
   }
 }
 
@@ -514,6 +640,20 @@ export function resolveGroundedObservation(
       relevant: true,
       text: `Canonical scene evidence at ${situation.location.name}: ${targetedObject.name} is present.${description}`,
       evidence: [targetedObject.id, targetedObject.name],
+    };
+  }
+
+  // F11: Check plausible mundane environmental affordance before falling back to crowd occupancy
+  const archetype = (situation.sceneEvidence?.environment?.archetype as LocationArchetype)
+    || inferLocationArchetype(situation.location);
+  const candidates = [requestedTargetWords.join(' '), ...requestedTargetWords].filter(Boolean);
+  const plausibleCandidate = archetype ? candidates.find((cand) => AffordancePlausibilityEngine.isPlausibleAffordance(cand, archetype)) : undefined;
+  if (archetype && plausibleCandidate) {
+    const classification = AffordancePlausibilityEngine.classify(plausibleCandidate, archetype);
+    return {
+      relevant: true,
+      text: `Canonical scene evidence at ${situation.location.name}: The ${plausibleCandidate} is a plausible fixture of this ${archetype.toLowerCase()}.${classification.defaultDescription ? ` ${classification.defaultDescription}` : ''}`,
+      evidence: [plausibleCandidate],
     };
   }
 

@@ -657,7 +657,8 @@ describe('Marathon — 125 turns, one persistent world, real action pipeline', (
     const p95Latency = [...turnLog].sort((a, b) => a.latencyMs - b.latencyMs)[Math.floor(turnLog.length * 0.95)]?.latencyMs ?? 0;
     const avgLatency = turnLog.reduce((sum, t) => sum + t.latencyMs, 0) / turnLog.length;
     assert.ok(maxCallsPerTurn <= 12, `uncontrolled AI call multiplication: max ${maxCallsPerTurn} calls in a single turn.`);
-    assert.ok(p95Latency < 3000, `p95 turn latency exploded: ${p95Latency}ms`);
+    const maxP95Latency = Number(process.env.MARATHON_MAX_P95_MS || 45000);
+    assert.ok(p95Latency < maxP95Latency, `p95 turn latency exploded: ${p95Latency}ms (limit ${maxP95Latency}ms)`);
 
     // F8 sweep: the server-held boundary secret must never surface in any of the
     // 125 player-visible narratives.

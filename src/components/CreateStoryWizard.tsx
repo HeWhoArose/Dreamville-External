@@ -20,6 +20,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
+import { RulesChecklist } from './RulesChecklist';
 
 interface CreateStoryWizardProps {
   onSelectRun: (storyId: string) => void;
@@ -62,6 +63,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
   const [selectedMediums, setSelectedMediums] = useState<string[]>([]);
   const [selectedStoryMode, setSelectedStoryMode] = useState<'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM'>('PROTAGONIST');
   const [selectedRulesMode, setSelectedRulesMode] = useState<'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND'>('FULL_DND');
+  const [ruleToggles, setRuleToggles] = useState<Record<string, boolean>>({});
 
   // Stage 2 State: Synthesized World Preview & Evaluation
   const [synthesizedWorld, setSynthesizedWorld] = useState<any | null>(null);
@@ -94,6 +96,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
         mediumTags: selectedMediums,
         storyMode: selectedStoryMode,
         dndRulesMode: selectedRulesMode,
+        rulesProfile: selectedRulesMode === 'FULL_DND' ? undefined : { mode: selectedRulesMode, ruleToggles },
         generationSeed: `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       });
       setSynthesizedWorld(result);
@@ -326,7 +329,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
                       <button
                         key={value}
                         type="button"
-                        onClick={() => setSelectedRulesMode(value as typeof selectedRulesMode)}
+                        onClick={() => { setSelectedRulesMode(value as typeof selectedRulesMode); setRuleToggles({}); }}
                         className={`px-2.5 py-2 rounded-lg text-xs border transition-all cursor-pointer ${
                           selectedRulesMode === value
                             ? 'bg-blue-600/30 text-blue-200 border-blue-500/60 font-medium'
@@ -337,6 +340,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
                       </button>
                     ))}
                   </div>
+                  <RulesChecklist mode={selectedRulesMode} toggles={ruleToggles} onChange={setRuleToggles} />
                 </div>
               </div>
             </div>

@@ -14,7 +14,7 @@ describe('N19 Gemini-first live narrative routing', () => {
 		assert.equal(review[0], 'google_gemini::gemini-3.5-flash');
 
 		assert.ok(narrative.includes('groq::qwen/qwen3.8-27b'));
-		assert.ok(narrative.includes('openrouter::inclusionai/ling-3.0-flash:free'));
+		assert.ok(narrative.includes('openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'));
 		assert.ok(narrative.includes('provider_deterministic_emergency::emergency-fallback-local'));
 		assert.ok(dialogue.includes('groq::qwen/qwen3.8-27b'));
 		assert.ok(review.includes('groq::qwen/qwen3.8-27b'));

@@ -461,12 +461,13 @@ test('OpenRouter retries an empty assistant response with a larger budget and di
     const adapter = new OpenRouterAdapter();
     const result = await adapter.generate('narrative.generate', 'Return a narrative.', {
       modelId: 'provider/reasoning-model',
-      maxTokens: 1000,
+      maxTokens: 650,
     });
 
     assert.equal(result.text, 'Recovered answer.');
     assert.equal(requestCount, 2);
-    assert.equal(requests[0].max_tokens, 1000);
+    // A tight pacing budget is raised to the first-attempt floor so reasoning models do not waste a call.
+    assert.equal(requests[0].max_tokens, 1536);
     assert.equal(requests[1].max_tokens, 12288);
     assert.deepEqual(requests[1].reasoning, { effort: 'none' });
   } finally {

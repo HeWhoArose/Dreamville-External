@@ -1,0 +1,226 @@
+{
+  "packVersion": 1,
+  "id": "pack_ashen_cup",
+  "title": "The Ashen Cup (Tournament Arena)",
+  "premise": "You are Corvin Hale, a contracted fighter in the Ashen Cup, a winner-takes-all tournament held in the Cinder Arena. Tonight you fight Gravus Thorne, the reigning champion, in the third bout. The winner takes 500 crowns and is released from the Cup's contract. Bouts are called by bell, and a fighter who is not at the Ring Gate when their bout is called forfeits.",
+  "openingScene": "The Fighters' Hold smells of lamp oil, liniment and old sweat. Through the iron grille at the far end the crowd roars for the first bout; a bell has just rung once. Marshal Dessa Orrin stands by the tally board with a slate, and across the room Gravus Thorne is tightening a strap without looking at you.",
+  "protagonist": {
+    "name": "Corvin Hale",
+    "startLocationId": "loc_fighters_hold",
+    "kit": [
+      { "name": "Worn linen tunic", "category": "Miscellaneous", "quantity": 1 },
+      { "name": "Waterskin", "category": "Tool", "quantity": 1 },
+      { "name": "Tally token (bout three)", "category": "Miscellaneous", "quantity": 1 }
+    ]
+  },
+  "locations": [
+    {
+      "id": "loc_fighters_hold", "name": "The Fighters' Hold", "region": "reg_cinder_arena", "archetype": "ROOM", "discovered": true,
+      "tags": ["waiting_room", "indoor"],
+      "description": "A long stone waiting room under the stands. Benches line the walls, a tally board hangs by the door, and a barred grille at the far end looks out on the tunnel to the ring. Fighters stretch, pray, or stare at nothing.",
+      "ambient": "The crowd's roar thuds through the ceiling and dust sifts down with every stamp.",
+      "improvisable": [
+        { "key": "bench_leg", "sources": ["bench", "benches", "leg", "plank"], "name": "Bench Leg", "description": "A splintered oak leg wrenched off a bench. Heavy, clumsy, better than bare hands.", "category": "Weapon", "maxDurability": 6, "attackBonus": 1, "limit": 2 }
+      ]
+    },
+    {
+      "id": "loc_armoury_cage", "name": "The Armoury Cage", "region": "reg_cinder_arena", "archetype": "ROOM", "discovered": true,
+      "tags": ["armoury", "indoor"],
+      "description": "A caged alcove off the Hold where the Cup issues plain house weapons. Racks of dulled steel and hardened leather, watched by a bored quartermaster. Each fighter may draw one weapon before the gate.",
+      "ambient": "Oiled leather and cold iron."
+    },
+    {
+      "id": "loc_medic_alcove", "name": "The Medic's Alcove", "region": "reg_cinder_arena", "archetype": "ROOM", "discovered": true,
+      "tags": ["infirmary", "indoor"],
+      "description": "A curtained corner with a cot, a basin of vinegar water and a shelf of bandages and bitter tinctures. Dr Pell patches fighters between bouts.",
+      "ambient": "Vinegar and boiled linen."
+    },
+    {
+      "id": "loc_ring_gate", "name": "The Ring Gate Tunnel", "region": "reg_cinder_arena", "archetype": "GENERIC", "discovered": true,
+      "tags": ["tunnel", "threshold"],
+      "description": "A sloping stone tunnel ending in a portcullis, with a strip of white sand and sky beyond. Fighters wait here until the marshal raises the gate. The crowd's noise is deafening this close.",
+      "ambient": "Hot air and roaring pour down the tunnel."
+    },
+    {
+      "id": "loc_arena_sand", "name": "The Sand", "region": "reg_cinder_arena", "archetype": "GENERIC", "discovered": false,
+      "tags": ["arena", "combat"],
+      "terrain": {
+        "bounds": { "minX": 0, "maxX": 11, "minY": 0, "maxY": 7 },
+        "obstacles": [
+          { "x": 2, "y": 2, "cover": "HALF", "label": "rubble from the broken colonnade" },
+          { "x": 2, "y": 3, "cover": "THREE_QUARTERS", "label": "a toppled column" },
+          { "x": 3, "y": 5, "cover": "HALF", "label": "splintered timber" },
+          { "x": 6, "y": 2, "cover": "HALF", "label": "the low barrier wall" },
+          { "x": 6, "y": 3, "cover": "HALF", "label": "the low barrier wall" },
+          { "x": 6, "y": 4, "cover": "HALF", "label": "the low barrier wall" },
+          { "x": 4, "y": 6, "isImpassable": true, "label": "a fallen pillar" }
+        ],
+        "hazards": [
+          { "id": "weapon_pit", "type": "pit", "x": 8, "y": 6, "radiusCells": 0, "durationTurns": 9999, "damagePerTurn": 0, "fallFeet": 10 },
+          { "id": "spike_plate", "type": "trap", "x": 9, "y": 3, "radiusCells": 0, "durationTurns": 9999, "damagePerTurn": 8, "damageType": "piercing" }
+        ],
+        "startPositions": { "player": { "x": 1, "y": 3 }, "enemy": { "x": 10, "y": 3 } }
+      },
+      "description": "The open floor of the Cinder Arena: pale packed sand ringed by a high stone wall and tiered stands. The east half is churned and soft from flooding. Weapons from earlier rounds lie where they fell.",
+      "ambient": "A wall of noise, hot sun on sand, the smell of dust and blood."
+    },
+    {
+      "id": "loc_weapon_pit", "name": "The Weapon Pit", "region": "reg_cinder_arena", "archetype": "GENERIC", "discovered": false,
+      "tags": ["arena", "combat", "weapons"],
+      "description": "A sunken ring of sand at the arena's north edge where spent weapons are tossed between rounds. Spears, nets and maces lie in a tangle, some cracked, some rusted, a few still sound.",
+      "ambient": "Metal shifts and clinks underfoot."
+    },
+    {
+      "id": "loc_broken_colonnade", "name": "The Broken Colonnade", "region": "reg_cinder_arena", "archetype": "GENERIC", "discovered": false,
+      "tags": ["arena", "combat", "cover"],
+      "description": "Toppled stone columns and splintered timber on the arena's west side, left as cover. Broken shafts and pike staves poke from the rubble, and a dented shield leans against a fallen drum.",
+      "ambient": "Grit trickles from the rubble when the crowd stamps.",
+      "improvisable": [
+        { "key": "colonnade_shaft", "sources": ["shaft", "debris", "rubble", "timber", "wreckage", "stave"], "name": "Broken Shaft", "description": "A snapped pike shaft with a splintered end, usable as a club or a crude staff.", "category": "Weapon", "maxDurability": 8, "attackBonus": 1, "limit": 3 }
+      ]
+    },
+    {
+      "id": "loc_barrier_wall", "name": "The Barrier Wall", "region": "reg_cinder_arena", "archetype": "GENERIC", "discovered": false,
+      "tags": ["arena", "combat", "edge"],
+      "description": "The tall stone wall at the foot of the stands, hung with torn banners and iron rings. The crowd leans over the rail above, close enough to spit. A banner pole has worked loose from its bracket.",
+      "ambient": "Cheers and jeers rain down from above.",
+      "improvisable": [
+        { "key": "banner_pole", "sources": ["banner", "pole", "banners", "bracket"], "name": "Banner Pole", "description": "A long ash pole pulled free of its bracket, with a rag of banner still knotted at one end.", "category": "Weapon", "maxDurability": 10, "attackBonus": 1, "limit": 2 }
+      ]
+    }
+  ],
+  "routes": [
+    ["loc_fighters_hold", "loc_armoury_cage", 0.02, "Road"],
+    ["loc_fighters_hold", "loc_medic_alcove", 0.02, "Road"],
+    ["loc_fighters_hold", "loc_ring_gate", 0.05, "Road"],
+    ["loc_ring_gate", "loc_arena_sand", 0.04, "Road"],
+    ["loc_arena_sand", "loc_weapon_pit", 0.04, "Road"],
+    ["loc_arena_sand", "loc_broken_colonnade", 0.04, "Road"],
+    ["loc_arena_sand", "loc_barrier_wall", 0.04, "Road"]
+  ],
+  "items": [
+    { "id": "item_house_gladius", "locationId": "loc_armoury_cage", "name": "House Gladius", "description": "A plain, serviceable short sword with a dulled edge, stamped with the Cup's mark.", "category": "Weapon", "maxDurability": 60, "attackBonus": 2, "damageDice": "1d6" },
+    { "id": "item_house_spear", "locationId": "loc_armoury_cage", "name": "House Spear", "description": "A six-foot ash spear with a leaf-shaped head, balanced for reach.", "category": "Weapon", "maxDurability": 50, "attackBonus": 2, "damageDice": "1d6" },
+    { "id": "item_house_buckler", "locationId": "loc_armoury_cage", "name": "Iron Buckler", "description": "A small round iron shield with a worn grip.", "category": "Shield", "maxDurability": 40, "armorBonus": 1 },
+    { "id": "item_leather_jerkin", "locationId": "loc_armoury_cage", "name": "Hardened Leather Jerkin", "description": "A boiled-leather vest, stiff and sweat-darkened.", "category": "Armor", "maxDurability": 50, "armorBonus": 2 },
+    { "id": "item_pit_cracked_spear", "locationId": "loc_weapon_pit", "name": "Cracked Spear", "description": "A spear with a hairline split up the shaft. It will take a few hard blows and no more.", "category": "Weapon", "maxDurability": 40, "durabilityFraction": 0.3, "attackBonus": 2 },
+    { "id": "item_pit_rusted_mace", "locationId": "loc_weapon_pit", "name": "Rusted Mace", "description": "A flanged mace pitted with rust, still heavy enough to dent a helm.", "category": "Weapon", "maxDurability": 50, "durabilityFraction": 0.5, "attackBonus": 3 },
+    { "id": "item_pit_sound_net", "locationId": "loc_weapon_pit", "name": "Weighted Net", "description": "A lead-weighted net, sound and unfrayed. Good for tangling an opponent's feet.", "category": "Tool", "maxDurability": 30 },
+    { "id": "item_pit_hilt", "locationId": "loc_weapon_pit", "name": "Snapped Sword", "description": "A sword snapped a hand's breadth above the guard. The stub is an ugly, short stabbing weapon.", "category": "Weapon", "maxDurability": 50, "durabilityFraction": 0, "attackBonus": 3 },
+    { "id": "item_colonnade_shield", "locationId": "loc_broken_colonnade", "name": "Dented Shield", "description": "A round wooden shield, caved in at the rim, with the boss still solid.", "category": "Shield", "maxDurability": 30, "durabilityFraction": 0.5, "armorBonus": 2 },
+    { "id": "item_sand_trident", "locationId": "loc_arena_sand", "name": "Dropped Trident", "description": "A trident dropped by a fighter from an earlier bout, one tine slightly bent.", "category": "Weapon", "maxDurability": 40, "durabilityFraction": 0.8, "attackBonus": 2 }
+  ],
+  "events": [
+    { "id": "evt_bout_one", "kind": "TOURNAMENT", "name": "First bout called", "locationId": "loc_ring_gate", "startsAfterMinutes": 10 },
+    { "id": "evt_bout_two", "kind": "TOURNAMENT", "name": "Second bout called", "locationId": "loc_ring_gate", "startsAfterMinutes": 25 },
+    { "id": "evt_bout_three", "kind": "TOURNAMENT", "name": "Corvin Hale versus Gravus Thorne: bout three called at the Ring Gate", "locationId": "loc_ring_gate", "startsAfterMinutes": 40, "deadlineAfterMinutes": 55 }
+  ],
+  "npcs": [
+    {
+      "id": "npc_dessa_orrin", "name": "Dessa Orrin", "role": "Arena marshal", "locationId": "loc_fighters_hold",
+      "description": "A lean woman with a slate and a brass handbell, who runs the Cup's bouts to the minute and has no patience for stragglers.",
+      "dialogueStyle": "Clipped and procedural; answers rules questions exactly and nothing else.",
+      "motivations": ["Keep the bouts on schedule", "Keep the Cup's rules clean"],
+      "knownToProtagonist": true,
+      "knows": ["fact_cup_rules", "fact_bout_order", "fact_bell_forfeit", "fact_armoury_rule", "fact_soft_sand"],
+      "sharing": "FREE", "secrets": [], "refuses": []
+    },
+    {
+      "id": "npc_gravus_thorne", "name": "Gravus Thorne", "role": "Reigning champion", "locationId": "loc_fighters_hold",
+      "description": "A broad, scarred champion in a plate cuirass, unhurried and unreadable, who has won the Cup three years running.",
+      "dialogueStyle": "Quiet and sparing; speaks as if every word costs coin.",
+      "motivations": ["Win a fourth Cup", "Never show a weakness"],
+      "carries": [
+        { "name": "Champion's Broadsword", "category": "Weapon", "slot": "mainHand", "attackBonus": 4, "maxDurability": 90 },
+        { "name": "Champion's Kite Shield", "category": "Shield", "slot": "offHand", "armorBonus": 2, "maxDurability": 70 },
+        { "name": "Champion's Cuirass", "category": "Armor", "slot": "body", "armorBonus": 4, "maxDurability": 100 }
+      ],
+      "knows": ["fact_prize", "fact_your_bout"],
+      "sharing": "GUARDED", "secrets": ["He is afraid of losing his place as champion."], "refuses": ["Telling you how he fights."],
+      "combat": {
+        "level": 5, "hp": 70, "armorClass": 11, "speed": 30, "attackBonus": 3, "damageFormula": "1d10+4", "damageType": "slashing",
+        "phases": [
+          { "id": "unhurried", "name": "The Unhurried Champion", "minHpPercent": 0.5, "maxHpPercent": 1, "resources": { "fury": 0 } },
+          {
+            "id": "desperate", "name": "The Desperate Champion", "minHpPercent": 0, "maxHpPercent": 0.5, "targetPriority": "LOWEST_HP",
+            "modifiers": { "combat.attackBonus": 2 }, "resources": { "fury": 2 }, "abilities": ["crushing_blow"],
+            "abilityDefinitions": [
+              { "id": "crushing_blow", "name": "Crushing Blow", "resolutionMode": "SINGLE_ATTACK", "scale": "PERSON", "actionCost": "ACTION", "targetingMode": "ONE_TARGET", "damageFormula": "2d10+4", "damageType": "bludgeoning", "resourceCost": { "name": "fury", "amount": 1 } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "npc_marek_ironhand", "name": "Marek Ironhand", "role": "Veteran gladiator", "locationId": "loc_fighters_hold",
+      "description": "A grey, one-eyed veteran who has fought in the Cup for twelve years and now mostly gives advice nobody asked for.",
+      "dialogueStyle": "Gruff and rambling, fond of war stories, blunt about danger.",
+      "motivations": ["See one more good fighter win", "Stay alive another year"],
+      "carries": [
+        { "name": "Marek's Sabre", "category": "Weapon", "slot": "mainHand", "attackBonus": 2, "maxDurability": 60 },
+        { "name": "Marek's Wineskin", "category": "Miscellaneous" }
+      ],
+      "knows": ["fact_pit_weapons", "fact_gravus_overhead", "fact_prize"],
+      "sharing": "GUARDED", "secrets": ["Marek has watched Gravus's last three Cups closely."], "refuses": ["Naming the wager he placed on your bout."],
+      "combat": { "level": 3, "hp": 38, "armorClass": 14, "speed": 30, "attackBonus": 3, "damageFormula": "1d8+2", "damageType": "slashing" }
+    },
+    {
+      "id": "npc_sela_quickwater", "name": "Sela Quickwater", "role": "Young net-fighter", "locationId": "loc_fighters_hold",
+      "description": "A wiry, nervous young net-fighter who talks fast when she is frightened, and she is frightened.",
+      "dialogueStyle": "Fast, tumbling sentences; trails off when she says too much.",
+      "motivations": ["Survive her first Cup", "Buy her brother's freedom"],
+      "carries": [
+        { "name": "Sela's Weighted Net", "category": "Tool", "slot": "mainHand", "maxDurability": 30 },
+        { "name": "Sela's Dagger", "category": "Weapon", "attackBonus": 1, "maxDurability": 40 }
+      ],
+      "knows": ["fact_colonnade_shafts", "fact_gravus_strap", "fact_medic_help"],
+      "sharing": "GUARDED", "secrets": ["Sela saw Gravus's shield strap fray in his last bout."], "refuses": ["Saying who she bet on."],
+      "combat": { "level": 3, "hp": 22, "armorClass": 13, "speed": 30, "attackBonus": 4, "damageFormula": "1d6+2", "damageType": "piercing" }
+    },
+    {
+      "id": "npc_bruno_stonejaw", "name": "Bruno Stonejaw", "role": "Brawler", "locationId": "loc_fighters_hold",
+      "description": "A hulking, bruised brawler sitting alone with his fists wrapped, glaring at anyone who looks his way for long.",
+      "dialogueStyle": "Short, hostile growls; respects only strength.",
+      "motivations": ["Beat Gravus Thorne", "Be left alone"],
+      "carries": [
+        { "name": "Bruno's War Hammer", "category": "Weapon", "slot": "mainHand", "attackBonus": 3, "maxDurability": 70 },
+        { "name": "Bruno's Hide Vest", "category": "Armor", "slot": "body", "armorBonus": 1, "maxDurability": 40 }
+      ],
+      "knows": ["fact_bruno_loss"],
+      "sharing": "SECRET", "secrets": ["Gravus beat Bruno last year and Bruno has never forgiven it."], "refuses": ["Talking about last year."],
+      "combat": { "level": 3, "hp": 45, "armorClass": 13, "speed": 30, "attackBonus": 2, "damageFormula": "1d10+3", "damageType": "bludgeoning" }
+    },
+    {
+      "id": "npc_doctor_pell", "name": "Dr Pell", "role": "Arena medic", "locationId": "loc_medic_alcove",
+      "description": "A tired, ink-stained physician who stitches fighters between bouts and charges whatever they can pay.",
+      "dialogueStyle": "Dry, weary, bluntly clinical.",
+      "motivations": ["Keep fighters alive", "Get paid"],
+      "knows": ["fact_medic_help", "fact_cup_rules"],
+      "sharing": "FREE", "secrets": [], "refuses": []
+    },
+    {
+      "id": "npc_quartermaster_hob", "name": "Hob the Quartermaster", "role": "Armoury keeper", "locationId": "loc_armoury_cage",
+      "description": "A heavy-set, bored man behind the cage who checks every fighter's tally token before releasing a weapon.",
+      "dialogueStyle": "Flat and bureaucratic; says the same line twice.",
+      "motivations": ["Follow the book", "Be done by the final bout"],
+      "knows": ["fact_armoury_rule"],
+      "sharing": "FREE", "secrets": [], "refuses": []
+    }
+  ],
+  "facts": [
+    { "id": "fact_prize", "statement": "The Ashen Cup winner takes 500 crowns and is released from the Cup's contract.", "subject": "Ashen Cup", "predicate": "awards_winner", "object": "500 crowns and release from contract", "knownAtStart": true },
+    { "id": "fact_your_bout", "statement": "Corvin Hale fights Gravus Thorne in the third bout of the evening.", "subject": "Corvin Hale", "predicate": "fights_in", "object": "bout three against Gravus Thorne", "knownAtStart": true },
+    { "id": "fact_cup_rules", "statement": "Bouts in the Ashen Cup end by yielding or incapacitation, and a killing blow forfeits the prize money.", "subject": "Ashen Cup", "predicate": "ends_bouts_by", "object": "yield or incapacitation; killing forfeits prize", "knownAtStart": false },
+    { "id": "fact_bout_order", "statement": "Two bouts are fought before yours, and the marshal rings a bell when each is called.", "subject": "Ashen Cup", "predicate": "calls_bouts_by", "object": "bell, two bouts before bout three", "knownAtStart": false },
+    { "id": "fact_bell_forfeit", "statement": "A fighter who is not at the Ring Gate when their bout is called forfeits it.", "subject": "Ring Gate", "predicate": "forfeits_latecomers", "object": "fighters absent when called", "knownAtStart": false },
+    { "id": "fact_armoury_rule", "statement": "Each fighter may draw one weapon from the Armoury Cage before the gate, and anything lying on the sand is fair to take once the bout begins.", "subject": "Armoury Cage", "predicate": "issues_one_weapon", "object": "one weapon per fighter; sand weapons fair game", "knownAtStart": false },
+    { "id": "fact_soft_sand", "statement": "The east half of the Sand is soft from flooding and slows anyone in heavy armour.", "subject": "The Sand", "predicate": "is_soft_on", "object": "east half, slows heavy armour", "knownAtStart": false },
+    { "id": "fact_pit_weapons", "statement": "The Weapon Pit holds tossed spears, nets and maces, and some of them are cracked or rusted and will not last.", "subject": "Weapon Pit", "predicate": "holds", "object": "spears, nets, maces; some cracked or rusted", "knownAtStart": false },
+    { "id": "fact_colonnade_shafts", "statement": "Broken shafts in the colonnade rubble make serviceable improvised clubs.", "subject": "Broken Colonnade", "predicate": "yields", "object": "broken shafts usable as clubs", "knownAtStart": false },
+    { "id": "fact_gravus_overhead", "statement": "Gravus Thorne opens every bout with a heavy overhead strike and is slow to recover from it.", "subject": "Gravus Thorne", "predicate": "opens_with", "object": "heavy overhead strike, slow recovery", "knownAtStart": false },
+    { "id": "fact_gravus_strap", "statement": "Gravus Thorne's kite shield strap is badly frayed and may give way under a hard blow.", "subject": "Gravus Thorne", "predicate": "has_weakness", "object": "frayed shield strap", "knownAtStart": false },
+    { "id": "fact_medic_help", "statement": "Dr Pell will treat wounds between bouts for a coin or a favour.", "subject": "Dr Pell", "predicate": "treats_fighters", "object": "for a coin or a favour", "knownAtStart": false },
+    { "id": "fact_bruno_loss", "statement": "Bruno Stonejaw lost to Gravus Thorne in last year's Cup and has never forgiven it.", "subject": "Bruno Stonejaw", "predicate": "lost_to", "object": "Gravus Thorne last year", "knownAtStart": false }
+  ],
+  "clues": []
+}

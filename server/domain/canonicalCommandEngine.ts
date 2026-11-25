@@ -220,7 +220,7 @@ const phase8SimulationEngine = new Phase8SimulationEngine();
 export class CanonicalCommandEngine {
 	private static readonly instance = new CanonicalCommandEngine();
 	private readonly inFlight = new Map<string, Promise<CanonicalCommandResult>>();
-	private readonly storyQueues = new Map<string, Promise<void>>();
+	private readonly storyLocks = new Map<string, { locked: boolean; waiters: Array<() => void> }>();
 	private readonly exclusiveStoryContext = new AsyncLocalStorage<string>();
 	private readonly completedResults = new Map<string, { fingerprint: string; data?: unknown }>();
 
@@ -371,6 +371,33 @@ export class CanonicalCommandEngine {
 			};
 		}
 
+		// F12 Invariant: Cannot take or loot deceased bodies into actor inventory
+		if (command.type === 'INTERACT' || command.type === 'CORE_ACTION' || command.type === 'USE_ITEM') {
+			const payload = (command.payload || {}) as Record<string, unknown>;
+			const action = String(payload.action || '').toUpperCase();
+			if (['TAKE', 'PICKUP', 'LOOT'].includes(action)) {
+				const targetId = String(payload.targetId || payload.targetEntityId || '');
+				if (targetId) {
+					const card = repository.getEntityCard(command.storyId, targetId);
+					if (
+						card &&
+						(card.worldState?.isAlive === false ||
+						 card.lifecycle?.status === 'DEAD' ||
+						 (card.classification?.tags || []).some((t: string) => t.toLowerCase() === 'corpse') ||
+						 (card.traits || []).some((t: string) => t.toLowerCase() === 'corpse' || t.toLowerCase() === 'deceased_body'))
+					) {
+						return {
+							success: false,
+							commandId: command.commandId || '',
+							errorReason: 'CANNOT_TAKE_CORPSE',
+							rolledBack: false,
+							mutationPaths: [],
+						};
+					}
+				}
+			}
+		}
+
 		if (!repository.getStoryRun(command.storyId)) {
 			repository.seedStory(command.storyId);
 		}
@@ -502,23 +529,67 @@ export class CanonicalCommandEngine {
 		return this.enqueueStoryCommand(storyId, () => this.exclusiveStoryContext.run(storyId, work));
 	}
 
+	public isInsideExclusiveContext(storyId: string): boolean {
+		return this.exclusiveStoryContext.getStore() === storyId;
+	}
+
+	public updateCompletedResult(storyId: string, commandId: string, data: unknown): void {
+		if (!storyId || !commandId) return;
+		const key = `${storyId}::${commandId}`;
+		const existing = this.completedResults.get(key);
+		if (existing) {
+			existing.data = clone(data);
+		}
+	}
+
+	private async acquireLock(storyId: string): Promise<void> {
+		let lock = this.storyLocks.get(storyId);
+		if (!lock) {
+			lock = { locked: false, waiters: [] };
+			this.storyLocks.set(storyId, lock);
+		}
+		if (!lock.locked) {
+			lock.locked = true;
+			return;
+		}
+		await new Promise<void>((resolve) => {
+			lock!.waiters.push(resolve);
+		});
+	}
+
+	private releaseLock(storyId: string): void {
+		const lock = this.storyLocks.get(storyId);
+		if (!lock) return;
+		const next = lock.waiters.shift();
+		if (next) {
+			next();
+		} else {
+			lock.locked = false;
+			this.storyLocks.delete(storyId);
+		}
+	}
+
+	public async withDecoupledLock<T>(storyId: string, work: () => Promise<T>): Promise<T> {
+		if (this.exclusiveStoryContext.getStore() === storyId) {
+			this.releaseLock(storyId);
+			try {
+				return await this.exclusiveStoryContext.run('', work);
+			} finally {
+				await this.acquireLock(storyId);
+			}
+		}
+		return work();
+	}
+
 	private async enqueueStoryCommand<T>(
 		storyId: string,
 		work: () => Promise<T>
 	): Promise<T> {
-		const previous = this.storyQueues.get(storyId) || Promise.resolve();
-		const next = previous.then(work, work);
-		const queueTail = next.then(
-			() => undefined,
-			() => undefined
-		);
-		this.storyQueues.set(storyId, queueTail);
+		await this.acquireLock(storyId);
 		try {
-			return await next;
+			return await work();
 		} finally {
-			if (this.storyQueues.get(storyId) === queueTail) {
-				this.storyQueues.delete(storyId);
-			}
+			this.releaseLock(storyId);
 		}
 	}
 

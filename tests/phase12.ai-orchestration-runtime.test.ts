@@ -933,7 +933,7 @@ test('Phase 12 regression: free-model detection requires provider-verified free-
 test('Phase 12 regression: narrative fallback chain contains the configured OpenRouter free route', () => {
 	const config = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'server/data/orchestrator_config.json'), 'utf8'));
 	assert.ok(Array.isArray(config.fallbackChains?.['narrative.generate']));
-	assert.ok(config.fallbackChains['narrative.generate'].includes('openrouter::inclusionai/ling-3.0-flash:free'));
+	assert.ok(config.fallbackChains['narrative.generate'].includes('openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'));
 });
 
 

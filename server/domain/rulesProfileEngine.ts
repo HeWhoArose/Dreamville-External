@@ -4,6 +4,7 @@ import type {
 	RuleProfileResolution,
 	RulesProfile,
 } from '../../src/types';
+import { RULES_CATALOGUE, isRuleEnabled, isRuleLocked, sanitizeRuleToggles } from '../../src/data/rulesCatalogue';
 
 const IMPLICIT_ABILITY_CHECKS = 'implicit_ability_checks';
 const IMPLICIT_SAVING_THROWS = 'implicit_saving_throws';
@@ -298,7 +299,65 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 	return next;
 }
 
+/**
+ * Applies the per-rule switches from the rules catalogue. Switches are accepted only as validated booleans over known ids:
+ * Full D&D takes none, Hybrid cannot change locked groups. In Hybrid, a switch that turns off a rule driving one of the six
+ * legacy mechanics disables that mechanic so the existing engine paths follow it.
+ */
+function applyRuleToggles(profile: RulesProfile, rawToggles: unknown, warnings: string[]): RulesProfile {
+	const next = clone(profile);
+	const toggles = sanitizeRuleToggles(rawToggles, next.mode);
+	if (rawToggles && typeof rawToggles === 'object' && Object.keys(rawToggles as object).length > Object.keys(toggles).length) {
+		warnings.push('Some rule switches were ignored: unknown rules, non-boolean values, locked groups, or Full D&D.');
+	}
+	next.ruleToggles = toggles;
+
+	if (next.mode === 'HYBRID_DND') {
+		for (const entry of RULES_CATALOGUE) {
+			if (!entry.mechanic || isRuleLocked(entry.id)) continue;
+			if (isRuleEnabled(next.mode, toggles, entry.id)) continue;
+			next.enabledMechanics = next.enabledMechanics.filter((id) => id !== entry.mechanic);
+			if (!next.disabledMechanics.includes(entry.mechanic)) next.disabledMechanics.push(entry.mechanic);
+		}
+		next.allowStandardDndSpellRules = next.enabledMechanics.includes(STANDARD_DND_SPELL_RULES)
+			&& !next.disabledMechanics.includes(STANDARD_DND_SPELL_RULES);
+	}
+
+	if (next.mode === 'CUSTOM_HOMEBREW_DND') {
+		// Ticking a rule on in Custom is an explicit enable of the mechanic that rule drives. Base ruleset stays NONE.
+		for (const entry of RULES_CATALOGUE) {
+			if (!entry.mechanic || toggles[entry.id] !== true) continue;
+			next.disabledMechanics = next.disabledMechanics.filter((id) => id !== entry.mechanic);
+			if (!next.enabledMechanics.includes(entry.mechanic)) next.enabledMechanics.push(entry.mechanic);
+		}
+		next.allowStandardDndSpellRules = next.enabledMechanics.includes(STANDARD_DND_SPELL_RULES)
+			&& !next.disabledMechanics.includes(STANDARD_DND_SPELL_RULES);
+		next.allowImplicitAbilityChecks = next.enabledMechanics.includes(IMPLICIT_ABILITY_CHECKS)
+			&& !next.disabledMechanics.includes(IMPLICIT_ABILITY_CHECKS);
+	}
+	return next;
+}
+
 export class RulesProfileEngine {
+	/**
+	 * Whether the engine may apply a rule. Full D&D and Hybrid follow the catalogue. Custom Homebrew keeps its existing explicit
+	 * authority gates (explicit rest, spell and combat overrides) and is refused here only when the rule was switched off on purpose.
+	 */
+	public rulePermits(profile: RulesProfile | null | undefined, ruleId: string): boolean {
+		if (!profile) return isRuleEnabled('FULL_DND', undefined, ruleId);
+		if (profile.mode !== 'CUSTOM_HOMEBREW_DND') return isRuleEnabled(profile.mode, profile.ruleToggles, ruleId);
+		// A Custom story built from the checklist (at least one rule ticked on) follows the checklist strictly: unticked is off.
+		// A Custom story with no ticks keeps its older explicit gates, which decide on their own.
+		const checklistDriven = Object.values(profile.ruleToggles || {}).some((value) => value === true);
+		return isRuleEnabled(checklistDriven ? 'CUSTOM_HOMEBREW_DND' : 'HYBRID_DND', profile.ruleToggles, ruleId);
+	}
+
+	/** Whether a catalogue rule applies under this profile (mode plus switches). */
+	public isRuleEnabled(profile: RulesProfile | null | undefined, ruleId: string): boolean {
+		if (!profile) return true;
+		return isRuleEnabled(profile.mode, profile.ruleToggles, ruleId);
+	}
+
 	public createDefault(mode: DndRulesMode = 'FULL_DND'): RulesProfile {
 		return baseProfile(mode);
 	}
@@ -361,6 +420,7 @@ export class RulesProfileEngine {
 		}
 
 		profile = applyOverrides(profile, profile.overrides);
+		profile = applyRuleToggles(profile, suppliedModeMatches ? supplied?.ruleToggles : undefined, warnings);
 
 		if (mode === 'CUSTOM_HOMEBREW_DND' && profile.baseRuleset === 'DND_5E') {
 			warnings.push('CUSTOM_HOMEBREW_DND cannot silently inherit the D&D 5e base ruleset; forcing baseRuleset to NONE.');

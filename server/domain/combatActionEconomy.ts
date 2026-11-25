@@ -31,6 +31,8 @@ export interface CombatTurnResources {
 }
 
 export interface CombatTurnResourceSnapshot {
+  /** Special resources (rage, ki, energy) held by the actor; filled in by the combat engine. */
+  specialResources?: Record<string, number>;
   actorId: string;
   round: number;
   movementRemainingCells: number;
@@ -98,6 +100,15 @@ export class CombatActionEconomy {
 
   public getAll(): CombatTurnResources[] {
     return Array.from(this.resources.values()).map((resource) => this.clone(resource));
+  }
+
+  /** The free object interaction each turn (draw or stow a weapon, pick something up). */
+  public consumeObjectInteraction(actorId: string): { success: boolean; errorReason?: string } {
+    const current = this.resources.get(actorId);
+    if (!current) return { success: false, errorReason: 'Combat turn resources are not initialized for this actor.' };
+    if (!current.objectInteractionAvailable) return { success: false, errorReason: 'The free object interaction was already used this turn.' };
+    current.objectInteractionAvailable = false;
+    return { success: true };
   }
 
   public canConsume(actorId: string, resource: CombatActionResource): boolean {

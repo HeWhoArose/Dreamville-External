@@ -22,7 +22,8 @@ import { CurrentSituationBuilder, type CurrentSituation } from './currentSituati
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
-import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
+import { classifyNarrationFailure, cutOffendingSentences, describesObservedTarget, isReadableNarration, namesTravelDestination, type GuardNote, type GuardOutcome } from './narrationGuardPolicy';
+import { buildAnswerBearingFactsBlock, narrationRecentTurnWindow, buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
 import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation, type NarrativeRichnessDecision, type NarrativeRichnessIssue } from './narrativeRichnessEvaluation';
@@ -32,6 +33,7 @@ import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { buildRequiredConsequences, isConsequenceCovered } from './narrativeConsequenceCoverage';
+import { analyzeKnownFactUse } from './knownFactUse';
 import type { NarratorVoiceState } from './narratorVoiceEngine';
 import type { NarrativeNoveltyState } from './narrativeNoveltyEngine';
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
@@ -1951,7 +1953,12 @@ export class OpenRouterAdapter implements IProviderAdapter {
       ? AbortSignal.any([controller.signal, options.abortSignal])
       : controller.signal;
 
-    const requestedMaxTokens = Math.max(256, Number(options?.maxTokens || 4096));
+    // Free OpenRouter models are frequently reasoning models that spend the completion budget on
+    // thinking and return empty content. A tight pacing budget (for example 650) therefore wastes
+    // the first call and forces a recovery retry. The cap is only a ceiling; word/paragraph pacing
+    // is enforced by validation, so a higher floor does not lengthen narration.
+    const OPENROUTER_MIN_FIRST_ATTEMPT_TOKENS = 1536;
+    const requestedMaxTokens = Math.max(OPENROUTER_MIN_FIRST_ATTEMPT_TOKENS, Number(options?.maxTokens || 4096));
     const boundedMaxTokens = Math.min(requestedMaxTokens, 8192);
 
     const buildBody = (recoveryAttempt: boolean): Record<string, unknown> => {
@@ -3170,6 +3177,17 @@ export function normalizeTranscriptionProviderText(rawText: string): { valid: bo
 		: { valid: false, text: '', reason: 'Transcription provider returned empty text.' };
 }
 
+/** Soft quality gates are on by default; NARRATION_SOFT_GATES=0 restores strict rejection (for A/B measurement). */
+function softNarrationGatesEnabled(): boolean {
+  return process.env.NARRATION_SOFT_GATES !== '0';
+}
+
+/** Richness score below which an "IMPROVE" verdict is worth a polish call on its own. NARRATION_POLISH_FLOOR overrides (default 0.55). */
+function narrationPolishFloor(): number {
+  const configured = Number(process.env.NARRATION_POLISH_FLOOR);
+  return Number.isFinite(configured) && configured > 0 ? configured : 0.55;
+}
+
 export class MultiModelOrchestrator {
   public static readonly PROMPT_VERSION = DREAMBOOK_PROMPT_VERSION;
   private models: Map<string, ModelRegistryRecord> = new Map();
@@ -3216,6 +3234,7 @@ export class MultiModelOrchestrator {
     if (!isTestRuntime || loadTestPersistence) {
       this.loadPersistedConfig();
     }
+    this.retireStaleFreeModelRoutes();
     this.normalizePinnedTaskFallbackRoutes();
     this.normalizeGeneralTextTaskEligibility();
   }
@@ -3228,7 +3247,7 @@ export class MultiModelOrchestrator {
         if (data && typeof data === 'object') {
           if (Array.isArray(data.customModels)) {
             for (const cm of data.customModels) {
-              if (cm && cm.providerId && cm.modelId) {
+              if (cm && cm.providerId && cm.modelId && !MultiModelOrchestrator.RETIRED_FREE_MODEL_ROUTES[`${cm.providerId}::${cm.modelId}`]) {
                 this.registerModel(cm);
               }
             }
@@ -3569,6 +3588,20 @@ export class MultiModelOrchestrator {
     return status;
   }
 
+  /** Milliseconds until the first real model on the task's route leaves cooldown; 0 unless every real model is cooling down. */
+  private routeCooldownRemainingMs(task: TaskId): number {
+    const models = this.getFallbackChain(task)
+      .filter((key) => key && !key.includes('emergency-fallback-local'))
+      .map((key) => this.models.get(key))
+      .filter((model): model is ModelRegistryRecord => Boolean(model) && !model!.isEmergencyFloor && model!.health !== 'DisabledByUser');
+    if (models.length === 0) return 0;
+    const remaining = models.map((model) => {
+      const until = this.ensureRuntimeStatus(model).cooldownUntil;
+      return typeof until === 'number' ? until - Date.now() : 0;
+    });
+    return remaining.every((ms) => ms > 0) ? Math.min(...remaining) : 0;
+  }
+
   private isModelCoolingDown(model: ModelRegistryRecord): boolean {
     const cooldownUntil = this.ensureRuntimeStatus(model).cooldownUntil;
     return typeof cooldownUntil === 'number' && cooldownUntil > Date.now();
@@ -3689,6 +3722,11 @@ export class MultiModelOrchestrator {
     }
     if (failureType === '5XX') status.serverError5xxCount += 1;
     if (failureType === 'TIMEOUT') status.timeoutCount += 1;
+    // A model the provider reports as no longer available (for example OpenRouter's
+    // "unavailable for free" 404) will not recover within a session: stop retrying it every turn.
+    if (failureType === 'UNAVAILABLE' && /unavailable for free|no endpoints found|not a valid model|model.{0,20}not found|no longer available/i.test(errorMessage)) {
+      status.cooldownUntil = Date.now() + 6 * 60 * 60 * 1000;
+    }
     if (failureType === '429' || failureType === '5XX' || failureType === 'TIMEOUT') {
       const cooldownMs = Math.min(60000, 5000 * Math.pow(2, Math.max(0, status.consecutiveFailures - 1)));
       status.cooldownUntil = Date.now() + cooldownMs;
@@ -3755,6 +3793,35 @@ export class MultiModelOrchestrator {
     if (this.usageLedger.length > 500) this.usageLedger.splice(0, this.usageLedger.length - 500);
   }
 
+  /**
+   * Free OpenRouter slugs that the provider has confirmed are no longer free
+   * ("This model is unavailable for free", HTTP 404). Persisted configs and
+   * older defaults may still reference them; they are rewritten to specific
+   * models confirmed free by a live probe. The `openrouter/free` router is deliberately
+   * not used: it picks a different model per call, which breaks narration consistency.
+   */
+  private static readonly RETIRED_FREE_MODEL_ROUTES: Record<string, string> = {
+    'openrouter::inclusionai/ling-3.0-flash:free': 'openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    'openrouter::qwen/qwen3.8-27b:free': 'openrouter::dots-studio/dots-3-note-preview:free',
+  };
+
+  private static replaceRetiredRoute(key: string): string {
+    return MultiModelOrchestrator.RETIRED_FREE_MODEL_ROUTES[key] ?? key;
+  }
+
+  private retireStaleFreeModelRoutes(): void {
+    for (const [task, chain] of this.taskFallbackChains.entries()) {
+      const rewritten = chain.map((key) => MultiModelOrchestrator.replaceRetiredRoute(key));
+      this.taskFallbackChains.set(task, rewritten.filter((key, index) => rewritten.indexOf(key) === index));
+    }
+    for (const [task, key] of this.taskPinnedModels.entries()) {
+      this.taskPinnedModels.set(task, MultiModelOrchestrator.replaceRetiredRoute(key));
+    }
+    for (const [category, key] of this.categoryOverrides.entries()) {
+      this.categoryOverrides.set(category, MultiModelOrchestrator.replaceRetiredRoute(key));
+    }
+  }
+
   private seedDefaultPins(): void {
     const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
     const routes: Partial<Record<TaskId, string[]>> = {
@@ -3766,7 +3833,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.1-flash-lite",
         "groq::qwen/qwen3.8-27b",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free"
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       ],
       "narrative.review": [
         "google_gemini::gemini-3.5-flash",
@@ -3775,7 +3842,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-2.5-flash",
         "google_gemini::gemini-3.1-flash-lite",
         "groq::qwen/qwen3.8-27b",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "openrouter::google/gemma-4-31b-it:free"
       ],
       "character.dialogue": [
@@ -3785,7 +3852,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.1-flash-lite",
         "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "openrouter::google/gemma-4-31b-it:free"
       ],
       "character.extract": [
@@ -3823,7 +3890,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free"
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       ],
       "utility.inspect": [
         "google_gemini::gemini-3.5-flash-lite",
@@ -3831,7 +3898,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.5-flash",
         "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "openrouter::google/gemma-4-31b-it:free"
       ],
       "rules.adjudicate": [
@@ -3842,7 +3909,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free"
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       ],
       "rules.analyze": [
         "groq::openai/gpt-oss-120b",
@@ -3852,7 +3919,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free"
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       ],
       "tactical.reason": [
         "groq::openai/gpt-oss-120b",
@@ -3862,7 +3929,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free"
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       ],
       "combat.tactics": [
         "groq::openai/gpt-oss-120b",
@@ -3872,14 +3939,14 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free"
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       ],
       "combat.animation.plan": [
         "groq::openai/gpt-oss-120b",
         "groq::qwen/qwen3.8-27b",
         "groq::openai/gpt-oss-20b",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite",
         "google_gemini::gemini-3.5-flash"
@@ -3892,7 +3959,7 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free"
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       ],
       "capability.synthesize": [
         "groq::openai/gpt-oss-120b",
@@ -3902,15 +3969,14 @@ export class MultiModelOrchestrator {
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free"
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
       ],
       "world.generate": [
         "groq::qwen/qwen3.8-27b",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "google_gemini::gemini-3.5-flash",
         "google_gemini::gemini-3.8-flash",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::qwen/qwen3.8-27b:free",
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite"
       ],
@@ -3918,7 +3984,7 @@ export class MultiModelOrchestrator {
         "groq::openai/gpt-oss-120b",
         "groq::qwen/qwen3.8-27b",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "google_gemini::gemini-3.5-flash",
         "google_gemini::gemini-3.8-flash",
         "google_gemini::gemini-3.5-flash-lite"
@@ -3927,7 +3993,7 @@ export class MultiModelOrchestrator {
         "groq::openai/gpt-oss-120b",
         "groq::qwen/qwen3.8-27b",
         "openrouter::google/gemma-4-31b-it:free",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "google_gemini::gemini-3.5-flash",
         "google_gemini::gemini-3.8-flash",
         "google_gemini::gemini-3.5-flash-lite"
@@ -3936,7 +4002,7 @@ export class MultiModelOrchestrator {
         "groq::qwen/qwen3.8-27b",
         "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-3.1-flash-lite",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "openrouter::google/gemma-4-31b-it:free",
         "google_gemini::gemini-3.5-flash",
         "google_gemini::gemini-3.8-flash"
@@ -3944,7 +4010,7 @@ export class MultiModelOrchestrator {
       "ooc.respond": [
         "groq::qwen/qwen3.8-27b",
         "google_gemini::gemini-3.5-flash",
-        "openrouter::inclusionai/ling-3.0-flash:free",
+        "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "openrouter::google/gemma-4-31b-it:free",
         "google_gemini::gemini-2.5-flash"
       ]
@@ -3977,7 +4043,7 @@ export class MultiModelOrchestrator {
   public getFallbackChain(task: TaskId): string[] {
     return this.taskFallbackChains.get(task) || [
       'groq::qwen/qwen3.8-27b',
-      'openrouter::inclusionai/ling-3.0-flash:free',
+      'openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
       'openrouter::google/gemma-4-31b-it:free',
       'google_gemini::gemini-3.5-flash',
       'google_gemini::gemini-3.5-flash-lite',
@@ -4451,9 +4517,9 @@ export class MultiModelOrchestrator {
     }
 
     const openRouterFreeDefaults = [
-      ['inclusionai/ling-3.0-flash:free', 'Ling 3.0 Flash (OpenRouter Free)', 'creative', 106, false],
+      ['nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', 'Nemotron 3 Nano Omni 30B (OpenRouter Free)', 'creative', 106, true],
       ['google/gemma-4-31b-it:free', 'Gemma 4 31B (OpenRouter Free)', 'creative', 103, true],
-      ['qwen/qwen3.8-27b:free', 'Qwen3.8 27B (OpenRouter Free)', 'creative', 100, true],
+      ['dots-studio/dots-3-note-preview:free', 'dots.3 Note Preview (OpenRouter Free)', 'creative', 100, true],
     ] as Array<[string, string, ModelPool, number, boolean]>;
 
     for (const model of openRouterFreeDefaults) {
@@ -6827,10 +6893,10 @@ export class MultiModelOrchestrator {
       // 5. Memory Candidates validation
       const memoryCandidates: string[] = [];
       if (parsed.memoryCandidates) {
-        if (!Array.isArray(parsed.memoryCandidates)) {
-          return { valid: false, errorReason: 'memoryCandidates must be an array.' };
-        }
-        for (const m of parsed.memoryCandidates) {
+        // Optional metadata: a lone string is wrapped, any other non-array shape is dropped. It must not
+        // discard an otherwise valid narrative turn (observed live: weak models emit scalar cue fields).
+        const rawMemory = Array.isArray(parsed.memoryCandidates) ? parsed.memoryCandidates : typeof parsed.memoryCandidates === 'string' ? [parsed.memoryCandidates] : [];
+        for (const m of rawMemory) {
           if (typeof m === 'string') memoryCandidates.push(m);
         }
       }
@@ -6838,10 +6904,8 @@ export class MultiModelOrchestrator {
       // 6. Audio cues validation
       const audioCues: string[] = [];
       if (parsed.audioCues) {
-        if (!Array.isArray(parsed.audioCues)) {
-          return { valid: false, errorReason: 'audioCues must be an array.' };
-        }
-        for (const a of parsed.audioCues) {
+        const rawAudio = Array.isArray(parsed.audioCues) ? parsed.audioCues : typeof parsed.audioCues === 'string' ? [parsed.audioCues] : [];
+        for (const a of rawAudio) {
           if (typeof a === 'string' && a.trim()) audioCues.push(a.trim());
         }
       }
@@ -6852,10 +6916,8 @@ export class MultiModelOrchestrator {
       // shapes); normalize what is usable and drop the rest.
       const visualCues: (string | { prompt: string })[] = [];
       if (parsed.visualCues) {
-        if (!Array.isArray(parsed.visualCues)) {
-          return { valid: false, errorReason: 'visualCues must be an array.' };
-        }
-        for (const v of parsed.visualCues) {
+        const rawVisual = Array.isArray(parsed.visualCues) ? parsed.visualCues : (typeof parsed.visualCues === 'string' || (parsed.visualCues && typeof parsed.visualCues === 'object')) ? [parsed.visualCues] : [];
+        for (const v of rawVisual) {
           if (typeof v === 'string' && v.trim()) {
             visualCues.push(v.trim());
           } else if (v && typeof v === 'object') {
@@ -7137,6 +7199,7 @@ export class MultiModelOrchestrator {
       if (candidate.isEmergencyFloor || this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
       const adapter = this.getAdapter(candidate.providerId);
       if (!adapter) continue;
+      if (params.turnBudget && !params.turnBudget.canAttemptProvider('intent.interpret').allowed) break;
 
       const startedAt = Date.now();
       params.turnBudget?.recordProviderAttempt('intent.interpret');
@@ -7250,8 +7313,14 @@ export class MultiModelOrchestrator {
     }
     const activeDialogue = (run as any)?.runtimeState?.activeDialogue;
     if (activeDialogue?.speakerName) canonicalSceneNames.push(String(activeDialogue.speakerName));
+    // Character and object names are short ("Mei Sato"): match them on 3+ letter words, not the 5+ letter location tokens,
+    // otherwise a reply that names the person present in the scene fails the anchor check (14 spurious failures in live runs).
+    const shortTokens = (value: unknown): string[] =>
+      String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3 && !['the', 'and', 'for', 'a', 'an', 'of', 'her', 'his'].includes(token));
+    const narrationShortTokens = new Set(shortTokens(narration));
     const canonicalEntityMatch = canonicalSceneNames.some((name) =>
-      tokenize(name).some((token) => narrationTokens.has(token))
+      tokenize(name).some((token) => narrationTokens.has(token)) ||
+      shortTokens(name).some((token) => narrationShortTokens.has(token))
     );
 
     if (nameTokens.length > 0 && sceneTokens.length > 0 && !nameMatch && !sceneMatch && !canonicalEntityMatch) {
@@ -7597,7 +7666,8 @@ export class MultiModelOrchestrator {
     // references (e.g. "closed before dawn", "since morning", "during the night", "until midnight")
     // so historical, role-based, or conversational mentions are not mistaken for present-scene sky claims.
     const strippedOutput = output
-      .replace(/["“”'][^"“”']*["“”']/g, ' ')
+      .replace(/["“”][^"“”]*["“”]/g, ' ')
+      .replace(/(?:^|\s)'([^'\n]+)'(?:\s|$|[.,!?;:])/g, ' ')
       .replace(
         /\b(?:night|morning|dawn|dusk|midnight|noon|afternoon|sunset|daybreak)\s+(?:watch|watchmen|watchman|guard|guards|patrol|patrols|shift|shifts|bell|bells|market|raid|raids|duty|duties|vision|owl|owls|shade|terror|terrors|crew|ledger|ledgers|roster|rosters|report|reports|air\s+had|sky\s+had)\b/gi,
         ' ',
@@ -7667,7 +7737,7 @@ export class MultiModelOrchestrator {
     const rewriteStartedAt = Date.now();
     let response: ProviderGenerateResult;
     try {
-      response = await params.adapter.generate('narrative.generate', rewritePrompt, {
+      response = await params.adapter.generate('narrative.review', rewritePrompt, {
         timeoutMs: Math.min(params.timeoutMs, 5000),
         modelId: params.modelId,
         maxTokens: NarrativePacingEngine.outputTokenBudget(params.narrativePacingContract),
@@ -7678,12 +7748,12 @@ export class MultiModelOrchestrator {
       if (!response?.text) throw new Error('Narrative semantic rewrite provider returned empty text.');
       const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
       if (rewriteModel) {
-        this.recordProviderSuccess(rewriteModel, response, 'narrative.generate', rewriteStartedAt);
+        this.recordProviderSuccess(rewriteModel, response, 'narrative.review', rewriteStartedAt);
       }
     } catch (error) {
       const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
       if (rewriteModel) {
-        this.recordProviderFailure(rewriteModel, 'narrative.generate', error, rewriteStartedAt);
+        this.recordProviderFailure(rewriteModel, 'narrative.review', error, rewriteStartedAt);
       }
       throw error;
     }
@@ -7795,6 +7865,21 @@ export class MultiModelOrchestrator {
     const sceneContinuity = this.validateNarrativeSceneContinuity(narration, params.repository, params.storyId);
     if (!sceneContinuity.valid) return { valid: false, errorReason: sceneContinuity.errorReason };
 
+    if (params.intent?.movementIntent && params.intent.locationTarget?.name) {
+      const destination = params.intent.locationTarget.name.toLowerCase();
+      const currentLocation = params.situation.location.name.toLowerCase();
+      if (destination !== currentLocation) {
+        const ARRIVAL_CLAIM_PATTERN = /\b(?:arrive(?:s|d)?|reach(?:es|ed)?|step(?:s|ped)?\s+(?:in|into|inside)|enter(?:s|ed)?|now\s+(?:in|at|inside)|welcome\s+to|slip(?:s|ped)?\s+(?:in|into|inside)|find(?:s)?\s+(?:your|one|him|her|them)self\s+(?:in|at|inside|into)|ma(?:ke|kes|de)\s+it\s+(?:to|in|into|inside)|settle(?:s|d)?\s+(?:in|into|inside))\b/i;
+        const lower = narration.toLowerCase();
+        if (ARRIVAL_CLAIM_PATTERN.test(lower) && lower.includes(destination)) {
+          return {
+            valid: false,
+            errorReason: `Narration claims arrival at "${params.intent.locationTarget.name}" before canonical movement was committed by the engine. Depict only the departure, approach, or travel attempt from ${params.situation.location.name}.`,
+          };
+        }
+      }
+    }
+
     const actionContinuity = this.validateNarrativeActionContinuity(narration, params.playerAction, params.intent);
     if (!actionContinuity.valid) return { valid: false, errorReason: actionContinuity.errorReason };
 
@@ -7853,10 +7938,24 @@ export class MultiModelOrchestrator {
     // Keep N18 diagnostic scoring advisory for compact, semantically grounded
     // action descriptions. Fail closed only for clear scenery-padding cases or
     // an information-seeking turn that did not answer (or bound) the question.
+    // SOFT gate: when the narration states the fact the player already holds that answers the question, scenery
+    // around it is a style issue. Keep the grounded answer (hard gates still apply: canon, knowledge boundary,
+    // movement) instead of discarding the turn.
+    const answerIsGrounded = softNarrationGatesEnabled() && isInformationSeekingTurn && analyzeKnownFactUse(
+      narration,
+      [params.intent.informationGoal, params.intent.originalText].filter(Boolean).join(' '),
+      [...((params.situation as any).playerKnowledge?.knownFacts || []), ...((params.situation as any).relevantLore || [])],
+    ).used;
+    // Examining a named thing, or setting out for a named place, is described in scenic terms but is a response to the action.
+    const scenicButResponsive = softNarrationGatesEnabled() && (
+      describesObservedTarget(narration, params.playerAction) ||
+      (Boolean(params.intent.movementIntent) && namesTravelDestination(narration, params.intent.locationTarget?.name))
+    );
     if (
       actionSubstance &&
       actionSubstance.score < 0.50 &&
-      (environmentalPaddingDominates || informationResponseIsMissing)
+      !answerIsGrounded &&
+      ((environmentalPaddingDominates && !scenicButResponsive) || informationResponseIsMissing)
     ) {
       return {
         valid: false,
@@ -8004,7 +8103,15 @@ export class MultiModelOrchestrator {
     const hasConsequenceBeat = enforcePerEffectCoverage && requiredConsequences.length > 0
       ? missingConsequences.length === 0
       : consequenceSignal || consequenceVerbOverlap;
-    const valid = actionAnchor && hasConsequenceBeat;
+    // An information question answered by the fact the player already holds needs no separate reaction beat.
+    const answeredFromKnownFact = (params.intent.interactionMode === 'INFORMATION_SEEKING' || Boolean(params.intent.informationGoal)) && analyzeKnownFactUse(
+      params.narrativeText,
+      [params.intent.informationGoal, params.intent.originalText].filter(Boolean).join(' '),
+      [...((params.situation as any).playerKnowledge?.knownFacts || []), ...((params.situation as any).relevantLore || [])],
+    ).used;
+    // Setting out for a named place is answered by the departure and the route; naming the destination is the response.
+    const travelResponds = Boolean(params.intent.movementIntent) && namesTravelDestination(params.narrativeText, params.intent.locationTarget?.name);
+    const valid = ((answeredFromKnownFact || travelResponds) && missingConsequences.length === 0) || (actionAnchor && hasConsequenceBeat);
     const reason = valid
       ? undefined
       : missingConsequences.length
@@ -8029,7 +8136,7 @@ export class MultiModelOrchestrator {
     noveltyState?: NarrativeNoveltyState;
     previousNarrations?: string[];
     enforceActionFidelity?: boolean;
-  }): { valid: boolean; errorReason?: string } {
+  }): { valid: boolean; errorReason?: string; offendingClaims?: string[] } {
     const narration = (params.turnPackage.narrative || []).join(' ').trim();
     if (!narration) {
       return { valid: false, errorReason: 'Final narrative candidate is empty.' };
@@ -8083,6 +8190,7 @@ export class MultiModelOrchestrator {
       return {
         valid: false,
         errorReason: 'Final narrative candidate failed semantic review' + (details ? ': ' + details : '.'),
+        offendingClaims: [...semanticReview.unsupportedClaims],
       };
     }
 
@@ -8159,6 +8267,8 @@ export class MultiModelOrchestrator {
     modelId?: string;
     providerId?: string;
     error?: string;
+    /** Guard policy record for this turn: outcome, findings by severity, and whether a repair (reserved or not) was used. */
+    guard?: { outcome: GuardOutcome; findings: GuardNote[]; repairUsed: boolean; reservedRepairUsed: boolean };
     source?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
     fallbackReason?: string;
     attemptsTrail?: Array<{
@@ -8237,6 +8347,7 @@ export class MultiModelOrchestrator {
       viewerActorId: currentSituation.player.actorId,
       worldRepo,
     });
+    currentSituation = CurrentSituationBuilder.toNarratorSafeProjection(currentSituation);
     const rawResearchResult = NarrativeResearchPipeline.research({
       repository: worldRepo,
       storyId,
@@ -8319,7 +8430,7 @@ export class MultiModelOrchestrator {
       currentSituation.location.description ? `Canonical description: ${currentSituation.location.description}` : '',
       currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
       `Canonical world time: ${currentSituation.worldTime}`,
-      `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
+      `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.displayName || entity.name).join(', ') || 'None'}`,
       `Visible current-scene events (canonical or projected): ${canonicalSceneEventContext}`,
       currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
       'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
@@ -8575,6 +8686,42 @@ export class MultiModelOrchestrator {
       assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
     };
 
+    // Guard policy (reference study: Open Game Master narration guard). Soft findings get one corrective attempt and are then
+    // kept and recorded; hard findings still reject.
+    const guardState: { outcome: GuardOutcome; findings: GuardNote[]; repairUsed: boolean; reservedRepairUsed: boolean } = {
+      outcome: 'quiet', findings: [], repairUsed: false, reservedRepairUsed: false,
+    };
+    let softHeld = null as { text: string; reason: string } | null;
+    let softFailures = 0;
+    const guardNarrationValidation = (text: string, strict: (candidate: string) => TaskResponseValidationResult): TaskResponseValidationResult => {
+      const result = strict(text);
+      if (result.valid) return result;
+      const reason = String(result.errorReason || '');
+      const severity = classifyNarrationFailure(reason);
+      guardState.findings.push({ severity, reason });
+      if (severity === 'HARD' || !softNarrationGatesEnabled()) return result;
+      const heldProse = this.validateTurnPackage(text, { allowPlainTextNarration: true });
+      if (!heldProse.valid || !heldProse.turnPackage || !isReadableNarration(heldProse.turnPackage.narrative.join(' '))) return result;
+      softHeld = { text, reason };
+      softFailures += 1;
+      if (softFailures >= 2) {
+        guardState.outcome = 'kept_soft';
+        return { valid: true };
+      }
+      return result;
+    };
+    // The same continuity checks run again after generation. A soft finding the guard already weighed is tolerated there
+    // too (recorded, never silently dropped); hard and unrecognised findings still reject.
+    const tolerateSoftFinalFinding = (reason?: string): boolean => {
+      if (!softNarrationGatesEnabled()) return false;
+      const text = String(reason || '');
+      if (classifyNarrationFailure(text) !== 'SOFT') return false;
+      if (!isReadableNarration(finalNarrationText)) return false;
+      guardState.findings.push({ severity: 'SOFT', reason: text });
+      if (guardState.outcome === 'quiet') guardState.outcome = 'kept_soft';
+      return true;
+    };
+
     let generated: Awaited<ReturnType<MultiModelOrchestrator['executeTaskGeneration']>>;
     try {
       generated = await this.executeTaskGeneration(
@@ -8593,7 +8740,7 @@ export class MultiModelOrchestrator {
         canonicalLocationName: currentSituation.location.name,
         playerAction,
         narrativeHandoff: narrativeProviderHandoff,
-        validateResponse: (text) => {
+        validateResponse: (rawText) => guardNarrationValidation(rawText, (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
           if (!validation.valid || !validation.turnPackage) {
             return { valid: false, errorReason: validation.errorReason };
@@ -8642,10 +8789,25 @@ export class MultiModelOrchestrator {
           return temporalContinuity.valid
             ? { valid: true }
             : { valid: false, errorReason: temporalContinuity.errorReason };
-        },
+        }),
       },
     );
     } catch (generationError: any) {
+      if (softHeld && softNarrationGatesEnabled()) {
+        // The best candidate had only soft findings and the repair attempt could not be completed: keep it.
+        const heldTrail = Array.isArray(generationError?.attemptsTrail) ? generationError.attemptsTrail : [];
+        const heldAttempt = heldTrail.find((attempt: any) => String(attempt?.error || '').includes('Task response schema validation failed'));
+        generated = {
+          text: softHeld.text,
+          source: 'AI_FALLBACK',
+          providerId: heldAttempt?.providerId || 'unknown',
+          modelId: heldAttempt?.modelId || 'unknown',
+          fallbackReason: 'Kept the best candidate after soft findings: ' + softHeld.reason,
+          attempts: heldTrail.length,
+          attemptsTrail: heldTrail,
+        } as any;
+        guardState.outcome = 'kept_soft';
+      } else {
       const errorMessage = String(generationError?.message || generationError || 'Narration generation failed.');
       const attemptsTrail = Array.isArray(generationError?.attemptsTrail) ? generationError.attemptsTrail : [];
       const lastFailedAttempt = [...attemptsTrail].reverse().find((attempt: any) => attempt.status === 'FAILED');
@@ -8661,7 +8823,9 @@ export class MultiModelOrchestrator {
         storyBeat,
         researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
+        guard: { ...guardState, outcome: 'unavailable' as GuardOutcome },
       };
+      }
     }
 
     // Narrative generation has a deterministic emergency floor. When all configured
@@ -8700,7 +8864,7 @@ export class MultiModelOrchestrator {
 
     let finalNarrationText = validation.turnPackage.narrative.join(' ');
     const finalSceneContinuity = this.validateNarrativeSceneContinuity(finalNarrationText, worldRepo, storyId);
-    if (!finalSceneContinuity.valid) {
+    if (!finalSceneContinuity.valid && !tolerateSoftFinalFinding(finalSceneContinuity.errorReason)) {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8716,7 +8880,7 @@ export class MultiModelOrchestrator {
       };
     }
     const finalActionContinuity = this.validateNarrativeActionContinuity(finalNarrationText, playerAction, playerIntent);
-    if (!finalActionContinuity.valid) {
+    if (!finalActionContinuity.valid && !tolerateSoftFinalFinding(finalActionContinuity.errorReason)) {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8732,7 +8896,7 @@ export class MultiModelOrchestrator {
       };
     }
     const finalInformationContinuity = this.validateNarrativeInformationContinuity(finalNarrationText, playerAction, playerIntent);
-    if (!finalInformationContinuity.valid) {
+    if (!finalInformationContinuity.valid && !tolerateSoftFinalFinding(finalInformationContinuity.errorReason)) {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8775,7 +8939,8 @@ export class MultiModelOrchestrator {
       finalNarrationText,
       (validation.turnPackage.dialogue || []).length > 0,
       currentSituation.player.name,
-    ) && !openingTurn;
+    ) && !openingTurn && !describesObservedTarget(finalNarrationText, playerAction) &&
+      !(Boolean(playerIntent.movementIntent) && namesTravelDestination(finalNarrationText, playerIntent.locationTarget?.name));
     const narrativeQualityAudit = buildNarrativeQualityAudit(
       finalNarrativeRichnessEvaluation,
       environmentExcess,
@@ -8815,19 +8980,27 @@ export class MultiModelOrchestrator {
     );
     const effectiveMaxRetries =
       params.maxRetries ?? ((hasMissingVisibleConsequence || (params.actionResolution !== undefined && !initialActionFidelity.valid)) ? 1 : 0);
+    // A richness "IMPROVE" alone used to fire a repair call on almost every turn (13 of 14 accepted live turns). Polish is
+    // only worth a call when the score is clearly low; concrete findings below still trigger a repair at any score.
+    const richnessNeedsPolish = finalNarrativeRichnessEvaluation.decision === 'IMPROVE' &&
+      (!softNarrationGatesEnabled() || finalNarrativeRichnessEvaluation.overallScore < narrationPolishFloor());
     const qualityGateTriggersRewrite =
       environmentExcess ||
-      finalNarrativeRichnessEvaluation.decision === 'IMPROVE' ||
+      richnessNeedsPolish ||
       initialSemanticReview.decision !== 'ACCEPT' ||
-      initialLiteraryReview.decision === 'REWRITE' ||
+      // Voice/novelty polish alone does not justify a repair call in soft mode (it fired on 3 of 8 replayed turns); its issues are
+      // still passed to the repair whenever another finding triggers one.
+      (initialLiteraryReview.decision === 'REWRITE' && !softNarrationGatesEnabled()) ||
       (params.actionResolution !== undefined && !finalActionModeContinuity.valid) ||
       (params.actionResolution !== undefined && !initialStoryBeatContinuity.valid) ||
       (params.actionResolution !== undefined && !initialActionFidelity.valid);
     if (qualityGateTriggersRewrite && effectiveMaxRetries >= 1) {
-      const rewriteBudget = turnAiCallBudget.beginTask('narrative.review');
+      const rewriteBudget = turnAiCallBudget.beginCorrection('narrative.review');
       if (rewriteBudget.allowed) {
         turnAiCallBudget.recordProviderAttempt('narrative.review');
         narrativeQualityAudit.rewriteAttempted = true;
+        guardState.repairUsed = true;
+        guardState.reservedRepairUsed = Boolean((rewriteBudget as any).reserved);
       try {
         const styleDirective = (params.styleInstruction || '').trim();
         const rewritePromptText = [
@@ -8838,12 +9011,15 @@ export class MultiModelOrchestrator {
           JSON.stringify({
             location: currentSituation.location,
             worldTime: currentSituation.worldTime,
-            nearbyEntities: currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer),
+            nearbyEntities: currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => ({
+              ...entity,
+              name: entity.displayName || entity.name,
+            })),
             visibleEvents: currentSituation.visibleEvents,
           }),
           '',
           ...(canonicalRecentTurns.length
-            ? ['RECENT TURNS (canonically committed; do not contradict):', canonicalRecentTurns.slice(-2).map((turn, index) => `Turn ${index + 1} | Player: ${turn.playerAction} | Narration: ${turn.narration}`).join('\n'), '']
+            ? ['RECENT TURNS (canonically committed; do not contradict):', canonicalRecentTurns.slice(-narrationRecentTurnWindow()).map((turn, index) => `Turn ${index + 1} | Player: ${turn.playerAction} | Narration: ${turn.narration}`).join('\n'), '']
             : []),
           'ORIGINAL NARRATION (presentation only):',
           finalNarrationText,
@@ -8862,6 +9038,10 @@ export class MultiModelOrchestrator {
                 '',
               ]
             : []),
+          (() => {
+            const answerFacts = buildAnswerBearingFactsBlock(researchResult.blocks || [], playerIntent);
+            return answerFacts ? 'ESTABLISHED FACTS THAT ANSWER THIS QUESTION:\n' + answerFacts + '\nThe rewrite must state the answer first, in character, instead of describing the room.' : '';
+          })(),
           'PRESENTATION QUALITY REVIEW:',
           NarrativeRichnessEvaluator.buildRewriteGuidance(finalNarrativeRichnessEvaluation),
           initialLiteraryReview.issues.length > 0
@@ -9000,6 +9180,7 @@ export class MultiModelOrchestrator {
             ) {
               validation.turnPackage = rewriteValidation.turnPackage;
               finalNarrationText = rewriteNarration;
+              guardState.outcome = 'rewritten';
               finalNarrativeRichnessEvaluation = postRewriteEvaluation;
               narrativeQualityAudit.rewriteSucceeded = true;
               narrativeQualityAudit.finalDecision = postRewriteEvaluation.decision;
@@ -9053,12 +9234,21 @@ export class MultiModelOrchestrator {
       finalNarrationText,
       currentSituation.player.name,
     );
+    const finalSpokenText = (validation.turnPackage?.dialogue || []).map((line: any) => String(line?.text || '')).join(' ');
+    const finalAnswerIsGrounded = softNarrationGatesEnabled() && (playerIntent.interactionMode === 'INFORMATION_SEEKING' || Boolean(playerIntent.informationGoal)) && analyzeKnownFactUse(
+      `${finalNarrationText} ${finalSpokenText}`,
+      [playerIntent.informationGoal, playerIntent.originalText].filter(Boolean).join(' '),
+      [...((currentSituation as any).playerKnowledge?.knownFacts || []), ...((currentSituation as any).relevantLore || [])],
+    ).used;
     const finalEnvironmentExcess = detectNarrativeEnvironmentExcess(
       finalNarrationText,
       (validation.turnPackage.dialogue || []).length > 0,
       currentSituation.player.name,
-    ) && !openingTurn;
+    ) && !openingTurn && !finalAnswerIsGrounded && !describesObservedTarget(finalNarrationText, playerAction) &&
+      !(Boolean(playerIntent.movementIntent) && namesTravelDestination(finalNarrationText, playerIntent.locationTarget?.name));
     if (finalEnvironmentExcess) {
+      // Content-free scenery (no action, no answer) is a HARD finding in the guard policy: it stays rejected after the repair.
+      guardState.outcome = 'rejected_hard';
       const environmentFailure =
         'N18 environment/substance gate rejected final narration: environment-only description remained after the available rewrite budget was skipped or exhausted.';
       narrativeQualityAudit.finalDecision = 'IMPROVE';
@@ -9085,6 +9275,7 @@ export class MultiModelOrchestrator {
         contextAudit,
         narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
         narrativeQualityAudit,
+        guard: { ...guardState },
         error: environmentFailure,
       };
     }
@@ -9226,7 +9417,7 @@ export class MultiModelOrchestrator {
     (narrativeQualityAudit as any).semanticReview = finalSemanticReview;
     (narrativeQualityAudit as any).actionFidelity = finalActionFidelity;
 
-    const finalCandidateValidation = this.validateNarrativeCandidate({
+    let finalCandidateValidation: { valid: boolean; errorReason?: string; offendingClaims?: string[] } = this.validateNarrativeCandidate({
       storyId,
       playerAction,
       intent: playerIntent,
@@ -9242,10 +9433,53 @@ export class MultiModelOrchestrator {
       previousNarrations: previousNarrationsForReview,
       enforceActionFidelity: Boolean(params.actionResolution),
     });
+    if (!finalCandidateValidation.valid && softNarrationGatesEnabled()) {
+      const finalFailure = String(finalCandidateValidation.errorReason || '');
+      const finalSeverity = classifyNarrationFailure(finalFailure);      guardState.findings.push({ severity: finalSeverity, reason: finalFailure });
+      const offending = finalCandidateValidation.offendingClaims || [];
+      if (offending.length > 0) {
+        // Reference guard: cut just the contradicting sentences when enough of the story is left to read.
+        const cut = cutOffendingSentences(finalNarrationText, offending);
+        if (cut.removed.length > 0) {
+          const cutPackage = { ...validation.turnPackage!, narrative: [cut.text], stateChanges: [] };
+          const recheck = this.validateNarrativeCandidate({
+            storyId,
+            playerAction,
+            intent: playerIntent,
+            situation: currentSituation,
+            plan: richnessEvaluationPlan,
+            storyBeat,
+            actionResolution: params.actionResolution,
+            turnPackage: cutPackage,
+            repository: worldRepo,
+            pacingContract: narrativePacingContract,
+            voice: narratorVoiceState,
+            noveltyState: narrativeNoveltyState,
+            previousNarrations: previousNarrationsForReview,
+            enforceActionFidelity: Boolean(params.actionResolution),
+          });
+          if (recheck.valid || classifyNarrationFailure(recheck.errorReason) === 'SOFT') {
+            validation.turnPackage = cutPackage;
+            finalNarrationText = cut.text;
+            guardState.outcome = 'cut';
+            guardState.findings.push({ severity: 'SOFT', reason: `Removed ${cut.removed.length} unsupported sentence(s).` });
+            finalCandidateValidation = { valid: true };
+          }
+        }
+      }
+      // Scenery that still carries some action or answer is kept; content-free scenery (a very low action-substance score) is not.
+      const actionSubstanceScore = (finalNarrativeRichnessEvaluation as any)?.dimensions?.find((entry: any) => entry.dimension === 'ACTION_SUBSTANCE')?.score ?? 1;
+      if (!finalCandidateValidation.valid && finalSeverity === 'SOFT' && isReadableNarration(finalNarrationText) && actionSubstanceScore >= 0.3) {
+        guardState.outcome = 'kept_soft';
+        finalCandidateValidation = { valid: true };
+      }
+    }
     if (!finalCandidateValidation.valid) {
+      guardState.outcome = 'rejected_hard';
       return {
         success: false,
         validationRejected: true,
+        guard: { ...guardState },
         providerId: generated.providerId,
         modelId: generated.modelId,
         source: generated.source,
@@ -9288,6 +9522,7 @@ export class MultiModelOrchestrator {
       actionFidelity: finalActionFidelity,
       narrativeQualityAudit,
       storyBeat,
+      guard: { ...guardState, outcome: guardState.outcome === 'quiet' && guardState.repairUsed ? ('rewritten' as GuardOutcome) : guardState.outcome },
     };
   }
 
@@ -9738,6 +9973,7 @@ export class MultiModelOrchestrator {
         error?: string;
       }> = [];
 
+      let candidatesTried = 0;
       // 3. Provider Execution Loop with Retries, Timeouts, and Failover (DEF-CH12-01, DEF-CH12-07)
       for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
         const currentCandidate = candidateChain[cIdx];
@@ -9746,6 +9982,15 @@ export class MultiModelOrchestrator {
         const adapter = this.getAdapter(currentCandidate.providerId);
         if (!adapter) {
           continue;
+        }
+        // executeTurn retries the same model before failing over, so its bound is on how many
+        // different models a turn may try (the live /action path makes one attempt per model).
+        if (!currentCandidate.isEmergencyFloor) {
+          if (candidatesTried >= turnAiCallBudget.providerAttemptCap(task)) {
+            lastError = `Per-turn provider attempt cap reached for ${task}: ${candidatesTried} models tried.`;
+            break;
+          }
+          candidatesTried++;
         }
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -10518,6 +10763,8 @@ export class MultiModelOrchestrator {
       playerAction?: string;
       narrativeHandoff?: NarrativeProviderHandoffContract;
       turnBudget?: AiTurnCallBudget;
+      /** Marks a correction/repair call that may spend the turn's reserved correction attempt. */
+      reservedCall?: boolean;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
        * When true, a configured task route may be expanded with additional eligible AI models
@@ -10556,6 +10803,13 @@ export class MultiModelOrchestrator {
       reason: string;
     }>;
   }> {
+    // A turn-budgeted caller (live narration) on a short route would otherwise fail instantly while its only
+    // model sits in a brief post-503 cooldown. Wait out a short, bounded cooldown instead of losing the turn.
+    if (options?.turnBudget) {
+      const waitMs = this.routeCooldownRemainingMs(task);
+      if (waitMs > 0 && waitMs <= 20000) await new Promise((resolve) => setTimeout(resolve, waitMs + 50));
+    }
+
     const contract = getAiTaskContract(task);
     const turnBudgetDecision = options?.turnBudget?.beginTask(task);
     if (turnBudgetDecision && !turnBudgetDecision.allowed) {
@@ -10608,7 +10862,7 @@ export class MultiModelOrchestrator {
     this.refreshAllProviderModelStatuses();
     const timeoutMs = options?.timeoutMs || 35000;
     const contextTokens = options?.contextTokens ?? 0;
-    let selection: ReturnType<typeof this.selectBestModel>;
+    let selection: ReturnType<MultiModelOrchestrator['selectBestModel']>;
     let selectionWasForcedFallback = false;
     try {
       selection = this.selectBestModel(task, { contextTokens });
@@ -10899,6 +11153,11 @@ export class MultiModelOrchestrator {
       error?: string;
     }> = [];
 
+    // One corrective retry per model when the response was reachable but failed task validation (live runs
+    // lost whole turns to a single "Micro beat is too long" / continuity-guard rejection on a one-model chain).
+    const validationRetried = new Set<string>();
+    let pendingRetryFeedback: string | undefined;
+
     for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
       // A caller that explicitly withholds deterministic fallback must not reach
       // the emergency model through the ordinary configured candidate chain.
@@ -10907,6 +11166,14 @@ export class MultiModelOrchestrator {
       }
       if (!hasConfiguredTaskChain && totalAttempts >= effectiveRouteAttemptBudget && !candidateChain[cIdx].isEmergencyFloor) {
         break;
+      }
+      // Hard per-turn cap on real provider requests (configured chains are otherwise unbounded).
+      if (!candidateChain[cIdx].isEmergencyFloor && options?.turnBudget) {
+        const attemptDecision = options.turnBudget.canAttemptProvider(task, { reserved: options.reservedCall });
+        if (!attemptDecision.allowed) {
+          lastError = attemptDecision.reason || lastError;
+          break;
+        }
       }
       // For adaptive tasks only, try one final live-registry recovery
       // candidate before the emergency floor. Explicit configured routes skip
@@ -10945,6 +11212,8 @@ export class MultiModelOrchestrator {
 
       const currentCandidate = candidateChain[cIdx];
       const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
+      const retryFeedback = pendingRetryFeedback;
+      pendingRetryFeedback = undefined;
 
       const adapter = this.getAdapter(currentCandidate.providerId);
       if (!adapter) {
@@ -10972,7 +11241,9 @@ export class MultiModelOrchestrator {
 
         let providerRes: ProviderGenerateResult;
         try {
-          providerRes = await adapter.generate(task, prompt, {
+          providerRes = await adapter.generate(task, retryFeedback ? `${prompt}
+
+${retryFeedback}` : prompt, {
             allowDeterministicFallback,
             timeoutMs,
             maxTokens: options?.maxTokens,
@@ -11049,7 +11320,10 @@ export class MultiModelOrchestrator {
         ) {
           const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
           this.consecutiveFailures.set(modelKey, failures);
-          if (failures >= 2) {
+          // Transient provider trouble (503 demand spikes, 429 throttles, timeouts) is handled by the
+          // time-bounded cooldown in recordProviderFailure. Only persistent failures (bad credentials,
+          // model gone) open the breaker; otherwise two 503s permanently killed a one-model chain.
+          if (failures >= 2 && (failureType === 'AUTH' || failureType === 'UNAVAILABLE')) {
             this.circuitBreakersTripped.add(modelKey);
             currentCandidate.health = 'Unavailable';
           }
@@ -11067,6 +11341,31 @@ export class MultiModelOrchestrator {
           latencyMs,
           error: lastError,
         });
+
+        if (
+          /^Task response schema validation failed/.test(lastError) &&
+          !currentCandidate.isEmergencyFloor &&
+          !validationRetried.has(modelKey) &&
+          // A configured next model is tried first (ordered fallback); the corrective retry is for the last real candidate.
+          !candidateChain.slice(cIdx + 1).some((next) => !next.isEmergencyFloor)
+        ) {
+          validationRetried.add(modelKey);
+          const rejection = lastError.replace(/^Task response schema validation failed:?\s*/, '').trim().replace(/\.+$/, '').slice(0, 400);
+          pendingRetryFeedback = `YOUR PREVIOUS ANSWER WAS REJECTED: ${rejection}. Return a corrected answer in the same format that fixes exactly this problem.`;
+          candidateChain.splice(cIdx + 1, 0, currentCandidate);
+        } else if (
+          // Only turn-budgeted callers (live narration) get the extra transport try; the budget caps total requests.
+          options?.turnBudget &&
+          !currentCandidate.isEmergencyFloor &&
+          !validationRetried.has(`transient:${modelKey}`) &&
+          (failureType === 'TIMEOUT' || failureType === '5XX' || /fetch failed|econnreset|socket hang up|network/i.test(lastError)) &&
+          !candidateChain.slice(cIdx + 1).some((next) => !next.isEmergencyFloor)
+        ) {
+          // One more try for a transient transport failure (timeout, 503 demand spike, dropped connection).
+          validationRetried.add(`transient:${modelKey}`);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          candidateChain.splice(cIdx + 1, 0, currentCandidate);
+        }
 
       }
     }

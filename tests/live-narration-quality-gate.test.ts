@@ -208,3 +208,55 @@ test('Phase 1A: live narration gate accepts consequence-faithful human phrasing 
 	assert.ok(incomplete.actionFidelity.missingConsequences.some(value => /prone/i.test(value)));
 	assert.ok(incomplete.actionFidelity.missingConsequences.some(value => /collided/i.test(value) || /obstacle/i.test(value)));
 });
+
+test('hard/soft split: a missing canonical consequence is a hard failure and never soft-passes', () => {
+	const result = serverMockAuthority.evaluateLiveNarrativeQuality({
+		narrativeText: 'The dagger strikes the guarded door and lodges deep in the wood. Splinters scatter around the blade.',
+		playerAction: 'I throw my dagger at the guarded door.',
+		actionResolution: resolution() as any,
+		situation: situation() as any,
+		intent: { action: 'attack', interactionMode: 'WORLD_ACTION', speechIntent: false } as any,
+	});
+	assert.ok(result.actionFidelity.missingConsequences.length > 0);
+	assert.equal(result.hardAccepted, false);
+});
+
+test('hard/soft split: a fully grounded candidate is hard-accepted with no soft issues from consequence coverage', () => {
+	const result = serverMockAuthority.evaluateLiveNarrativeQuality({
+		narrativeText: 'The dagger strikes the guarded door and lodges deep in the wood. The impact catches the nearby guard’s attention; the Caste Enforcer turns sharply toward the impact, one hand leaving his weapon.',
+		playerAction: 'I throw my dagger at the guarded door.',
+		actionResolution: resolution() as any,
+		situation: situation() as any,
+		intent: { action: 'attack', interactionMode: 'WORLD_ACTION', speechIntent: false } as any,
+	});
+	assert.equal(result.hardAccepted, true);
+	assert.deepEqual(result.softIssues.filter(issue => /acknowledges too little/.test(issue)), []);
+});
+
+test('an information question answered by the fact the player already holds passes without a separate reaction beat', () => {
+	const knownFact = { id: 'fact_found_by_watchman', subjectEntityId: 'Silas Okafor', predicate: 'found_body_at', objectValue: 'just after midnight', provenanceSummary: 'Night watchman Silas Okafor found the body shortly after midnight.' };
+	const base = situation() as any;
+	const withKnowledge = { ...base, playerKnowledge: { ...(base.playerKnowledge || {}), knownFacts: [knownFact], authorizedFactIds: [knownFact.id] } };
+	const resolutionNoEffects = { resolutionMethod: 'NO_CHECK', outcomeTier: 'NO_CHECK', actualEffect: 'The action proceeds as an ordinary deterministic world/narrative action.', physicalConsequences: [], playerVisibleConsequences: [], targetEntityIds: [], canonicalStateChanges: [] };
+	const intent = { action: 'attempt_action', interactionMode: 'INFORMATION_SEEKING', informationGoal: 'Who found the body?', originalText: 'Who found the body?', speechIntent: false } as any;
+	const answered = serverMockAuthority.evaluateLiveNarrativeQuality({
+		narrativeText: 'Night watchman Silas Okafor found the body shortly after midnight, Mei says.',
+		playerAction: 'Who found the body?', actionResolution: resolutionNoEffects as any, situation: withKnowledge, intent,
+	});
+	assert.equal(answered.actionFidelity.valid, true);
+	const evasion = serverMockAuthority.evaluateLiveNarrativeQuality({
+		narrativeText: 'Rain patters on the glass while Mei stands near the desk, her gaze drifting toward the window.',
+		playerAction: 'Who found the body?', actionResolution: resolutionNoEffects as any, situation: withKnowledge, intent,
+	});
+	assert.equal(evasion.actionFidelity.valid, false, 'scenery with no answer must still fail');
+});
+
+test('a travel reply that names the destination responds to the action; one that does not is still rejected', () => {
+	const resolutionNoEffects = { resolutionMethod: 'NO_CHECK', outcomeTier: 'NO_CHECK', actualEffect: 'The action proceeds as an ordinary deterministic world/narrative action.', physicalConsequences: [], playerVisibleConsequences: [], targetEntityIds: [], canonicalStateChanges: [] };
+	const intent = { action: 'travel', interactionMode: 'WORLD_ACTION', movementIntent: true, locationTarget: { name: 'Warehouse Docks' }, originalText: 'I head out to the docks.', speechIntent: false } as any;
+	const base = { playerAction: 'I head out to the docks.', actionResolution: resolutionNoEffects as any, situation: situation() as any, intent };
+	const departs = serverMockAuthority.evaluateLiveNarrativeQuality({ ...base, narrativeText: 'You pull your coat on and step out into the rain, the road toward the Warehouse Docks gleaming under the street lamps.' });
+	assert.equal(departs.actionFidelity.valid, true);
+	const ignores = serverMockAuthority.evaluateLiveNarrativeQuality({ ...base, narrativeText: 'Rain patters on the frosted glass while the desk lamp hums over the cluttered oak surface of the room.' });
+	assert.equal(ignores.actionFidelity.valid, false);
+});

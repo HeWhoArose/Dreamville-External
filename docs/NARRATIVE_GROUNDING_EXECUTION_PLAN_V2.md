@@ -5,7 +5,7 @@
 **Created:** 2026-10-17  
 **Baseline reviewed:** `main` at merge commit `ce3d3cb8` (merge of PR #76)  
 **Owner:** player-intent fidelity, evidence-grounded narration, objective and story-structure continuity, living-world opportunity grounding, narrative candidate/fallback validation, and live-model validation  
-**Takes over from:** [`ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`](ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md), which is **deferred to this plan** and kept as the historical record  
+**Takes over from:** [`ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`](outdated/superseded-plans/ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN_HISTORICAL.md), which is **deferred to this plan** and kept as the historical record  
 **Evidence inputs:** [`NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md`](NARRATIVE_COMPETITIVE_RESEARCH_AND_GAP_AUDIT_2026-10-17.md)  
 **Authority:** [`docs/README.md`](README.md) is the document index. This file owns the work below; it does not supersede the canonical owners of any subsystem.
 
@@ -138,13 +138,13 @@ Phase numbers are local to this program, as before. They do not renumber the Dee
 | X1 | 2 | G1 | Objective ledger as a read-only projection with a visible current objective |
 | X1b | 2 | G2 | Bounded, expiring information-goal continuation |
 | X3 | 3 | G5 | Arc-level memory summaries through the existing memory owner |
-| X6b | 4 | G8 | Grounded emergent-thread text or suppression |
+| X6b | 4 | G8 | Grounded emergent-thread text or suppression. **Done 2026-11-23** via option (a): title and description derived from the committed event and the location display name (`describeEmergentThread`, `tests/emergent-thread-title.test.ts`) |
 | X4 | 5 | G3 | Milestone layer on planned events, evaluated deterministically |
 | X8 | 5 | G10 | Stall ladder using only committed world mechanisms |
 | X9 | 5 | G9 | Persistent non-combat consequences and canonical-content authorship |
 | X2 | 6 | G4 | Redirection policy plus over-compliance and name-leak checks |
 | X5b | 8 | G6 | Replay harness and hybrid evaluation |
-| X6c | 9 | G7 | Execute the D1 decision on `StoryDirectorService` |
+| X6c | 9 | G7 | Execute the D1 decision on `StoryDirectorService`. **Done 2026-11-23** (done early, outside Phase 9): the service, its three endpoints and its demo tests were removed; `phase3.command-routing-audit` and `ch16_behavioral_verification` were updated and the transaction-scoping test in `phase3.canonical-command` was kept with a different vehicle |
 
 **Slice rule.** A slice may start only when (a) its failure is reproduced in the Phase 1 baseline or by a deterministic test on current code, and (b) it extends the owner named for it. A slice whose failure is not reproduced stays deferred. One slice is one branch and one pull request, with before and after evidence for the scenario that justified it.
 

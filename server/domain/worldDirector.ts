@@ -131,7 +131,7 @@ export interface WorldDirectorReadinessReport {
  * Conservative signal only: the premise selects a readiness profile; it does
  * not establish that any victim, clue, culprit, or event exists canonically.
  */
-function isInvestigationPremise(value: string): boolean {
+export function isInvestigationPremise(value: string): boolean {
   return /\b(?:murder|murdered|homicide|corpse|dead body|crime scene|victim|forensic examination)\b/i.test(value)
     || /\binvestigat\w{0,12}.{0,48}\b(?:death|body|victim|crime|murder)\b/i.test(value);
 }
